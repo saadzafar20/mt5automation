@@ -1,0 +1,584 @@
+2026-01-28 06:21:44,366 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 06:21:44,383 - __main__ - ERROR - MT5 initialization failed: (-10003, "IPC initialize failed, Process create failed 'C:\\\\Program Files\\\\MetaTrader 5\\\\terminal64.exe'")
+2026-01-28 06:21:44,384 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 06:21:44,385 - __main__ - INFO - Shutting down...
+2026-01-28 07:28:40,228 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:28:40,233 - __main__ - ERROR - MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:28:40,234 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:28:40,234 - __main__ - INFO - Shutting down...
+2026-01-28 07:30:37,708 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:30:37,714 - __main__ - ERROR - MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:30:37,716 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:30:37,718 - __main__ - INFO - Shutting down...
+2026-01-28 07:31:44,820 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:31:44,827 - __main__ - ERROR - MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:31:44,830 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:31:44,831 - __main__ - INFO - Shutting down...
+2026-01-28 07:33:04,678 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:33:04,730 - __main__ - ERROR - MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:33:04,736 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:33:04,743 - __main__ - INFO - Shutting down...
+2026-01-28 07:34:11,625 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:34:11,627 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-28 07:34:11,633 - __main__ - WARNING - MT5 initialization attempt 1 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:34:11,636 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:34:13,637 - __main__ - INFO - MT5 connection attempt 2/5...
+2026-01-28 07:34:13,638 - __main__ - WARNING - MT5 initialization attempt 2 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:34:13,639 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:34:15,640 - __main__ - INFO - MT5 connection attempt 3/5...
+2026-01-28 07:34:15,642 - __main__ - WARNING - MT5 initialization attempt 3 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:34:15,643 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:34:17,644 - __main__ - INFO - MT5 connection attempt 4/5...
+2026-01-28 07:34:17,646 - __main__ - WARNING - MT5 initialization attempt 4 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:34:17,646 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:34:19,647 - __main__ - INFO - MT5 connection attempt 5/5...
+2026-01-28 07:34:19,649 - __main__ - WARNING - MT5 initialization attempt 5 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:34:19,650 - __main__ - ERROR - Failed to connect to MT5 after 5 attempts
+2026-01-28 07:34:19,650 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:34:19,651 - __main__ - INFO - Shutting down...
+2026-01-28 07:38:12,364 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-28 07:38:12,366 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-28 07:38:12,384 - __main__ - WARNING - Path-based init failed: (-6, 'Terminal: Authorization failed'), trying without path...
+2026-01-28 07:38:12,399 - __main__ - WARNING - MT5 initialization attempt 1 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:38:12,404 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:38:14,405 - __main__ - INFO - MT5 connection attempt 2/5...
+2026-01-28 07:38:14,408 - __main__ - WARNING - Path-based init failed: (-6, 'Terminal: Authorization failed'), trying without path...
+2026-01-28 07:38:14,415 - __main__ - WARNING - MT5 initialization attempt 2 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:38:14,416 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:38:16,417 - __main__ - INFO - MT5 connection attempt 3/5...
+2026-01-28 07:38:16,419 - __main__ - WARNING - Path-based init failed: (-6, 'Terminal: Authorization failed'), trying without path...
+2026-01-28 07:38:16,426 - __main__ - WARNING - MT5 initialization attempt 3 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:38:16,428 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:38:18,429 - __main__ - INFO - MT5 connection attempt 4/5...
+2026-01-28 07:38:18,432 - __main__ - WARNING - Path-based init failed: (-6, 'Terminal: Authorization failed'), trying without path...
+2026-01-28 07:38:18,439 - __main__ - WARNING - MT5 initialization attempt 4 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:38:18,440 - __main__ - INFO - Retrying in 2 seconds...
+2026-01-28 07:38:20,441 - __main__ - INFO - MT5 connection attempt 5/5...
+2026-01-28 07:38:20,444 - __main__ - WARNING - Path-based init failed: (-6, 'Terminal: Authorization failed'), trying without path...
+2026-01-28 07:38:20,451 - __main__ - WARNING - MT5 initialization attempt 5 failed: (-6, 'Terminal: Authorization failed')
+2026-01-28 07:38:20,453 - __main__ - ERROR - Failed to connect to MT5 after 5 attempts
+2026-01-28 07:38:20,454 - __main__ - ERROR - Failed to connect to MT5. Please check your credentials.
+2026-01-28 07:38:20,454 - __main__ - INFO - Shutting down...
+2026-01-29 00:53:00,966 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 00:53:00,968 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 00:53:00,971 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 00:53:00,972 - __main__ - INFO - MT5 connection successful
+2026-01-29 00:53:01,085 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 00:53:01,087 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 00:56:10,512 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='TradingView test signal', timestamp='2026-01-29T08:56:10.512339')
+2026-01-29 00:56:10,514 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 00:56:10,515 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 00:56:10] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:04:21,883 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:04:21,889 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:04:21,895 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:04:21,895 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:04:21,922 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:04:21,925 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:04:36,151 - __main__ - INFO - Shutting down...
+2026-01-29 01:04:36,153 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:06:45,856 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:06:45,859 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:06:45,864 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:06:45,866 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:06:45,895 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:06:45,897 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:07:05,728 - __main__ - INFO - Shutting down...
+2026-01-29 01:07:05,733 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:08:54,181 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:08:54,187 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:08:54,192 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:08:54,194 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:08:54,241 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:08:54,243 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:12:47,451 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:12:47.451021')
+2026-01-29 01:12:47,469 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:12:47,470 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:12:47] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:17:29,723 - __main__ - INFO - Shutting down...
+2026-01-29 01:17:29,725 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:17:33,243 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:17:33,257 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:17:33,266 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:17:33,267 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:17:33,314 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:17:33,318 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:17:39,327 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:17:39.327300')
+2026-01-29 01:17:39,328 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:17:39,329 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:17:39] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:19:18,525 - __main__ - INFO - Shutting down...
+2026-01-29 01:19:18,526 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:19:21,255 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:19:21,266 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:19:21,271 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:19:21,287 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:19:21,330 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:19:21,332 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:19:24,766 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:19:24.766701')
+2026-01-29 01:19:24,768 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:19:24,770 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:19:24] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:22:44,424 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:22:44] "GET /health HTTP/1.1" 200 -
+2026-01-29 01:28:46,642 - __main__ - INFO - Shutting down...
+2026-01-29 01:28:46,644 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:28:50,192 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:28:50,201 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:28:50,205 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:28:50,207 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:28:50,246 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:28:50,260 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:28:53,389 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:28:53.389417')
+2026-01-29 01:28:53,392 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:28:53,393 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:28:53] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:29:38,009 - __main__ - INFO - Shutting down...
+2026-01-29 01:29:38,012 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:30:20,113 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:30:20,119 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:30:20,132 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:30:20,138 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:30:20,181 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:30:20,182 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:30:25,058 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:30:25.058588')
+2026-01-29 01:30:25,061 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:30:25,069 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:30:25] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:30:57,851 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:30:57] "[31m[1mGET /signal HTTP/1.1[0m" 405 -
+2026-01-29 01:31:45,564 - __main__ - INFO - Shutting down...
+2026-01-29 01:31:45,567 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:31:48,409 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:31:48,417 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:31:48,422 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:31:48,431 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:31:48,494 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:31:48,515 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:31:52,554 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:31:52.554320')
+2026-01-29 01:31:52,555 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:31:52,556 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:31:52] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:33:42,383 - __main__ - INFO - Shutting down...
+2026-01-29 01:33:42,385 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:42:39,148 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:42:39,153 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:42:39,157 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:42:39,164 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:42:39,245 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:42:39,251 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:42:41,804 - __main__ - INFO - Shutting down...
+2026-01-29 01:42:41,806 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:44:58,808 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:44:58,820 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:44:58,849 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:44:58,876 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:44:59,041 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:44:59,053 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:45:07,753 - __main__ - INFO - Shutting down...
+2026-01-29 01:45:07,756 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:45:10,185 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:45:10,190 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:45:10,193 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:45:10,197 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:45:10,247 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:45:10,251 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:45:17,152 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.1, stop_loss=1.09, timeframe='M15', comment='', timestamp='2026-01-29T09:45:17.152787')
+2026-01-29 01:45:17,154 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:45:17,155 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:45:17] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:53:36,851 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:53:36] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:54:15,331 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=None, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T09:54:15.331832')
+2026-01-29 01:54:15,348 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:54:15,349 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:54:15] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:57:37,447 - __main__ - INFO - Shutting down...
+2026-01-29 01:57:37,451 - __main__ - INFO - Disconnected from MT5
+2026-01-29 01:57:40,003 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 01:57:40,014 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 01:57:40,018 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 01:57:40,019 - __main__ - INFO - MT5 connection successful
+2026-01-29 01:57:40,080 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 01:57:40,082 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 01:57:43,138 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=None, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T09:57:43.138001')
+2026-01-29 01:57:43,139 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 01:57:43,140 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 01:57:43] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 01:58:32,543 - werkzeug - INFO - 209.38.27.37 - - [29/Jan/2026 01:58:32] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 01:58:32,978 - werkzeug - INFO - 209.38.27.37 - - [29/Jan/2026 01:58:32] "[33mPOST / HTTP/1.1[0m" 404 -
+2026-01-29 02:04:02,833 - __main__ - INFO - Shutting down...
+2026-01-29 02:04:02,835 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:04:05,696 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:04:05,698 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:04:05,702 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:04:05,710 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:04:05,777 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:04:05,778 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:04:16,701 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=None, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T10:04:16.700956')
+2026-01-29 02:04:16,702 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 02:04:16,703 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:04:16] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:08:19,544 - __main__ - INFO - Shutting down...
+2026-01-29 02:08:19,559 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:08:21,718 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:08:21,728 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:08:21,733 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:08:21,736 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:08:21,779 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:08:21,782 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:08:39,237 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=None, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T10:08:39.236965')
+2026-01-29 02:08:39,238 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 02:08:39,239 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:08:39] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:23:28,763 - __main__ - INFO - Shutting down...
+2026-01-29 02:23:28,766 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:23:30,733 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:23:30,740 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:23:30,744 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:23:30,745 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:23:30,782 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:23:30,783 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:23:34,946 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:23:34.946038')
+2026-01-29 02:23:34,946 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:23:34.946038')
+2026-01-29 02:23:34,946 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.1951100000000001, 'ask': 1.19514, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:23:34,947 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 02:23:34,947 - __main__ - INFO - Spread check for EURUSD: False
+2026-01-29 02:23:34,947 - __main__ - ERROR - Spread too high for EURUSD
+2026-01-29 02:23:34,947 - __main__ - ERROR - Order execution failed. MT5 error: (1, 'Success')
+2026-01-29 02:23:34,948 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:23:34] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:30:45,881 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:30:45.881895')
+2026-01-29 02:30:45,882 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:30:45.881895')
+2026-01-29 02:30:45,882 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.19534, 'ask': 1.19536, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:30:45,882 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 02:30:45,883 - __main__ - INFO - Spread check for EURUSD: False
+2026-01-29 02:30:45,883 - __main__ - ERROR - Spread too high for EURUSD
+2026-01-29 02:30:45,883 - __main__ - ERROR - Order execution failed. MT5 error: (1, 'Success')
+2026-01-29 02:30:45,884 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:30:45] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:31:51,688 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:31:51.687932')
+2026-01-29 02:31:51,688 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:31:51.687932')
+2026-01-29 02:31:51,688 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.19527, 'ask': 1.19529, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:31:51,688 - __main__ - ERROR - Error checking spread: 'Config' object has no attribute 'MAX_SPREAD_PIPS'
+2026-01-29 02:31:51,689 - __main__ - INFO - Spread check for EURUSD: False
+2026-01-29 02:31:51,689 - __main__ - ERROR - Spread too high for EURUSD
+2026-01-29 02:31:51,689 - __main__ - ERROR - Order execution failed. MT5 error: (1, 'Success')
+2026-01-29 02:31:51,689 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:31:51] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:32:15,051 - __main__ - INFO - Shutting down...
+2026-01-29 02:32:15,052 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:32:17,566 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:32:17,577 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:32:17,582 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:32:17,593 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:32:17,644 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:32:17,645 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:32:20,393 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:32:20.393186')
+2026-01-29 02:32:20,393 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:32:20.393186')
+2026-01-29 02:32:20,393 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.1951, 'ask': 1.19513, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:32:20,394 - __main__ - INFO - Spread check for EURUSD: True
+2026-01-29 02:32:20,394 - __main__ - INFO - Order type: 0
+2026-01-29 02:32:20,394 - __main__ - INFO - Tick: Tick(time=1769689939, bid=1.1951, ask=1.19513, last=0.0, volume=0, time_msc=1769689939544, flags=1028, volume_real=0.0)
+2026-01-29 02:32:20,397 - __main__ - INFO - Order price: 1.19513
+2026-01-29 02:32:20,397 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:32:20,415 - __main__ - ERROR - Error sending order: 'Config' object has no attribute 'SLIPPAGE'
+2026-01-29 02:32:20,415 - __main__ - ERROR - Order execution failed. MT5 error: (1, 'Success')
+2026-01-29 02:32:20,416 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:32:20] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-01-29 02:33:50,330 - __main__ - INFO - Shutting down...
+2026-01-29 02:33:50,332 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:33:53,392 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:33:53,396 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:33:53,405 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:33:53,411 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:33:53,453 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:33:53,455 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:33:57,161 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:33:57.161678')
+2026-01-29 02:33:57,162 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:33:57.161678')
+2026-01-29 02:33:57,162 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.19532, 'ask': 1.19534, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:33:57,162 - __main__ - INFO - Spread check for EURUSD: True
+2026-01-29 02:33:57,162 - __main__ - INFO - Order type: 0
+2026-01-29 02:33:57,162 - __main__ - INFO - Tick: Tick(time=1769690037, bid=1.19532, ask=1.19534, last=0.0, volume=0, time_msc=1769690037015, flags=1026, volume_real=0.0)
+2026-01-29 02:33:57,163 - __main__ - INFO - Order price: 1.19534
+2026-01-29 02:33:57,163 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:33:57,163 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'EURUSD', 'volume': 0.1, 'type': 0, 'price': 1.19534, 'sl': 1.095, 'tp': 1.105, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:33:57.161678', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:33:57,164 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:33:57] "POST /signal HTTP/1.1" 200 -
+2026-01-29 02:36:26,055 - __main__ - INFO - Shutting down...
+2026-01-29 02:36:26,063 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:36:28,689 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:36:28,695 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:36:28,700 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:36:28,700 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:36:28,739 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:36:28,741 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:36:34,584 - __main__ - ERROR - Error processing signal: type object 'datetime.datetime' has no attribute 'datetime'
+2026-01-29 02:36:34,587 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:36:34] "[35m[1mPOST /signal HTTP/1.1[0m" 500 -
+2026-01-29 02:38:31,369 - __main__ - INFO - Shutting down...
+2026-01-29 02:38:31,372 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:39:31,998 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:39:32,006 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:39:32,010 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:39:32,013 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:39:32,013 - __main__ - INFO - Shutting down...
+2026-01-29 02:39:32,014 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:40:00,279 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:40:00,327 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:40:00,334 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:40:00,336 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:40:00,430 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:40:00,430 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:40:06,640 - __main__ - ERROR - Error processing signal: type object 'datetime.datetime' has no attribute 'datetime'
+2026-01-29 02:40:06,641 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:40:06] "[35m[1mPOST /signal HTTP/1.1[0m" 500 -
+2026-01-29 02:40:47,753 - __main__ - INFO - Shutting down...
+2026-01-29 02:40:47,755 - __main__ - INFO - Disconnected from MT5
+2026-01-29 02:40:50,211 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:40:50,236 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:40:50,242 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:40:50,243 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:40:50,295 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:40:50,300 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:40:53,967 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:40:53.967196+00:00')
+2026-01-29 02:40:53,967 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=1.105, stop_loss=1.095, timeframe='H1', comment='', timestamp='2026-01-29T10:40:53.967196+00:00')
+2026-01-29 02:40:53,978 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.19495, 'ask': 1.19498, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:40:53,984 - __main__ - INFO - Spread check for EURUSD: True
+2026-01-29 02:40:53,984 - __main__ - INFO - Order type: 0
+2026-01-29 02:40:53,984 - __main__ - INFO - Tick: Tick(time=1769690453, bid=1.19495, ask=1.19498, last=0.0, volume=0, time_msc=1769690453158, flags=1030, volume_real=0.0)
+2026-01-29 02:40:53,985 - __main__ - INFO - Order price: 1.19498
+2026-01-29 02:40:53,985 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:40:53,985 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'EURUSD', 'volume': 0.1, 'type': 0, 'price': 1.19498, 'sl': 1.095, 'tp': 1.105, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:40:53.967196+00:00', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:40:53,986 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:40:53] "POST /signal HTTP/1.1" 200 -
+2026-01-29 02:44:40,292 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T10:44:40.292203+00:00')
+2026-01-29 02:44:40,292 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.1, take_profit=None, stop_loss=None, timeframe='H1', comment='', timestamp='2026-01-29T10:44:40.292203+00:00')
+2026-01-29 02:44:40,292 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.19502, 'ask': 1.19504, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:44:40,293 - __main__ - INFO - Spread check for EURUSD: True
+2026-01-29 02:44:40,295 - __main__ - INFO - Order type: 0
+2026-01-29 02:44:40,295 - __main__ - INFO - Tick: Tick(time=1769690680, bid=1.19502, ask=1.19504, last=0.0, volume=0, time_msc=1769690680200, flags=1026, volume_real=0.0)
+2026-01-29 02:44:40,296 - __main__ - INFO - Order price: 1.19504
+2026-01-29 02:44:40,296 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:44:40,296 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'EURUSD', 'volume': 0.1, 'type': 0, 'price': 1.19504, 'sl': None, 'tp': None, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:44:40.292203+00:00', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:44:40,297 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:44:40] "POST /signal HTTP/1.1" 200 -
+2026-01-29 02:48:00,154 - __main__ - INFO - Signal received: Signal(symbol='GBPUSD', action='BUY', lot_size=0.1, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:48:00.154926+00:00')
+2026-01-29 02:48:00,155 - __main__ - INFO - send_order called with signal: Signal(symbol='GBPUSD', action='BUY', lot_size=0.1, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:48:00.154926+00:00')
+2026-01-29 02:48:00,155 - __main__ - INFO - Symbol info: {'symbol': 'GBPUSD', 'bid': 1.37952, 'ask': 1.37954, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:48:00,155 - __main__ - INFO - Spread check for GBPUSD: True
+2026-01-29 02:48:00,156 - __main__ - INFO - Order type: 0
+2026-01-29 02:48:00,156 - __main__ - INFO - Tick: Tick(time=1769690879, bid=1.37952, ask=1.37954, last=0.0, volume=0, time_msc=1769690879373, flags=1030, volume_real=0.0)
+2026-01-29 02:48:00,156 - __main__ - INFO - Order price: 1.37954
+2026-01-29 02:48:00,156 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:48:00,156 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'GBPUSD', 'volume': 0.1, 'type': 0, 'price': 1.37954, 'sl': 0, 'tp': 0, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:48:00.154926+00:00', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:48:00,157 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:48:00] "POST /signal HTTP/1.1" 200 -
+2026-01-29 02:52:20,668 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-29 02:52:20,673 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-29 02:52:20,677 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-29 02:52:20,679 - __main__ - INFO - MT5 connection successful
+2026-01-29 02:52:20,712 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-29 02:52:20,713 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-29 02:52:34,080 - __main__ - INFO - Signal received: Signal(symbol='GBPUSD', action='BUY', lot_size=0.1, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:52:34.080679+00:00')
+2026-01-29 02:52:34,081 - __main__ - INFO - send_order called with signal: Signal(symbol='GBPUSD', action='BUY', lot_size=0.1, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:52:34.080679+00:00')
+2026-01-29 02:52:34,081 - __main__ - INFO - Symbol info: {'symbol': 'GBPUSD', 'bid': 1.37915, 'ask': 1.37918, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:52:34,081 - __main__ - INFO - Spread check for GBPUSD: True
+2026-01-29 02:52:34,082 - __main__ - INFO - Order type: 0
+2026-01-29 02:52:34,082 - __main__ - INFO - Tick: Tick(time=1769691152, bid=1.37915, ask=1.37918, last=0.0, volume=0, time_msc=1769691152927, flags=1030, volume_real=0.0)
+2026-01-29 02:52:34,082 - __main__ - INFO - Order price: 1.37918
+2026-01-29 02:52:34,082 - __main__ - INFO - Lot size: 0.1
+2026-01-29 02:52:34,082 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'GBPUSD', 'volume': 0.1, 'type': 0, 'price': 1.37918, 'sl': 0, 'tp': 0, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:52:34.080679+00:00', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:52:34,083 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:52:34] "POST /signal HTTP/1.1" 200 -
+2026-01-29 02:52:42,472 - __main__ - INFO - Signal received: Signal(symbol='GBPUSD', action='BUY', lot_size=1.0, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:52:42.472080+00:00')
+2026-01-29 02:52:42,472 - __main__ - INFO - send_order called with signal: Signal(symbol='GBPUSD', action='BUY', lot_size=1.0, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-29T10:52:42.472080+00:00')
+2026-01-29 02:52:42,472 - __main__ - INFO - Symbol info: {'symbol': 'GBPUSD', 'bid': 1.37901, 'ask': 1.37903, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-29 02:52:42,473 - __main__ - INFO - Spread check for GBPUSD: True
+2026-01-29 02:52:42,473 - __main__ - INFO - Order type: 0
+2026-01-29 02:52:42,473 - __main__ - INFO - Tick: Tick(time=1769691162, bid=1.37901, ask=1.37903, last=0.0, volume=0, time_msc=1769691162216, flags=1030, volume_real=0.0)
+2026-01-29 02:52:42,473 - __main__ - INFO - Order price: 1.37903
+2026-01-29 02:52:42,473 - __main__ - INFO - Lot size: 1.0
+2026-01-29 02:52:42,473 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'GBPUSD', 'volume': 1.0, 'type': 0, 'price': 1.37903, 'sl': 0, 'tp': 0, 'deviation': 50, 'magic': 1234567, 'comment': ' - 2026-01-29T10:52:42.472080+00:00', 'type_time': 0, 'type_filling': 1}
+2026-01-29 02:52:42,474 - werkzeug - INFO - 127.0.0.1 - - [29/Jan/2026 02:52:42] "POST /signal HTTP/1.1" 200 -
+2026-01-29 03:04:11,469 - werkzeug - INFO - 134.199.163.226 - - [29/Jan/2026 03:04:11] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 03:04:11,915 - werkzeug - INFO - 134.199.163.226 - - [29/Jan/2026 03:04:11] "[33mPOST / HTTP/1.1[0m" 404 -
+2026-01-29 07:47:13,335 - werkzeug - INFO - 64.112.126.83 - - [29/Jan/2026 07:47:13] "[33mGET /.env.production HTTP/1.0[0m" 404 -
+2026-01-29 07:49:49,381 - werkzeug - ERROR - 162.216.149.6 - - [29/Jan/2026 07:49:49] code 400, message Bad request syntax ('\x16\x03\x01\x00è\x01\x00\x00ä\x03\x03UÈ\\Ôt½')
+2026-01-29 07:49:49,382 - werkzeug - INFO - 162.216.149.6 - - [29/Jan/2026 07:49:49] "[31m[1m\x16\x03\x01\x00è\x01\x00\x00ä\x03\x03UÈ\\Ôt½[0m" 400 -
+2026-01-29 07:49:49,453 - werkzeug - ERROR - 162.216.149.6 - - [29/Jan/2026 07:49:49] code 400, message Bad request version ('À(À$À\x14À')
+2026-01-29 07:49:49,458 - werkzeug - INFO - 162.216.149.6 - - [29/Jan/2026 07:49:49] "[31m[1m\x16\x03\x01\x00Ê\x01\x00\x00Æ\x03\x031{\x124Mb\\òOls#ü\x18ÿ\x19èvéZò÷8òù­×¬çm #\x00\x00hÌ\x14Ì\x13À/À+À0À,À\x11À\x07À'À#À\x13À\x09À(À$À\x14À[0m" 400 -
+2026-01-29 11:48:16,561 - werkzeug - INFO - 130.12.180.122 - - [29/Jan/2026 11:48:16] "[33mCONNECT 64.89.161.229:25566 HTTP/1.1[0m" 404 -
+2026-01-29 12:12:02,270 - werkzeug - INFO - 198.235.24.126 - - [29/Jan/2026 12:12:02] "[33mGET / HTTP/1.0[0m" 404 -
+2026-01-29 12:20:16,525 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:16] "[33mPOST / HTTP/1.1[0m" 404 -
+2026-01-29 12:20:17,071 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:17] "[33mPOST /_next HTTP/1.1[0m" 404 -
+2026-01-29 12:20:17,260 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:17] "[33mPOST /api HTTP/1.1[0m" 404 -
+2026-01-29 12:20:17,818 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:17] "[33mPOST /_next/server HTTP/1.1[0m" 404 -
+2026-01-29 12:20:18,540 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:18] "[33mPOST /app HTTP/1.1[0m" 404 -
+2026-01-29 12:20:18,873 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 12:20:18] "[33mPOST /api/route HTTP/1.1[0m" 404 -
+2026-01-29 12:38:18,698 - werkzeug - INFO - 101.249.63.253 - - [29/Jan/2026 12:38:18] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 12:38:51,818 - werkzeug - INFO - 124.117.193.208 - - [29/Jan/2026 12:38:51] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 13:40:18,752 - werkzeug - ERROR - 167.94.146.50 - - [29/Jan/2026 13:40:18] code 400, message Bad request version ('À\x14À')
+2026-01-29 13:40:18,754 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:18] "[31m[1m\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03-øa2¸MoKó^\x0bT8ø\x08½\x86ÁÐä£½ç\x1cw<\x1f¿ÅÀ\x9b× ¬ü\x8dâH\x95_ða?\x0fn\x83\x97øÉLsLyÖÖAúí!#L3ÊE[\x00&Ì¨Ì©À/À0À+À,À\x13À\x09À\x14À[0m" 400 -
+2026-01-29 13:40:22,504 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:22] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 13:40:32,241 - werkzeug - ERROR - 167.94.146.50 - - [29/Jan/2026 13:40:32] code 400, message Bad request version ('À\x14À')
+2026-01-29 13:40:32,243 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:32] "[31m[1m\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03r>sÎÂÅÊÞ½¾\x14MÏ¹Y²ÊÅ\x86*\x12ã \x8f¼-\x93@é\x7fê\x03 \x80ã\x8aõ}»¹|\x0bðÐÝT\x9fÓ\x90ãu\x0b\x0e)eë\x14\x09®óÖ|cÿ\x12\x00&Ì¨Ì©À/À0À+À,À\x13À\x09À\x14À[0m" 400 -
+2026-01-29 13:40:33,114 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:33] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 13:40:33,361 - werkzeug - ERROR - 167.94.146.50 - - [29/Jan/2026 13:40:33] code 505, message Invalid HTTP version (2.0)
+2026-01-29 13:40:33,364 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:33] "[35m[1mPRI * HTTP/2.0[0m" 505 -
+2026-01-29 13:40:37,326 - werkzeug - ERROR - 167.94.146.50 - - [29/Jan/2026 13:40:37] code 400, message Bad request version ('À\x14À')
+2026-01-29 13:40:37,328 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:37] "[31m[1m\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03 ã¼\x1cç\x0b\x84\x80¯UU\x160<âÑ¼çy\x82mb\x82ø\x9eÉIå?Êõ\x96 \x97/~p²\x12\x12UÂéÈÈ¥%U\x97\x86>:µ¯-ÛJó ?ÃÌ¤ï^\x00&Ì¨Ì©À/À0À+À,À\x13À\x09À\x14À[0m" 400 -
+2026-01-29 13:40:37,564 - werkzeug - INFO - 167.94.146.50 - - [29/Jan/2026 13:40:37] "[33mGET /security.txt HTTP/1.1[0m" 404 -
+2026-01-29 18:01:07,683 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:07] "[33mPOST / HTTP/1.1[0m" 404 -
+2026-01-29 18:01:08,495 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:08] "[33mPOST /_next HTTP/1.1[0m" 404 -
+2026-01-29 18:01:09,647 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:09] "[33mPOST /api HTTP/1.1[0m" 404 -
+2026-01-29 18:01:10,933 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:10] "[33mPOST /_next/server HTTP/1.1[0m" 404 -
+2026-01-29 18:01:11,757 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:11] "[33mPOST /app HTTP/1.1[0m" 404 -
+2026-01-29 18:01:12,695 - werkzeug - INFO - 45.194.92.35 - - [29/Jan/2026 18:01:12] "[33mPOST /api/route HTTP/1.1[0m" 404 -
+2026-01-29 18:05:00,762 - werkzeug - INFO - 3.137.73.221 - - [29/Jan/2026 18:05:00] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 18:05:59,779 - werkzeug - INFO - 3.137.73.221 - - [29/Jan/2026 18:05:59] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 18:06:56,304 - werkzeug - ERROR - 3.137.73.221 - - [29/Jan/2026 18:06:56] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x00{\x01\x00\x00w\x03\x03d5àC0')
+2026-01-29 18:06:56,309 - werkzeug - INFO - 3.137.73.221 - - [29/Jan/2026 18:06:56] "[31m[1m\x16\x03\x01\x00{\x01\x00\x00w\x03\x03d5àC0 Q\x04[0m" 400 -
+2026-01-29 18:08:53,511 - werkzeug - ERROR - 3.137.73.221 - - [29/Jan/2026 18:08:53] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x00{\x01\x00\x00w\x03\x03\x16\x0eÒA\x1as\x16@\x8eÏ\x80\x7f\x88\x94\x89\x01pAÐû}¯|B\x9f×\x87\x8a\x17Iþ\x8a\x00\x00\x1aÀ/À+À\x11À\x07À\x13À')
+2026-01-29 18:08:53,516 - werkzeug - INFO - 3.137.73.221 - - [29/Jan/2026 18:08:53] "[31m[1m\x16\x03\x01\x00{\x01\x00\x00w\x03\x03\x16\x0eÒA\x1as\x16@\x8eÏ\x80\x7f\x88\x94\x89\x01pAÐû}¯|B\x9f×\x87\x8a\x17Iþ\x8a\x00\x00\x1aÀ/À+À\x11À\x07À\x13À\x09À\x14À[0m" 400 -
+2026-01-29 21:47:04,564 - werkzeug - INFO - 64.62.156.52 - - [29/Jan/2026 21:47:04] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-29 21:47:36,208 - werkzeug - INFO - 64.62.156.62 - - [29/Jan/2026 21:47:36] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-29 22:59:47,158 - werkzeug - INFO - 205.210.31.244 - - [29/Jan/2026 22:59:47] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-30 00:34:14,536 - werkzeug - ERROR - 118.26.37.105 - - [30/Jan/2026 00:34:14] code 400, message Bad request version ('\x00\x9eÌ¨Ìª\x003\x00=\x00\x16À')
+2026-01-30 00:34:14,541 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:14] "[31m[1m\x16\x03\x01\x00ü\x01\x00\x00ø\x03\x03ò_ª7æ5¾\x9e5\\Ú\x9f<{dG¨íã¦¨®[·Ë\x11MC³A\x826 ÅàÁîÁY\x9eÜa\x083WfÉ¬h+\x8e !\x92\x03\x95\x073Î;2Ñ8G\x02\x004Ì¨Ì©À/À0À+À,À\x09\x00\x9eÌ¨Ìª\x003\x00=\x00\x16À[0m" 400 -
+2026-01-30 00:34:25,240 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:25] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-30 00:34:25,700 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:25] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-30 00:34:26,183 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:26] "[33mGET /robots.txt HTTP/1.1[0m" 404 -
+2026-01-30 00:34:26,664 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:26] "[33mGET /sitemap.xml HTTP/1.1[0m" 404 -
+2026-01-30 00:34:31,189 - werkzeug - INFO - 118.26.37.105 - - [30/Jan/2026 00:34:31] "[33mPOST /update_weights_from_tensor HTTP/1.1[0m" 404 -
+2026-01-30 02:33:06,455 - werkzeug - INFO - 45.79.115.134 - - [30/Jan/2026 02:33:06] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-30 03:03:04,516 - werkzeug - INFO - 66.175.213.4 - - [30/Jan/2026 03:03:04] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-30 04:23:20,958 - werkzeug - INFO - 93.123.109.37 - - [30/Jan/2026 04:23:20] "[33mGET / HTTP/1.1[0m" 404 -
+2026-01-30 06:13:11,618 - werkzeug - ERROR - 162.142.125.37 - - [30/Jan/2026 06:13:11] code 400, message Bad request version ('À\x14À')
+2026-01-30 06:13:11,621 - werkzeug - INFO - 162.142.125.37 - - [30/Jan/2026 06:13:11] "[31m[1m\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03¼gy\x1co<'<qûõ\x04\x03¢þÀØ¡@£M\x95hå\x16\x93_½\x9d)ËÝ yAå¨|YW\x0dAÉXcyTeÇ\x856H\x93ä;ÍF¥\x1dçÉ©\x0bÄ4\x00&Ì¨Ì©À/À0À+À,À\x13À\x09À\x14À[0m" 400 -
+2026-01-30 06:13:55,008 - werkzeug - ERROR - 162.142.125.37 - - [30/Jan/2026 06:13:55] code 400, message Bad request syntax ('ZG\x00\x00\x00\x05\x00+\x0e\x01\x00')
+2026-01-30 06:13:55,019 - werkzeug - INFO - 162.142.125.37 - - [30/Jan/2026 06:13:55] "[31m[1mZG\x00\x00\x00\x05\x00+\x0e\x01\x00[0m" 400 -
+2026-01-31 06:54:28,114 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-01-31 06:54:28,265 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-01-31 06:54:30,195 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-01-31 06:54:30,197 - __main__ - INFO - MT5 connection successful
+2026-01-31 06:54:31,626 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-01-31 06:54:31,627 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-31 06:56:43,244 - __main__ - INFO - Signal received: Signal(symbol='GBPUSD', action='BUY', lot_size=1.0, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-31T14:56:43.244007+00:00')
+2026-01-31 06:56:43,244 - __main__ - INFO - send_order called with signal: Signal(symbol='GBPUSD', action='BUY', lot_size=1.0, take_profit=0, stop_loss=0, timeframe='H1', comment='', timestamp='2026-01-31T14:56:43.244007+00:00')
+2026-01-31 06:56:43,245 - __main__ - INFO - Symbol info: {'symbol': 'GBPUSD', 'bid': 1.36817, 'ask': 1.36894, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-01-31 06:56:43,247 - __main__ - WARNING - GBPUSD spread too high: 76.99999999999373 pips
+2026-01-31 06:56:43,247 - __main__ - INFO - Spread check for GBPUSD: False
+2026-01-31 06:56:43,247 - __main__ - ERROR - Spread too high for GBPUSD
+2026-01-31 06:56:43,247 - __main__ - ERROR - Order execution failed. MT5 error: (1, 'Success')
+2026-01-31 06:56:43,248 - werkzeug - INFO - 127.0.0.1 - - [31/Jan/2026 06:56:43] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-02-03 06:39:51,825 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-02-03 06:39:51,856 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-02-03 06:39:51,860 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-02-03 06:39:51,861 - __main__ - INFO - MT5 connection successful
+2026-02-03 06:39:52,271 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-02-03 06:39:52,296 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-03 06:40:50,107 - werkzeug - INFO - 127.0.0.1 - - [03/Feb/2026 06:40:50] "[33mPOST /webhook HTTP/1.1[0m" 404 -
+2026-02-03 06:41:56,705 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-02-03 06:41:56,711 - __main__ - INFO - MT5 connection attempt 1/5...
+2026-02-03 06:41:56,756 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-02-03 06:41:56,759 - __main__ - INFO - MT5 connection successful
+2026-02-03 06:41:56,803 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://69.10.45.190:5000
+2026-02-03 06:41:56,813 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-03 06:52:45,156 - __main__ - INFO - Signal received: Signal(symbol='EURUSD', action='BUY', lot_size=0.01, take_profit=None, stop_loss=None, timeframe='H1', comment='One-Line Test', timestamp='2026-02-03T14:52:45.156283+00:00')
+2026-02-03 06:52:45,156 - __main__ - INFO - send_order called with signal: Signal(symbol='EURUSD', action='BUY', lot_size=0.01, take_profit=None, stop_loss=None, timeframe='H1', comment='One-Line Test', timestamp='2026-02-03T14:52:45.156283+00:00')
+2026-02-03 06:52:45,157 - __main__ - INFO - Symbol info: {'symbol': 'EURUSD', 'bid': 1.17986, 'ask': 1.1798899999999999, 'point': 1e-05, 'digits': 5, 'trade_contract_size': 100000.0}
+2026-02-03 06:52:45,158 - __main__ - INFO - Spread check for EURUSD: True
+2026-02-03 06:52:45,158 - __main__ - INFO - Order type: 0
+2026-02-03 06:52:45,158 - __main__ - INFO - Tick: Tick(time=1770137564, bid=1.17986, ask=1.1798899999999999, last=0.0, volume=0, time_msc=1770137564887, flags=1030, volume_real=0.0)
+2026-02-03 06:52:45,158 - __main__ - INFO - Order price: 1.1798899999999999
+2026-02-03 06:52:45,158 - __main__ - INFO - Lot size: 0.01
+2026-02-03 06:52:45,159 - __main__ - INFO - Order request dict: {'action': 1, 'symbol': 'EURUSD', 'volume': 0.01, 'type': 0, 'price': 1.1798899999999999, 'sl': None, 'tp': None, 'deviation': 50, 'magic': 1234567, 'comment': 'One-Line Test - 2026-02-03T14:52:45.156283+00:00', 'type_time': 0, 'type_filling': 1}
+2026-02-03 06:52:45,161 - werkzeug - INFO - 127.0.0.1 - - [03/Feb/2026 06:52:45] "POST /signal HTTP/1.1" 200 -
+2026-02-03 07:49:56,102 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-02-03 07:49:56,119 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-02-03 07:49:56,119 - __main__ - INFO - MT5 connection successful
+2026-02-03 07:49:56,207 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:80
+ * Running on http://69.10.45.190:80
+2026-02-03 07:49:56,238 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-03 07:52:32,162 - __main__ - INFO - Shutting down...
+2026-02-03 07:52:32,230 - __main__ - INFO - Disconnected from MT5
+2026-02-03 07:52:42,017 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-02-03 07:52:42,040 - __main__ - INFO - Connected to MT5: Pro (249750734)
+2026-02-03 07:52:42,041 - __main__ - INFO - MT5 connection successful
+2026-02-03 07:52:42,094 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:80
+ * Running on http://69.10.45.190:80
+2026-02-03 07:52:42,097 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-03 08:00:02,618 - __main__ - INFO - Shutting down...
+2026-02-03 08:00:02,622 - __main__ - INFO - Disconnected from MT5
+2026-02-03 08:00:06,663 - __main__ - INFO - Starting MT5 TradingView Integration...
+2026-02-03 08:00:06,681 - __main__ - INFO - Connected to MT5: Ayan Malik (5045612421)
+2026-02-03 08:00:06,684 - __main__ - INFO - MT5 connection successful
+2026-02-03 08:00:06,746 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:80
+ * Running on http://69.10.45.190:80
+2026-02-03 08:00:06,761 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-03 08:29:52,411 - __main__ - INFO - Signal Received: Signal(symbol='EURUSD', action='BUY', lot_size=0.01, take_profit=0.0, stop_loss=0.0, timeframe='H1', comment='One-Line Test', timestamp='2026-02-03T16:29:52.410640+00:00')
+2026-02-03 08:29:52,414 - __main__ - ERROR - Error sending order: module 'MetaTrader5' has no attribute 'SYMBOL_FILLING_FOK'
+2026-02-03 08:29:52,417 - __main__ - ERROR - Order execution failed: MT5 rejected order
+2026-02-03 08:29:52,418 - werkzeug - INFO - 127.0.0.1 - - [03/Feb/2026 08:29:52] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-02-03 08:30:09,239 - __main__ - INFO - Signal Received: Signal(symbol='EURUSD', action='BUY', lot_size=0.01, take_profit=0.0, stop_loss=0.0, timeframe='H1', comment='One-Line Test', timestamp='2026-02-03T16:30:09.239821+00:00')
+2026-02-03 08:30:09,244 - __main__ - ERROR - Error sending order: module 'MetaTrader5' has no attribute 'SYMBOL_FILLING_FOK'
+2026-02-03 08:30:09,248 - __main__ - ERROR - Order execution failed: MT5 rejected order
+2026-02-03 08:30:09,248 - werkzeug - INFO - 69.10.45.190 - - [03/Feb/2026 08:30:09] "[31m[1mPOST /signal HTTP/1.1[0m" 400 -
+2026-02-03 08:35:10,107 - __main__ - INFO - Shutting down...
+2026-02-03 08:35:10,109 - __main__ - INFO - Disconnected from MT5

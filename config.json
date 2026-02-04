@@ -1,0 +1,34 @@
+{
+    "mt5": {
+        "login": 12345678,
+        "password": "your_password_here",
+        "server": "MetaQuotes-Demo",
+        "path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+        "timeout_ms": 30000
+    },
+    "server": {
+        "host": "0.0.0.0",
+        "port": 5000,
+        "api_key": ""
+    },
+    "relay": {
+        "enabled": false,
+        "url": "http://YOUR_RELAY_IP:5000",
+        "poll_interval": 3
+    },
+    "trading": {
+        "default_lot_size": 0.1,
+        "max_lot_size": 1.0,
+        "risk_percentage": 2.0,
+        "max_spread_pips": 50.0,
+        "slippage": 10,
+        "magic_number": 123456,
+        "max_open_positions": 5
+    },
+    "notifications": {
+        "enabled": false,
+        "telegram_token": "",
+        "telegram_chat_id": ""
+    },
+    "license_key": "TEST-DEMO-1234-5678-VALID"
+}

@@ -1,0 +1,208 @@
+// TradingView Pine Script to Send Signals to MT5
+// This script sends trading signals via webhook to the Python HTTP listener
+
+//@version=5
+strategy("MT5 Signal Sender", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+// Webhook URL (replace with your Hostinger VPS IP/domain)
+webhook_url = input.string(
+    "http://YOUR_VPS_IP:5000/signal",
+    title="Webhook URL",
+    group="Settings"
+)
+
+// API Key for signature verification
+api_key = input.string(
+    "",
+    title="API Key",
+    tooltip="Leave empty if not using signature verification",
+    group="Settings"
+)
+
+// Trading Settings
+lot_size = input.float(
+    0.1,
+    title="Lot Size",
+    minval=0.01,
+    step=0.01,
+    group="Trading"
+)
+
+// Strategy Parameters
+fast_length = input.int(9, title="Fast MA Length", group="Strategy")
+slow_length = input.int(21, title="Slow MA Length", group="Strategy")
+atr_length = input.int(14, title="ATR Length", group="Strategy")
+atr_multiplier = input.float(2.0, title="ATR Multiplier", group="Strategy")
+
+// Risk Management
+use_stop_loss = input.bool(true, title="Use Stop Loss", group="Risk Management")
+use_take_profit = input.bool(true, title="Use Take Profit", group="Risk Management")
+tp_ratio = input.float(2.0, title="TP/SL Ratio", group="Risk Management")
+
+// ============================================================================
+// INDICATOR CALCULATIONS
+// ============================================================================
+
+// Moving Averages
+fast_ma = ta.sma(close, fast_length)
+slow_ma = ta.sma(close, slow_length)
+
+// ATR for stops and profits
+atr = ta.atr(atr_length)
+
+// RSI for confirmation
+rsi = ta.rsi(close, 14)
+
+// ============================================================================
+// STRATEGY LOGIC
+// ============================================================================
+
+// Buy Signal: Fast MA above Slow MA + RSI not overbought
+buy_signal = fast_ma > slow_ma and rsi < 70 and close > fast_ma
+
+// Sell Signal: Fast MA below Slow MA + RSI not oversold
+sell_signal = fast_ma < slow_ma and rsi > 30 and close < fast_ma
+
+// Exit Signals
+exit_buy_signal = fast_ma < slow_ma
+exit_sell_signal = fast_ma > slow_ma
+
+// ============================================================================
+// SIGNAL CALCULATION
+// ============================================================================
+
+// Calculate SL and TP levels
+stop_loss_distance = atr * atr_multiplier
+take_profit_distance = stop_loss_distance * tp_ratio
+
+buy_stop = close - stop_loss_distance
+buy_target = close + take_profit_distance
+
+sell_stop = close + stop_loss_distance
+sell_target = close - take_profit_distance
+
+// ============================================================================
+// WEBHOOK MESSAGE CONSTRUCTION
+// ============================================================================
+
+// Buy Signal Message
+buy_message = ""
+if buy_signal
+    buy_message := json.stringify(
+        json.from_all(
+            symbol=syminfo.tickerid,
+            action="BUY",
+            lot_size=lot_size,
+            stop_loss=use_stop_loss ? buy_stop : na,
+            take_profit=use_take_profit ? buy_target : na,
+            timeframe=timeframe.period,
+            comment="Buy signal: Fast MA > Slow MA, RSI < 70"
+        )
+    )
+
+// Sell Signal Message
+sell_message = ""
+if sell_signal
+    sell_message := json.stringify(
+        json.from_all(
+            symbol=syminfo.tickerid,
+            action="SELL",
+            lot_size=lot_size,
+            stop_loss=use_stop_loss ? sell_stop : na,
+            take_profit=use_take_profit ? sell_target : na,
+            timeframe=timeframe.period,
+            comment="Sell signal: Fast MA < Slow MA, RSI > 30"
+        )
+    )
+
+// Exit Buy Message
+exit_buy_message = ""
+if exit_buy_signal
+    exit_buy_message := json.stringify(
+        json.from_all(
+            symbol=syminfo.tickerid,
+            action="CLOSE_BUY",
+            timeframe=timeframe.period,
+            comment="Close buy: Fast MA crossed below Slow MA"
+        )
+    )
+
+// Exit Sell Message
+exit_sell_message = ""
+if exit_sell_signal
+    exit_sell_message := json.stringify(
+        json.from_all(
+            symbol=syminfo.tickerid,
+            action="CLOSE_SELL",
+            timeframe=timeframe.period,
+            comment="Close sell: Fast MA crossed above Slow MA"
+        )
+    )
+
+// ============================================================================
+// SEND ALERTS
+// ============================================================================
+
+if buy_signal
+    alert(buy_message, alert.freq_once_per_bar_close)
+    request.post(
+        url=webhook_url,
+        headers=na,
+        body=buy_message
+    )
+
+if sell_signal
+    alert(sell_message, alert.freq_once_per_bar_close)
+    request.post(
+        url=webhook_url,
+        headers=na,
+        body=sell_message
+    )
+
+if exit_buy_signal and strategy.position_size > 0
+    alert(exit_buy_message, alert.freq_once_per_bar_close)
+    request.post(
+        url=webhook_url,
+        headers=na,
+        body=exit_buy_message
+    )
+
+if exit_sell_signal and strategy.position_size < 0
+    alert(exit_sell_message, alert.freq_once_per_bar_close)
+    request.post(
+        url=webhook_url,
+        headers=na,
+        body=exit_sell_message
+    )
+
+// ============================================================================
+// VISUALIZATION
+// ============================================================================
+
+// Plot Moving Averages
+plot(fast_ma, color=color.blue, title="Fast MA")
+plot(slow_ma, color=color.orange, title="Slow MA")
+
+// Plot Buy/Sell Signals
+plotshape(buy_signal, style=shape.labelup, location=location.belowbar, color=color.green, size=size.small, title="Buy Signal")
+plotshape(sell_signal, style=shape.labeldown, location=location.abovebar, color=color.red, size=size.small, title="Sell Signal")
+
+// ============================================================================
+// STRATEGY ENTRIES (Optional - for backtesting in TradingView)
+// ============================================================================
+
+if buy_signal and strategy.position_size == 0
+    strategy.entry("Buy", strategy.long, qty=lot_size)
+
+if sell_signal and strategy.position_size == 0
+    strategy.entry("Sell", strategy.short, qty=lot_size)
+
+if exit_buy_signal and strategy.position_size > 0
+    strategy.close("Buy")
+
+if exit_sell_signal and strategy.position_size < 0
+    strategy.close("Sell")
