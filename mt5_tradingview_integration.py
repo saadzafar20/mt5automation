@@ -56,6 +56,7 @@ class Config:
     MT5_TIMEOUT: int = int(os.getenv('MT5_TIMEOUT', '30000'))
     MAX_SPREAD_PIPS: float = float(os.getenv('MAX_SPREAD_PIPS', '20'))
     SLIPPAGE: int = int(os.getenv('SLIPPAGE', '50'))
+    DEFAULT_LOT_SIZE: float = float(os.getenv('DEFAULT_LOT_SIZE', '0.01'))
     
     # API Settings
     API_HOST: str = os.getenv('API_HOST', '0.0.0.0')
@@ -148,11 +149,27 @@ class MT5Manager:
         return mt5.ORDER_FILLING_RETURN
 
     def _with_suffix(self, symbol: str) -> str:
-        """Append configured suffix to symbol if needed"""
-        if self.symbol_suffix and not symbol.endswith(self.symbol_suffix):
-            return symbol + self.symbol_suffix
-        return symbol
+        # 1. Try the exact symbol from TradingView (e.g., EURUSD)
+        if mt5.symbol_info(symbol):
+            return symbol
 
+        # 2. Try configured suffix (e.g., EURUSD.m)
+        if self.symbol_suffix:
+            suffixed = f"{symbol}{self.symbol_suffix}"
+            if mt5.symbol_info(suffixed):
+                logger.info(f"Suffix Match Found: {symbol} -> {suffixed}")
+                return suffixed
+
+        # 3. If not found, look through all symbols in Market Watch
+        all_symbols = mt5.symbols_get() or []
+        for s in all_symbols:
+            # Check if the TV symbol is part of the broker's symbol name
+            if symbol in s.name:
+                logger.info(f"Dynamic Match Found: {symbol} -> {s.name}")
+                return s.name
+
+        return symbol  # Fallback
+    
     def send_order(self, signal: Signal) -> Optional[int]:
         """Send order to MT5 and return order ticket on success"""
         try:
