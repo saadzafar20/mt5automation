@@ -243,12 +243,20 @@ def receive_signal():
     if api_key and not verify_api_key(user_id, api_key):
         return jsonify({"error": "unauthorized"}), 401
 
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        raw_body = request.get_data(as_text=True).strip()
+        if raw_body:
+            try:
+                data = json.loads(raw_body)
+            except json.JSONDecodeError:
+                return jsonify({"error": "invalid JSON payload"}), 400
+    data = data or {}
     action = data.get("action", "").upper()
     symbol = data.get("symbol", "")
-    size = data.get("size", 0.1)
-    sl = data.get("sl")
-    tp = data.get("tp")
+    size = data.get("size", data.get("lot_size", 0.1))
+    sl = data.get("sl", data.get("stop_loss"))
+    tp = data.get("tp", data.get("take_profit"))
 
     if not action or not symbol:
         return jsonify({"error": "missing action or symbol"}), 400

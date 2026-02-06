@@ -370,7 +370,14 @@ def receive_signal():
     global last_signal_time
     
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if data is None:
+            raw_body = request.get_data(as_text=True).strip()
+            if raw_body:
+                try:
+                    data = json.loads(raw_body)
+                except json.JSONDecodeError:
+                    return jsonify({'error': 'Invalid JSON payload'}), 400
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
@@ -379,12 +386,16 @@ def receive_signal():
         if not raw_action:
             return jsonify({'error': 'Missing action'}), 400
 
+        lot_size = data.get('lot_size', data.get('size', 0.01))
+        take_profit = data.get('take_profit', data.get('tp', 0.0))
+        stop_loss = data.get('stop_loss', data.get('sl', 0.0))
+
         signal = Signal(
             symbol=data.get('symbol', '').upper(),
             action=raw_action.upper(),
-            lot_size=float(data.get('lot_size', 0.01)),
-            take_profit=float(data.get('take_profit', 0.0)),
-            stop_loss=float(data.get('stop_loss', 0.0)),
+            lot_size=float(lot_size),
+            take_profit=float(take_profit),
+            stop_loss=float(stop_loss),
             timeframe=data.get('timeframe', 'H1'),
             comment=data.get('comment', 'TV Signal')
         )
