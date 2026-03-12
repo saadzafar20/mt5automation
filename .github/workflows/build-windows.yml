@@ -36,23 +36,12 @@ jobs:
             relay_gui.py
         shell: pwsh
 
-      - name: Get version + short SHA
-        id: meta
-        run: |
-          $sha = (git rev-parse --short HEAD)
-          echo "sha=$sha" >> $env:GITHUB_OUTPUT
-          echo "tag=v1.0.0-win-$sha" >> $env:GITHUB_OUTPUT
-          echo "title=PlatAlgo Relay v1.0.0 Windows ($sha)" >> $env:GITHUB_OUTPUT
-        shell: pwsh
-
-      - name: Upload .exe to platalgo-releases
+      - name: Upload .exe to Cloudflare R2
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_PAT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          gh release create "${{ steps.meta.outputs.tag }}" `
-            dist\PlatAlgoRelay.exe `
-            --repo ayanmalikshub/platalgoreleases `
-            --title "${{ steps.meta.outputs.title }}" `
-            --notes "## PlatAlgo Relay — Windows App`n`n### Install`n1. Download **PlatAlgoRelay.exe** below`n2. Run it directly — no installation needed`n3. Windows may show a SmartScreen warning; click 'More info' → 'Run anyway'`n`nBuilt from commit ${{ steps.meta.outputs.sha }}" `
-            --latest
+          aws s3 cp dist\PlatAlgoRelay.exe s3://platalgo-releases/PlatAlgoRelay.exe `
+            --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com `
+            --no-progress
         shell: pwsh

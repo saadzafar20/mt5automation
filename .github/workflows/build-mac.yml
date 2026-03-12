@@ -24,35 +24,11 @@ jobs:
           chmod +x build_relay_mac.sh
           ./build_relay_mac.sh
 
-      - name: Get version + short SHA
-        id: meta
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          echo "sha=$SHA" >> $GITHUB_OUTPUT
-          echo "tag=v1.0.0-$SHA" >> $GITHUB_OUTPUT
-          echo "title=PlatAlgo Relay v1.0.0 ($SHA)" >> $GITHUB_OUTPUT
-
-      - name: Upload .dmg to platalgo-releases
+      - name: Upload .dmg to Cloudflare R2
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_PAT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          NOTES="## PlatAlgo Relay — Mac App
-
-          ### Install
-          1. Download **PlatAlgoRelay.dmg** below
-          2. Open the DMG, drag PlatAlgoRelay to Applications
-          3. Right-click → Open the first time if Gatekeeper blocks it
-
-          ### What's included
-          - Connect to PlatAlgo bridge for automated MT5 trading
-          - 24/7 VPS Mode — trades execute via cloud even when your Mac is off
-          - Glass morphism UI with native macOS transparency
-
-          Built from commit ${{ steps.meta.outputs.sha }}"
-
-          gh release create "${{ steps.meta.outputs.tag }}" \
-            dist/PlatAlgoRelay.dmg \
-            --repo ayanmalikshub/platalgoreleases \
-            --title "${{ steps.meta.outputs.title }}" \
-            --notes "$NOTES" \
-            --latest
+          aws s3 cp dist/PlatAlgoRelay.dmg s3://platalgo-releases/PlatAlgoRelay.dmg \
+            --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+            --no-progress
