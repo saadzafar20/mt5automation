@@ -1,0 +1,22 @@
+app.platalgo.com {
+    reverse_proxy localhost:8080
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Compress responses
+    encode gzip
+
+    # Access log
+    log {
+        output file C:/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}

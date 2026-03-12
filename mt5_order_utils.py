@@ -1,0 +1,246 @@
+"""Shared MT5 order execution utilities.
+
+This module extracts common MT5 order logic used by both:
+- relay.py (self-hosted execution)
+- managed_mt5_worker.py (VPS managed execution)
+"""
+
+from typing import Any, Dict, Optional
+
+# Common MT5 error code mappings
+MT5_RETCODE_MESSAGES = {
+    10004: "Requote received.",
+    10006: "Request rejected by server.",
+    10007: "Request canceled by trader.",
+    10010: "Only part of the request was completed.",
+    10011: "Request processing error.",
+    10012: "Request timed out.",
+    10013: "Invalid request parameters.",
+    10014: "Invalid volume.",
+    10015: "Invalid price.",
+    10016: "Invalid stop loss or take profit.",
+    10017: "Trading disabled for this account.",
+    10018: "Market is currently closed.",
+    10019: "Not enough money in account to execute trade.",
+    10020: "Price has changed significantly.",
+    10021: "No quotes available for this symbol.",
+    10022: "Invalid order expiration date.",
+    10023: "Order state has changed.",
+    10024: "Too many trade requests.",
+    10025: "No changes in request parameters.",
+    10026: "Autotrading disabled by server.",
+    10027: "Autotrading disabled by client terminal.",
+    10028: "Request locked for processing.",
+    10029: "Order or position frozen.",
+    10030: "Invalid order filling type.",
+    10031: "No connection with the trade server.",
+    10032: "Operation allowed only for live accounts.",
+    10033: "Number of pending orders has reached the limit.",
+    10034: "Volume of orders and positions for this symbol has reached the limit.",
+    10035: "Incorrect or prohibited order type.",
+    10036: "Position with the specified POSITION_IDENTIFIER has already been closed.",
+    10038: "A close volume exceeds the current position volume.",
+    10039: "A close order already exists for this position.",
+    10040: "Number of open positions reached the limit set by the broker.",
+    10041: "Pending order activation request is rejected, order is canceled.",
+    10042: "Request rejected due to the 'Only long positions are allowed' rule.",
+    10043: "Request rejected due to the 'Only short positions are allowed' rule.",
+    10044: "Request rejected due to the 'Only position closing is allowed' rule.",
+    10045: "Request rejected as exceeding the maximum allowed position volume by symbol.",
+    10046: "Request rejected due to hedging being disallowed.",
+    10047: "Request rejected due to violation of FIFO rule.",
+}
+
+
+def map_mt5_retcode(retcode: Optional[int]) -> str:
+    """Map MT5 return code to human-readable message."""
+    if retcode is None:
+        return "Trade request failed."
+    return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
+
+
+def build_market_order(mt5, action: str, symbol: str, volume: float, 
+                       sl: Optional[float] = None, tp: Optional[float] = None,
+                       comment: str = "bridge-trade") -> Optional[Dict[str, Any]]:
+    """
+    Build a market order request dict for MT5.
+    
+    Args:
+        mt5: MetaTrader5 module
+        action: "BUY" or "SELL"
+        symbol: Trading symbol (e.g., "EURUSD")
+        volume: Lot size
+        sl: Stop loss price (optional)
+        tp: Take profit price (optional)
+        comment: Order comment
+        
+    Returns:
+        Order request dict or None if invalid
+    """
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        return None
+    
+    order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
+    price = tick.ask if action == "BUY" else tick.bid
+    
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": float(volume),
+        "type": order_type,
+        "price": price,
+        "comment": comment,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+    
+    if sl is not None:
+        request["sl"] = float(sl)
+    if tp is not None:
+        request["tp"] = float(tp)
+    
+    return request
+
+
+def build_close_request(mt5, position, comment: str = "bridge-close") -> Dict[str, Any]:
+    """
+    Build a close position request dict for MT5.
+    
+    Args:
+        mt5: MetaTrader5 module
+        position: Position object from mt5.positions_get()
+        comment: Order comment
+        
+    Returns:
+        Close order request dict
+    """
+    close_type = mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    
+    return {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": position.symbol,
+        "volume": position.volume,
+        "type": close_type,
+        "position": position.ticket,
+        "comment": comment,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+
+def execute_market_order(mt5, action: str, symbol: str, volume: float,
+                         sl: Optional[float] = None, tp: Optional[float] = None,
+                         comment: str = "bridge-trade") -> Dict[str, Any]:
+    """
+    Execute a market order via MT5.
+    
+    Args:
+        mt5: MetaTrader5 module
+        action: "BUY" or "SELL"
+        symbol: Trading symbol
+        volume: Lot size
+        sl: Stop loss price (optional)
+        tp: Take profit price (optional)
+        comment: Order comment
+        
+    Returns:
+        Result dict with status, order_id, error, etc.
+    """
+    if not symbol:
+        return {"status": "failed", "error": "missing symbol"}
+    
+    action = action.upper()
+    if action not in ("BUY", "SELL"):
+        return {"status": "failed", "error": f"invalid action: {action}"}
+    
+    request = build_market_order(mt5, action, symbol, volume, sl, tp, comment)
+    if not request:
+        return {"status": "failed", "error": f"no tick data for {symbol}"}
+    
+    result = mt5.order_send(request)
+    
+    if result.retcode == mt5.TRADE_RETCODE_DONE:
+        return {
+            "status": "executed",
+            "order_id": result.order,
+        }
+    else:
+        return {
+            "status": "failed",
+            "error": result.comment,
+            "retcode": result.retcode,
+            "error_message": map_mt5_retcode(result.retcode),
+        }
+
+
+def close_positions(mt5, symbol: Optional[str] = None, 
+                    comment: str = "bridge-close") -> Dict[str, Any]:
+    """
+    Close all positions, optionally filtered by symbol.
+    
+    Args:
+        mt5: MetaTrader5 module
+        symbol: Symbol to close (None = close all)
+        comment: Order comment
+        
+    Returns:
+        Result dict with status, order_ids, error
+    """
+    positions = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
+    
+    if not positions:
+        return {"status": "failed", "error": "no open positions"}
+    
+    closed_orders = []
+    failed_count = 0
+    
+    for pos in positions:
+        close_req = build_close_request(mt5, pos, comment)
+        result = mt5.order_send(close_req)
+        
+        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+            closed_orders.append(result.order)
+        else:
+            failed_count += 1
+    
+    if closed_orders:
+        result = {
+            "status": "executed",
+            "order_ids": closed_orders,
+            "closed_count": len(closed_orders),
+        }
+        if failed_count:
+            result["failed_count"] = failed_count
+        return result
+    else:
+        return {"status": "failed", "error": "all close requests failed"}
+
+
+def execute_command(mt5, command: Dict[str, Any], 
+                    comment_prefix: str = "bridge") -> Dict[str, Any]:
+    """
+    Execute a trade command dict via MT5.
+    
+    Args:
+        mt5: MetaTrader5 module
+        command: Command dict with action, symbol, size, sl, tp
+        comment_prefix: Prefix for order comments
+        
+    Returns:
+        Result dict
+    """
+    action = (command.get("action") or "").upper()
+    symbol = command.get("symbol", "")
+    size = float(command.get("size") or 0.1)
+    sl = command.get("sl")
+    tp = command.get("tp")
+    
+    if action in ("BUY", "SELL"):
+        return execute_market_order(
+            mt5, action, symbol, size, sl, tp,
+            comment=f"{comment_prefix}-trade"
+        )
+    elif action.startswith("CLOSE"):
+        close_symbol = None if action == "CLOSE_ALL" else symbol
+        return close_positions(mt5, close_symbol, comment=f"{comment_prefix}-close")
+    else:
+        return {"status": "failed", "error": f"unknown action: {action}"}

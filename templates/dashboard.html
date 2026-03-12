@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PlatAlgo — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: hsl(158, 50%, 4%);
+      --bg-card: hsla(156, 45%, 7%, 0.8);
+      --fg: hsl(42, 30%, 90%);
+      --fg-muted: hsl(155, 18%, 45%);
+      --primary: hsl(155, 65%, 36%);
+      --accent: hsl(43, 85%, 55%);
+      --secondary: hsl(156, 35%, 10%);
+      --border: hsla(156, 25%, 13%, 0.3);
+      --destructive: hsl(0, 72%, 50%);
+      --radius: 0.75rem;
+      --shadow-glass: 0 8px 32px -8px hsla(155, 65%, 36%, 0.18), 0 4px 16px -4px hsla(0, 0%, 0%, 0.08);
+      --shadow-gold: 0 8px 32px -8px hsla(43, 85%, 50%, 0.35);
+      --gradient-gold: linear-gradient(135deg, hsl(43, 85%, 50%), hsl(43, 80%, 65%));
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient BG */
+    .dash-ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+    .dash-ambient .orb-1 { position: absolute; top: 10%; left: 5%; width: 600px; height: 600px; background: hsla(155, 65%, 36%, 0.03); border-radius: 50%; filter: blur(200px); }
+    .dash-ambient .orb-2 { position: absolute; bottom: 10%; right: 5%; width: 500px; height: 500px; background: hsla(43, 85%, 55%, 0.03); border-radius: 50%; filter: blur(180px); }
+
+    /* Header */
+    .dash-header {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid hsla(156, 25%, 13%, 0.2);
+      box-shadow: var(--shadow-glass);
+    }
+    .header-inner { max-width: 1280px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .header-left { display: flex; align-items: center; gap: 32px; }
+    .header-logo { text-decoration: none; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .header-logo .gold { color: var(--accent); }
+    .header-logo .white { color: var(--fg); }
+
+    .header-nav { display: flex; align-items: center; gap: 4px; }
+    .nav-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px; font-size: 0.875rem; border-radius: 8px;
+      border: none; cursor: pointer; font-family: inherit; transition: all 0.3s;
+      background: transparent; color: var(--fg-muted);
+    }
+    .nav-btn:hover { color: var(--fg); background: hsla(156, 35%, 10%, 0.3); }
+    .nav-btn.active { color: var(--fg); background: hsla(156, 35%, 10%, 0.6); border: 1px solid var(--border); }
+    .nav-btn svg { width: 16px; height: 16px; }
+
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .icon-btn {
+      position: relative; padding: 8px; background: none; border: none; color: var(--fg-muted);
+      cursor: pointer; border-radius: 8px; transition: all 0.2s;
+    }
+    .icon-btn:hover { color: var(--fg); background: hsla(156, 35%, 10%, 0.3); }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .notif-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
+
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--gradient-gold);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--secondary); font-weight: 700; font-size: 0.875rem;
+      text-transform: uppercase;
+    }
+
+    .hamburger { display: none; }
+
+    .mobile-menu {
+      display: none;
+      border-top: 1px solid hsla(156, 25%, 13%, 0.2);
+      background: hsla(156, 45%, 7%, 0.95);
+      backdrop-filter: blur(24px);
+      padding: 12px 16px;
+    }
+    .mobile-menu.open { display: block; }
+    .mobile-nav-btn {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; padding: 12px 16px; font-size: 0.875rem;
+      border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
+      background: transparent; color: var(--fg-muted); transition: all 0.2s;
+    }
+    .mobile-nav-btn:hover { color: var(--fg); background: hsla(156, 35%, 10%, 0.3); }
+    .mobile-nav-btn.active { color: var(--fg); background: hsla(156, 35%, 10%, 0.6); }
+    .mobile-nav-btn svg { width: 16px; height: 16px; }
+
+    /* Flash messages */
+    .flash-zone { max-width: 1280px; margin: 16px auto 0; padding: 0 16px; position: relative; z-index: 10; }
+    .flash { padding: 12px 16px; border-radius: var(--radius); font-size: 0.875rem; margin-bottom: 8px; }
+    .flash.error { background: hsla(0, 72%, 50%, 0.15); color: #fca5a5; border: 1px solid hsla(0, 72%, 50%, 0.3); }
+    .flash.success { background: hsla(155, 65%, 36%, 0.15); color: #86efac; border: 1px solid hsla(155, 65%, 36%, 0.3); }
+
+    /* Main */
+    .dash-main { max-width: 1280px; margin: 0 auto; padding: 24px 16px; position: relative; z-index: 10; }
+
+    /* Glass card */
+    .glass { background: var(--bg-card); backdrop-filter: blur(24px); border: 1px solid hsla(156, 25%, 13%, 0.2); border-radius: var(--radius); box-shadow: var(--shadow-glass); }
+
+    /* Welcome banner */
+    .welcome-banner { padding: 24px 32px; position: relative; overflow: hidden; margin-bottom: 24px; }
+    .welcome-glow-1 { position: absolute; top: 0; right: 0; width: 320px; height: 320px; background: hsla(155, 65%, 36%, 0.05); border-radius: 50%; filter: blur(100px); }
+    .welcome-glow-2 { position: absolute; bottom: 0; left: 33%; width: 240px; height: 240px; background: hsla(43, 85%, 55%, 0.04); border-radius: 50%; filter: blur(80px); }
+    .welcome-top-line { position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(to right, transparent, hsla(43, 85%, 55%, 0.3), transparent); }
+    .welcome-content { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+    .welcome-title { font-size: 1.5rem; font-weight: 700; }
+    .welcome-title .gold { color: var(--accent); }
+    .welcome-subtitle { color: var(--fg-muted); margin-top: 6px; font-size: 0.875rem; }
+    .welcome-badges { display: flex; flex-wrap: wrap; gap: 12px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 500;
+      backdrop-filter: blur(8px);
+    }
+    .badge svg { width: 12px; height: 12px; }
+    .badge-primary { background: hsla(155, 65%, 36%, 0.1); color: var(--primary); border: 1px solid hsla(155, 65%, 36%, 0.2); }
+    .badge-accent { background: hsla(43, 85%, 55%, 0.1); color: var(--accent); border: 1px solid hsla(43, 85%, 55%, 0.2); }
+
+    /* Stats grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+    .stat-card { padding: 16px 20px; position: relative; overflow: hidden; transition: all 0.5s; }
+    .stat-card:hover { border-color: hsla(43, 85%, 55%, 0.15); }
+    .stat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .stat-label { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; color: var(--fg-muted); }
+    .stat-icon { padding: 6px; border-radius: 8px; background: hsla(155, 65%, 36%, 0.08); color: var(--primary); }
+    .stat-icon svg { width: 14px; height: 14px; }
+    .stat-value { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.025em; }
+    .stat-value.online { color: hsl(155, 65%, 50%); }
+    .stat-value.offline { color: var(--destructive); }
+    .stat-sub { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.625rem; font-weight: 500; color: var(--fg-muted); }
+
+    /* Content grid */
+    .content-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+    /* Table card */
+    .table-card-header { padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid hsla(156, 25%, 13%, 0.15); }
+    .table-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .table-title svg { width: 20px; height: 20px; color: var(--primary); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; color: var(--fg-muted); padding: 12px 16px; border-bottom: 1px solid hsla(156, 25%, 13%, 0.2); }
+    th.right { text-align: right; }
+    td { padding: 12px 16px; border-bottom: 1px solid hsla(156, 25%, 13%, 0.1); font-size: 0.875rem; transition: background 0.2s; vertical-align: top; }
+    tr:hover td { background: hsla(156, 35%, 10%, 0.15); }
+    tr:last-child td { border-bottom: none; }
+    td.right { text-align: right; }
+    .empty-td { text-align: center; color: var(--fg-muted); padding: 28px 16px !important; font-size: 0.875rem; }
+
+    .pair-name { font-weight: 500; }
+    .pair-sub { font-size: 0.625rem; color: var(--fg-muted); margin-top: 2px; }
+
+    .badge-sm { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 0.625rem; font-weight: 500; }
+    .badge-buy  { background: hsla(155, 65%, 36%, 0.1); color: var(--primary); border: 1px solid hsla(155, 65%, 36%, 0.2); }
+    .badge-sell { background: hsla(0, 72%, 50%, 0.1); color: var(--destructive); border: 1px solid hsla(0, 72%, 50%, 0.2); }
+    .badge-executed { background: hsla(155, 65%, 36%, 0.05); color: var(--primary); border: 1px solid hsla(155, 65%, 36%, 0.3); }
+    .badge-pending  { background: hsla(43, 85%, 55%, 0.05); color: var(--accent); border: 1px solid hsla(43, 85%, 55%, 0.3); }
+    .badge-failed   { background: hsla(0, 72%, 50%, 0.08); color: var(--destructive); border: 1px solid hsla(0, 72%, 50%, 0.2); }
+    .badge-relay-online  { background: hsla(155, 65%, 36%, 0.1); color: var(--primary); border: 1px solid hsla(155, 65%, 36%, 0.2); }
+    .badge-relay-offline { background: hsla(0, 72%, 50%, 0.1); color: var(--destructive); border: 1px solid hsla(0, 72%, 50%, 0.2); }
+    .badge-relay-unknown { background: hsla(156, 35%, 10%, 0.3); color: var(--fg-muted); border: 1px solid var(--border); }
+
+    /* Sidebar */
+    .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+    .sidebar-header { padding: 16px 20px; border-bottom: 1px solid hsla(156, 25%, 13%, 0.15); }
+    .sidebar-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .sidebar-title svg { width: 18px; height: 18px; color: var(--primary); }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: pulse 2s ease-in-out infinite; margin-left: 4px; display: inline-block; }
+
+    .relay-list { padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .relay-item { padding: 12px 14px; border-radius: 10px; background: hsla(156, 35%, 10%, 0.2); border: 1px solid hsla(156, 25%, 13%, 0.15); transition: all 0.3s; }
+    .relay-item:hover { border-color: hsla(43, 85%, 55%, 0.15); }
+    .relay-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .relay-id { font-size: 0.8125rem; font-weight: 600; font-family: 'Courier New', monospace; }
+    .relay-meta { font-size: 0.6875rem; color: var(--fg-muted); display: flex; gap: 8px; }
+
+    /* Quick actions */
+    .quick-actions { padding: 20px; }
+    .quick-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: var(--fg); }
+    .quick-title svg { width: 16px; height: 16px; color: var(--accent); }
+    .quick-actions-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .btn-action {
+      width: 100%; height: 44px; border-radius: var(--radius);
+      font-size: 0.875rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.3s;
+    }
+    .btn-action svg { width: 16px; height: 16px; }
+    .btn-gold { background: var(--gradient-gold); color: var(--secondary); border: none; }
+    .btn-gold:hover { box-shadow: var(--shadow-gold); }
+    .btn-outline { background: hsla(156, 35%, 10%, 0.2); color: var(--fg); border: 1px solid var(--border); }
+    .btn-outline:hover { background: hsla(156, 35%, 10%, 0.5); border-color: hsla(43, 85%, 55%, 0.15); }
+    .btn-danger-outline { background: hsla(0, 72%, 50%, 0.08); color: var(--destructive); border: 1px solid hsla(0, 72%, 50%, 0.2); }
+    .btn-danger-outline:hover { background: hsla(0, 72%, 50%, 0.15); }
+
+    /* Full-width sections */
+    .section-card { margin-bottom: 16px; overflow: hidden; }
+    .section-head { padding: 16px 24px; border-bottom: 1px solid hsla(156, 25%, 13%, 0.15); display: flex; align-items: center; justify-content: space-between; }
+    .section-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .section-title svg { width: 18px; height: 18px; color: var(--primary); }
+    .section-body { padding: 20px 24px; }
+
+    /* API Key box */
+    .api-key-box {
+      background: hsla(156, 35%, 3%, 0.8);
+      border: 1px solid hsla(43, 85%, 55%, 0.2);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8125rem;
+      color: var(--accent);
+      word-break: break-all;
+      margin-bottom: 8px;
+    }
+    .muted-note { font-size: 0.75rem; color: var(--fg-muted); margin-top: 6px; }
+
+    /* URL box */
+    .url-box {
+      background: hsla(156, 35%, 3%, 0.8);
+      border: 1px solid hsla(156, 25%, 13%, 0.3);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.8125rem;
+      color: var(--fg-muted);
+      word-break: break-all;
+      margin: 8px 0;
+    }
+
+    /* Form fields */
+    .field-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+    .field { display: flex; flex-direction: column; min-width: 160px; flex: 1; }
+    .field label { font-size: 0.75rem; color: var(--fg-muted); margin-bottom: 6px; font-weight: 500; }
+    .field input, .field select {
+      height: 40px;
+      padding: 0 12px;
+      background: hsla(156, 35%, 10%, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--fg);
+      font-size: 0.875rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .field input:focus, .field select:focus {
+      border-color: hsla(43, 85%, 55%, 0.5);
+      box-shadow: 0 0 0 3px hsla(43, 85%, 55%, 0.1);
+    }
+    .field input[readonly] { color: var(--fg-muted); }
+    .field select option { background: hsl(158, 50%, 5%); }
+
+    /* Payload preview */
+    .payload {
+      margin-top: 14px;
+      background: hsla(156, 35%, 3%, 0.9);
+      border: 1px solid hsla(155, 65%, 36%, 0.15);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8125rem;
+      color: hsl(200, 90%, 70%);
+      white-space: pre-wrap;
+      min-height: 80px;
+    }
+
+    /* Button row */
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+    .btn {
+      height: 38px; padding: 0 16px; border-radius: 8px; border: none;
+      font-size: 0.875rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn svg { width: 14px; height: 14px; }
+    .btn-sm-gold { background: var(--gradient-gold); color: var(--secondary); }
+    .btn-sm-gold:hover { box-shadow: var(--shadow-gold); }
+    .btn-sm-dark { background: hsla(156, 35%, 10%, 0.4); border: 1px solid var(--border); color: var(--fg); }
+    .btn-sm-dark:hover { background: hsla(156, 35%, 10%, 0.7); border-color: hsla(43, 85%, 55%, 0.2); }
+    .btn-sm-danger { background: hsla(0, 72%, 50%, 0.15); border: 1px solid hsla(0, 72%, 50%, 0.3); color: hsl(0, 80%, 75%); }
+    .btn-sm-danger:hover { background: hsla(0, 72%, 50%, 0.25); }
+
+    /* Status message */
+    #settings-status { font-size: 0.75rem; margin-top: 8px; min-height: 18px; }
+
+    /* Script blocks */
+    .script-block { border: 1px solid hsla(156, 25%, 13%, 0.2); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+    .script-block:last-child { margin-bottom: 0; }
+    .script-head { padding: 12px 16px; background: hsla(156, 35%, 10%, 0.2); border-bottom: 1px solid hsla(156, 25%, 13%, 0.15); }
+    .script-title { font-weight: 600; font-size: 0.9375rem; }
+    .script-title .script-code { color: var(--fg-muted); font-weight: 400; font-size: 0.75rem; margin-left: 6px; }
+    .script-sub { margin-top: 4px; color: var(--fg-muted); font-size: 0.75rem; }
+
+    .hidden-mobile { display: table-cell; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    @media (min-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+      .stat-label { font-size: 0.75rem; }
+      .stat-value { font-size: 1.5rem; }
+      .stat-sub { font-size: 0.75rem; }
+      .dash-main { padding: 32px; }
+    }
+
+    @media (max-width: 1023px) {
+      .content-grid { grid-template-columns: 1fr; }
+      .header-nav { display: none; }
+      .hamburger { display: block; }
+      .hidden-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="dash-ambient">
+  <div class="orb-1"></div>
+  <div class="orb-2"></div>
+</div>
+
+<!-- Header -->
+<header class="dash-header">
+  <div class="header-inner">
+    <div class="header-left">
+      <a href="/" class="header-logo"><span class="gold">Plat</span><span class="white">Algo</span></a>
+      <nav class="header-nav">
+        <button class="nav-btn active">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-btn" onclick="scrollToSection('signals-section')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Signals
+        </button>
+        <button class="nav-btn" onclick="scrollToSection('tradingview-section')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          TradingView
+        </button>
+        <button class="nav-btn" onclick="scrollToSection('settings-section')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          Settings
+        </button>
+      </nav>
+    </div>
+    <div class="header-right">
+      <button class="icon-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="notif-dot"></span>
+      </button>
+      <div class="avatar">{{ dashboard.user_id[:2] }}</div>
+      <form method="post" action="/logout" style="margin:0;">
+        <button type="submit" class="icon-btn" title="Sign out">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        </button>
+      </form>
+      <button class="icon-btn hamburger" onclick="toggleMobileMenu()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <button class="mobile-nav-btn active">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="mobile-nav-btn" onclick="scrollToSection('signals-section');toggleMobileMenu()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Signals
+    </button>
+    <button class="mobile-nav-btn" onclick="scrollToSection('tradingview-section');toggleMobileMenu()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      TradingView
+    </button>
+    <button class="mobile-nav-btn" onclick="scrollToSection('settings-section');toggleMobileMenu()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      Settings
+    </button>
+  </div>
+</header>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-zone">
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<main class="dash-main">
+
+  <!-- Welcome Banner -->
+  <div class="glass welcome-banner">
+    <div class="welcome-glow-1"></div>
+    <div class="welcome-glow-2"></div>
+    <div class="welcome-top-line"></div>
+    <div class="welcome-content">
+      <div>
+        <h1 class="welcome-title">Welcome back, <span class="gold">{{ dashboard.user_id }}</span></h1>
+        <p class="welcome-subtitle">
+          {{ dashboard.relay_online }} relay{{ 's' if dashboard.relay_online != 1 else '' }} online &middot; {{ dashboard.scripts|length }} script{{ 's' if dashboard.scripts|length != 1 else '' }} active
+        </p>
+      </div>
+      <div class="welcome-badges">
+        <span class="badge badge-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+          Active Account
+        </span>
+        {% if dashboard.relay_online > 0 %}
+        <span class="badge badge-accent">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Relay Online
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="stats-grid">
+    <div class="glass stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Total Relays</span>
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ dashboard.relay_total }}</div>
+      <div class="stat-sub">registered relays</div>
+    </div>
+    <div class="glass stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Relays Online</span>
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        </div>
+      </div>
+      <div class="stat-value online">{{ dashboard.relay_online }}</div>
+      <div class="stat-sub">active connections</div>
+    </div>
+    <div class="glass stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Relays Offline</span>
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+        </div>
+      </div>
+      <div class="stat-value offline">{{ dashboard.relay_offline }}</div>
+      <div class="stat-sub">disconnected</div>
+    </div>
+    <div class="glass stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Scripts</span>
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+      </div>
+      <div class="stat-value">{{ dashboard.scripts|length }}</div>
+      <div class="stat-sub">purchased scripts</div>
+    </div>
+  </div>
+
+  <!-- Content Grid -->
+  <div class="content-grid">
+
+    <!-- Recent Trade Signals -->
+    <div class="glass">
+      <div class="table-card-header">
+        <h2 class="table-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 6-8"/></svg>
+          Recent Trade Signals
+        </h2>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Action</th>
+            <th class="hidden-mobile">Script</th>
+            <th class="hidden-mobile">Size</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(count=0) %}
+          {% for script in dashboard.scripts %}
+            {% for sig in script.recent_signals %}
+              {% if ns.count < 8 %}
+                {% set ns.count = ns.count + 1 %}
+                <tr>
+                  <td>
+                    <div class="pair-name">{{ sig.symbol }}</div>
+                    <div class="pair-sub">{{ sig.created_at }}</div>
+                  </td>
+                  <td>
+                    <span class="badge-sm {% if sig.action in ('BUY','buy') %}badge-buy{% else %}badge-sell{% endif %}">
+                      {{ sig.action }}
+                    </span>
+                  </td>
+                  <td class="hidden-mobile"><span style="font-size:0.8125rem;color:var(--fg-muted);">{{ script.script_name }}</span></td>
+                  <td class="hidden-mobile">{{ sig.size }}</td>
+                  <td class="right">
+                    <span class="badge-sm
+                      {% if sig.status == 'executed' %}badge-executed
+                      {% elif sig.status == 'failed' %}badge-failed
+                      {% else %}badge-pending{% endif %}">
+                      {{ sig.status }}
+                    </span>
+                  </td>
+                </tr>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% if ns.count == 0 %}
+            <tr><td class="empty-td" colspan="5">No trade signals received yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Relay Status -->
+      <div class="glass">
+        <div class="sidebar-header">
+          <h2 class="sidebar-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            Relay Status
+            {% if dashboard.relay_online > 0 %}<span class="live-dot"></span>{% endif %}
+          </h2>
+        </div>
+        <div class="relay-list">
+          {% for relay_id, relay in dashboard.relays.items() %}
+            <div class="relay-item">
+              <div class="relay-top">
+                <span class="relay-id">{{ relay_id }}</span>
+                <span class="badge-sm badge-relay-{{ relay.state }}">{{ relay.state }}</span>
+              </div>
+              <div class="relay-meta">
+                <span>{{ relay.relay_type }}</span>
+                <span>&middot;</span>
+                <span>{{ relay.last_heartbeat }}</span>
+              </div>
+            </div>
+          {% endfor %}
+          {% if not dashboard.relays %}
+            <p style="font-size:0.875rem;color:var(--fg-muted);padding:4px 0;">No relays registered yet.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="glass">
+        <div class="quick-actions">
+          <h3 class="quick-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Quick Actions
+          </h3>
+          <div class="quick-actions-list">
+            <button class="btn-action btn-gold" onclick="scrollToSection('tradingview-section')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              TradingView Setup
+            </button>
+            <button class="btn-action btn-outline" onclick="scrollToSection('settings-section')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              Settings
+            </button>
+            <form method="post" action="/logout" style="margin:0;">
+              <button type="submit" class="btn-action btn-danger-outline" style="width:100%;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                Sign Out
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- API Key -->
+  {% if dashboard_api_key %}
+    <div class="glass section-card" style="margin-bottom:16px;">
+      <div class="section-head">
+        <h2 class="section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+          Your API Key
+        </h2>
+      </div>
+      <div class="section-body">
+        <div class="api-key-box" id="apiKeyBox">{{ dashboard_api_key }}</div>
+        <div class="muted-note">Store this now — it won't be shown again after you leave this page.</div>
+        <div class="btn-row">
+          <button class="btn btn-sm-dark" onclick="navigator.clipboard.writeText(document.getElementById('apiKeyBox').textContent)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            Copy Key
+          </button>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="glass section-card" style="margin-bottom:16px;">
+      <div class="section-head">
+        <h2 class="section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+          API Key
+        </h2>
+      </div>
+      <div class="section-body">
+        <p class="muted-note" style="font-size:0.875rem;color:var(--fg-muted);">Your API key is stored securely and cannot be retrieved. Regenerate if you forgot it.</p>
+        <div class="btn-row">
+          <form method="post" action="/dashboard/regenerate-api-key" style="margin:0;">
+            <button type="submit" class="btn btn-sm-dark" onclick="return confirm('This will invalidate your current API key. Continue?')">Regenerate API Key</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- TradingView Setup -->
+  <div class="glass section-card" id="tradingview-section">
+    <div class="section-head">
+      <h2 class="section-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        TradingView Setup
+      </h2>
+    </div>
+    <div class="section-body">
+      <div style="font-size:0.8125rem;font-weight:600;color:var(--fg-muted);margin-bottom:4px;">Webhook URL</div>
+      <div class="url-box" id="webhook-url">{{ webhook_url }}</div>
+      <div class="btn-row" style="margin-top:8px;margin-bottom:24px;">
+        <button class="btn btn-sm-dark" onclick="navigator.clipboard.writeText(document.getElementById('webhook-url').textContent)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          Copy URL
+        </button>
+      </div>
+
+      <div style="font-size:0.8125rem;font-weight:600;color:var(--fg-muted);margin-bottom:12px;">Payload Generator</div>
+      <div class="field-grid">
+        <div class="field">
+          <label>User ID</label>
+          <input id="pg-user-id" value="{{ dashboard.user_id }}" readonly />
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input id="pg-api-key" type="password" placeholder="Enter your API key" />
+        </div>
+        <div class="field">
+          <label>Script</label>
+          <select id="pg-script">
+            {% for script in scripts %}
+              <option value="{{ script.script_name }}">{{ script.script_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Action</label>
+          <select id="pg-action"><option>BUY</option><option>SELL</option></select>
+        </div>
+        <div class="field">
+          <label>Symbol</label>
+          <input id="pg-symbol" value="EURUSD" />
+        </div>
+        <div class="field">
+          <label>Lot Size</label>
+          <input id="pg-size" value="0.1" />
+        </div>
+        <div class="field">
+          <label>Stop Loss (pips)</label>
+          <input id="pg-sl" type="number" placeholder="e.g. 50" />
+        </div>
+        <div class="field">
+          <label>Take Profit (pips)</label>
+          <input id="pg-tp" type="number" placeholder="e.g. 100" />
+        </div>
+      </div>
+      <div id="payload-preview" class="payload"></div>
+      <div class="btn-row">
+        <button class="btn btn-sm-gold" onclick="copyPayload()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          Copy Payload
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk & Notifications -->
+  <div class="glass section-card" id="settings-section">
+    <div class="section-head">
+      <h2 class="section-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        Risk &amp; Notifications
+      </h2>
+    </div>
+    <div class="section-body">
+      <div class="field-grid">
+        <div class="field">
+          <label>Max Lot Size</label>
+          <input id="set-max-lot" type="number" min="0.01" step="0.01" value="{{ settings.max_lot_size }}" />
+        </div>
+        <div class="field">
+          <label>Rate Limit: Max Trades</label>
+          <input id="set-rate-max" type="number" min="1" step="1" value="{{ settings.rate_limit_max_trades }}" />
+        </div>
+        <div class="field">
+          <label>Rate Limit Window (secs)</label>
+          <input id="set-rate-window" type="number" min="10" step="1" value="{{ settings.rate_limit_window_secs }}" />
+        </div>
+        <div class="field">
+          <label>Notifications</label>
+          <select id="set-notify-enabled">
+            <option value="1" {% if settings.notifications_enabled %}selected{% endif %}>Enabled</option>
+            <option value="0" {% if not settings.notifications_enabled %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-grid" style="margin-top:12px;">
+        <div class="field" style="min-width:280px;">
+          <label>Telegram Bot Token</label>
+          <input id="set-telegram-token" value="{{ settings.telegram_bot_token or '' }}" placeholder="123456:ABC..." />
+        </div>
+        <div class="field">
+          <label>Telegram Chat ID</label>
+          <input id="set-telegram-chat" value="{{ settings.telegram_chat_id or '' }}" placeholder="-100..." />
+        </div>
+        <div class="field" style="min-width:280px;">
+          <label>Discord Webhook URL</label>
+          <input id="set-discord-webhook" value="{{ settings.discord_webhook_url or '' }}" placeholder="https://discord.com/api/webhooks/..." />
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-sm-gold" onclick="saveSettings()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Settings
+        </button>
+        <button class="btn btn-sm-danger" onclick="panicCloseAll()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+          Panic: Close All
+        </button>
+      </div>
+      <div id="settings-status"></div>
+    </div>
+  </div>
+
+  <!-- Scripts & Trade Signals (detailed) -->
+  <div class="glass section-card" id="signals-section">
+    <div class="section-head">
+      <h2 class="section-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Scripts &amp; Trade Signals
+      </h2>
+    </div>
+    <div class="section-body">
+      {% for script in dashboard.scripts %}
+        <div class="script-block">
+          <div class="script-head">
+            <div class="script-title">
+              {{ script.script_name }}
+              <span class="script-code">({{ script.script_code }})</span>
+            </div>
+            <div class="script-sub">
+              Purchased: {{ script.purchased_at }} &nbsp;&middot;&nbsp;
+              Signals: {{ script.signals_count }} &nbsp;&middot;&nbsp;
+              Executed: {{ script.executed_count }}
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Signal</th>
+                <th>Symbol</th>
+                <th>Size</th>
+                <th>Status</th>
+                <th class="hidden-mobile">Relay</th>
+                <th class="hidden-mobile">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sig in script.recent_signals %}
+                <tr>
+                  <td><span style="font-size:0.8125rem;">{{ sig.created_at }}</span></td>
+                  <td>
+                    <span class="badge-sm {% if sig.action in ('BUY','buy') %}badge-buy{% else %}badge-sell{% endif %}">
+                      {{ sig.action }}
+                    </span>
+                  </td>
+                  <td>{{ sig.symbol }}</td>
+                  <td>{{ sig.size }}</td>
+                  <td>
+                    <span class="badge-sm
+                      {% if sig.status == 'executed' %}badge-executed
+                      {% elif sig.status == 'failed' %}badge-failed
+                      {% else %}badge-pending{% endif %}">
+                      {{ sig.status }}
+                    </span>
+                  </td>
+                  <td class="hidden-mobile" style="font-size:0.8125rem;color:var(--fg-muted);">{{ sig.relay_id }}</td>
+                  <td class="hidden-mobile" style="font-size:0.8125rem;color:var(--fg-muted);">{{ sig.error_message or '' }}</td>
+                </tr>
+              {% endfor %}
+              {% if not script.recent_signals %}
+                <tr><td class="empty-td" colspan="7">No signals received yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      {% endfor %}
+      {% if not dashboard.scripts %}
+        <p style="color:var(--fg-muted);font-size:0.875rem;">No scripts purchased yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</main>
+
+<script>
+function toggleMobileMenu() {
+  document.getElementById('mobileMenu').classList.toggle('open');
+}
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderPayload() {
+  const payload = {
+    user_id: document.getElementById('pg-user-id').value,
+    api_key: document.getElementById('pg-api-key').value || '<YOUR_API_KEY>',
+    script_name: document.getElementById('pg-script').value,
+    action: document.getElementById('pg-action').value,
+    symbol: document.getElementById('pg-symbol').value,
+    lot_size: parseFloat(document.getElementById('pg-size').value || '0.1')
+  };
+  const sl = document.getElementById('pg-sl').value;
+  const tp = document.getElementById('pg-tp').value;
+  if (sl) payload.sl = parseFloat(sl);
+  if (tp) payload.tp = parseFloat(tp);
+  document.getElementById('payload-preview').textContent = JSON.stringify(payload, null, 2);
+}
+
+function copyPayload() {
+  navigator.clipboard.writeText(document.getElementById('payload-preview').textContent);
+}
+
+async function saveSettings() {
+  const payload = {
+    max_lot_size: parseFloat(document.getElementById('set-max-lot').value || '0.5'),
+    rate_limit_max_trades: parseInt(document.getElementById('set-rate-max').value || '5', 10),
+    rate_limit_window_secs: parseInt(document.getElementById('set-rate-window').value || '60', 10),
+    notifications_enabled: document.getElementById('set-notify-enabled').value === '1',
+    telegram_bot_token: document.getElementById('set-telegram-token').value,
+    telegram_chat_id: document.getElementById('set-telegram-chat').value,
+    discord_webhook_url: document.getElementById('set-discord-webhook').value
+  };
+  const res = await fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const el = document.getElementById('settings-status');
+  el.textContent = res.ok ? 'Settings saved.' : 'Failed to save settings.';
+  el.style.color = res.ok ? 'hsl(155, 65%, 60%)' : 'hsl(0, 72%, 70%)';
+}
+
+async function panicCloseAll() {
+  if (!confirm('Close all open positions now?')) return;
+  const res = await fetch('/panic/close-all', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  const el = document.getElementById('settings-status');
+  el.textContent = res.ok ? ('Panic sent: ' + (data.status || 'ok')) : ('Panic failed: ' + (data.error || 'unknown'));
+  el.style.color = res.ok ? 'hsl(155, 65%, 60%)' : 'hsl(0, 72%, 70%)';
+}
+
+['pg-user-id','pg-api-key','pg-script','pg-action','pg-symbol','pg-size','pg-sl','pg-tp'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) { el.addEventListener('input', renderPayload); el.addEventListener('change', renderPayload); }
+});
+renderPayload();
+</script>
+</body>
+</html>

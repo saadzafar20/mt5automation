@@ -18,23 +18,20 @@ REM Activate virtual environment
 echo Activating virtual environment...
 call venv\Scripts\activate.bat
 
-REM Check if requirements are installed
-pip show flask > nul 2>&1
-if errorlevel 1 (
-    echo Installing dependencies...
-    pip install flask flask-cors requests
-)
+REM Install/update cloud bridge requirements
+echo Installing dependencies...
+pip install -r requirements_cloud_bridge.txt --quiet
 
-REM Get port (default to 5001)
+REM Get port (default to 8080 — Caddy proxies 80/443 → this port internally)
 set PORT=%1
 if "!PORT!"=="" (
-    set PORT=5001
+    set PORT=8080
 )
 
 echo.
 echo Configuration:
-echo   Port: !PORT!
-echo   URL: http://localhost:!PORT!
+echo   Port       : !PORT!
+echo   Public URL : https://platalgo.com
 echo.
 echo Starting Cloud Bridge on port !PORT!...
 echo ====================================

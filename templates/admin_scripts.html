@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Script Assignment</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; }
+    .topbar { background:#111827; color:white; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center; }
+    .topbar h1 { margin:0; font-size: 20px; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .section { background:white; border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.06); margin-bottom: 16px; }
+    .section h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; font-size: 17px; }
+    .section-content { padding: 14px 16px; }
+    label { display:block; margin-top: 10px; font-weight: 600; }
+    select { width:100%; max-width: 500px; padding: 10px; margin-top:6px; box-sizing:border-box; border: 1px solid #d0d7de; border-radius: 8px; }
+    button { margin-top: 14px; padding: 10px 14px; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    th { background:#f9fafb; }
+    .msg { margin: 8px 0; padding: 10px; border-radius: 8px; }
+    .error { background: #fee2e2; color: #991b1b; }
+    .success { background: #dcfce7; color: #166534; }
+    .logout-btn { background:#1f2937; color:white; border:1px solid #374151; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    .nav a { color: #bfdbfe; margin-right: 12px; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>Admin - Script Assignment</h1>
+      <div class="nav">
+        <a href="/admin/catalog">Catalog</a>
+        <a href="/admin/scripts">Assignments</a>
+      </div>
+    </div>
+    <form method="post" action="/admin/logout">
+      <button class="logout-btn" type="submit">Sign out ({{ admin_user }})</button>
+    </form>
+  </div>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="msg {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="section">
+      <h2>Assign Scripts to User</h2>
+      <div class="section-content">
+        <form method="post" action="/admin/scripts">
+          <label for="user_id">User</label>
+          <select id="user_id" name="user_id" required>
+            <option value="">Select user</option>
+            {% for user in users %}
+              <option value="{{ user.user_id }}">{{ user.user_id }} (created {{ user.created_at }})</option>
+            {% endfor %}
+          </select>
+
+          <label>Scripts (select multiple)</label>
+          <div style="margin-top:8px; max-height:200px; overflow-y:auto; border:1px solid #d0d7de; border-radius:8px; padding:10px;">
+            {% for script in scripts %}
+              <label style="display:flex; align-items:center; margin-bottom:8px; font-weight:normal; cursor:pointer;">
+                <input type="checkbox" name="script_codes" value="{{ script.script_code }}" style="margin-right:8px; width:18px; height:18px;" />
+                {{ script.script_name }} <span style="color:#6b7280; margin-left:6px;">({{ script.script_code }})</span>
+              </label>
+            {% endfor %}
+            {% if not scripts %}
+              <div style="color:#6b7280;">No scripts in catalog. Add scripts first.</div>
+            {% endif %}
+          </div>
+
+          <button type="submit">Assign Selected Scripts</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Current Assignments</h2>
+      <div class="section-content">
+        <table>
+          <thead>
+            <tr><th>User</th><th>Script Name</th><th>Script Code</th><th>Purchased At</th></tr>
+          </thead>
+          <tbody>
+          {% for row in assignments %}
+            <tr>
+              <td>{{ row.user_id }}</td>
+              <td>{{ row.script_name }}</td>
+              <td>{{ row.script_code }}</td>
+              <td>{{ row.purchased_at }}</td>
+            </tr>
+          {% endfor %}
+          {% if not assignments %}
+            <tr><td colspan="4">No assignments yet.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

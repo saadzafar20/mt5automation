@@ -34,13 +34,19 @@ if "!CONFIG_PATH!"=="" (
 REM Get bridge URL (default to localhost if running cloud bridge on same machine)
 set BRIDGE_URL=%2
 if "!BRIDGE_URL!"=="" (
-    set BRIDGE_URL=http://localhost:5001
+    set BRIDGE_URL=http://localhost:80
 )
 
 REM Get user ID (default to test user)
 set USER_ID=%3
 if "!USER_ID!"=="" (
     set USER_ID=default-user
+)
+
+REM Get password (arg 4 or prompt)
+set USER_PASSWORD=%4
+if "!USER_PASSWORD!"=="" (
+    set /p USER_PASSWORD=Enter dashboard password for !USER_ID!: 
 )
 
 echo.
@@ -54,7 +60,7 @@ echo ====================================
 echo.
 
 REM Start relay with arguments
-python relay.py --bridge-url !BRIDGE_URL! --user-id !USER_ID! --config !CONFIG_PATH!
+python relay.py --bridge-url !BRIDGE_URL! --user-id !USER_ID! --password !USER_PASSWORD! --config !CONFIG_PATH!
 
 REM Pause to see any errors
 pause

@@ -16,6 +16,7 @@ from dataclasses import dataclass, asdict
 from functools import wraps
 import hashlib
 import hmac
+import math
 
 # Web framework for HTTP listener
 from flask import Flask, request, jsonify
@@ -57,6 +58,12 @@ class Config:
     MAX_SPREAD_PIPS: float = float(os.getenv('MAX_SPREAD_PIPS', '20'))
     SLIPPAGE: int = int(os.getenv('SLIPPAGE', '50'))
     DEFAULT_LOT_SIZE: float = float(os.getenv('DEFAULT_LOT_SIZE', '0.01'))
+    DEFAULT_SL_PIPS: float = float(os.getenv('DEFAULT_SL_PIPS', '50'))
+    DEFAULT_TP_PIPS: float = float(os.getenv('DEFAULT_TP_PIPS', '100'))
+    MIN_LOT_SIZE: float = float(os.getenv('MIN_LOT_SIZE', '0.01'))
+    MAX_LOT_SIZE: float = float(os.getenv('MAX_LOT_SIZE', '0.02'))
+    RISK_PER_TRADE_PCT: float = float(os.getenv('RISK_PER_TRADE_PCT', '0.01'))
+    MAX_DAILY_LOSS_PCT: float = float(os.getenv('MAX_DAILY_LOSS_PCT', '0.05'))
     
     # API Settings
     API_HOST: str = os.getenv('API_HOST', '0.0.0.0')
@@ -67,6 +74,10 @@ class Config:
     TELEGRAM_TOKEN: str = os.getenv('TELEGRAM_TOKEN', '')
     TELEGRAM_CHAT_ID: str = os.getenv('TELEGRAM_CHAT_ID', '')
     ENABLE_NOTIFICATIONS: bool = os.getenv('ENABLE_NOTIFICATIONS', 'True') == 'True'
+    # SL/TP fallback as pct of account balance (e.g. 0.05 = 5%) when SL/TP missing/zero
+    SL_TP_BALANCE_PCT: float = float(os.getenv('SL_TP_BALANCE_PCT', '0.05'))
+    # Symbol aliases for brokers using short codes (JSON map e.g. {"BTCUSD": "BTC"})
+    SYMBOL_ALIASES: str = os.getenv('SYMBOL_ALIASES', '{}')
 
 
 @dataclass
@@ -99,6 +110,21 @@ class MT5Manager:
         self.account_info = None
         # Optional symbol suffix (e.g. .m, .pro)
         self.symbol_suffix = os.getenv('SYMBOL_SUFFIX', '')
+        # Cache resolved symbols to avoid repeated lookups
+        self.symbol_cache = {}
+        self.symbol_aliases = self._load_symbol_aliases(config.SYMBOL_ALIASES)
+
+    @staticmethod
+    def _load_symbol_aliases(raw: str) -> Dict[str, str]:
+        """Parse alias JSON safely, uppercasing keys for matching."""
+        try:
+            data = json.loads(raw) if raw else {}
+            if not isinstance(data, dict):
+                return {}
+            return {str(k).upper(): str(v) for k, v in data.items()}
+        except Exception as exc:
+            logger.warning(f"Failed to parse SYMBOL_ALIASES env: {exc}")
+            return {}
     
     def connect(self) -> bool:
         """Connects to the already running MT5 terminal"""
@@ -148,27 +174,114 @@ class MT5Manager:
             
         return mt5.ORDER_FILLING_RETURN
 
+    def _apply_alias(self, symbol: str) -> Optional[str]:
+        """Return alias if defined for the incoming symbol key."""
+        if not symbol:
+            return None
+        key = symbol.upper()
+        alias = self.symbol_aliases.get(key)
+        if alias:
+            alias_up = alias.upper()
+            logger.info(f"Alias remap: {key} -> {alias_up}")
+            return alias_up
+        return None
+
     def _with_suffix(self, symbol: str) -> str:
-        # 1. Try the exact symbol from TradingView (e.g., EURUSD)
-        if mt5.symbol_info(symbol):
+        """Resolve broker-specific symbol (alias/suffix/prefix) with caching."""
+        if not symbol:
             return symbol
 
-        # 2. Try configured suffix (e.g., EURUSD.m)
+        requested = symbol.upper()
+        aliased = self._apply_alias(requested) or requested
+
+        # Cache is keyed by the incoming requested symbol to preserve caller intent
+        cached = self.symbol_cache.get(requested)
+        if cached:
+            return cached
+
+        base = aliased
+
+        # 1) Direct match
+        direct = mt5.symbol_info(base)
+        if direct:
+            mt5.symbol_select(base, True)
+            self.symbol_cache[requested] = base
+            return base
+
+        # 2) Explicit configured suffix
         if self.symbol_suffix:
-            suffixed = f"{symbol}{self.symbol_suffix}"
-            if mt5.symbol_info(suffixed):
-                logger.info(f"Suffix Match Found: {symbol} -> {suffixed}")
-                return suffixed
+            candidate = f"{base}{self.symbol_suffix}"
+            info = mt5.symbol_info(candidate)
+            if info:
+                mt5.symbol_select(candidate, True)
+                self.symbol_cache[requested] = candidate
+                logger.info(f"Configured suffix mapped {base} -> {candidate}")
+                return candidate
 
-        # 3. If not found, look through all symbols in Market Watch
-        all_symbols = mt5.symbols_get() or []
-        for s in all_symbols:
-            # Check if the TV symbol is part of the broker's symbol name
-            if symbol in s.name:
-                logger.info(f"Dynamic Match Found: {symbol} -> {s.name}")
-                return s.name
+        # 3) Wildcard search across broker symbols (includes hidden ones)
+        candidates = mt5.symbols_get(f"*{base}*") or []
+        best_match = None
+        for s in candidates:
+            name = s.name
+            if base in name:
+                if best_match is None or len(name) < len(best_match):
+                    best_match = name
 
-        return symbol  # Fallback
+        if best_match:
+            mt5.symbol_select(best_match, True)
+            self.symbol_cache[requested] = best_match
+            logger.info(f"Auto-mapped symbol {base} -> {best_match}")
+            return best_match
+
+        # 4) Fallback to original
+        self.symbol_cache[requested] = requested
+        return requested
+
+    @staticmethod
+    def _get_pip_size(symbol_info) -> float:
+        """Derive pip size from MT5 symbol info."""
+        if symbol_info is None:
+            return 0.0
+        point = symbol_info.point or 0.0
+        digits = symbol_info.digits
+        if digits in (3, 5):
+            return point * 10
+        return point
+
+    @staticmethod
+    def _safe_float(val, default: float) -> float:
+        """Coerce values to float, falling back to default on None/invalid."""
+        if val is None or val == "":
+            return default
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_float_optional(val) -> Optional[float]:
+        """Coerce values to float or return None when missing/invalid."""
+        if val is None or val == "":
+            return None
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    def _clamp_volume(self, volume: float, symbol_info) -> float:
+        """Clamp volume to broker limits and configured min/max."""
+        min_vol = max(self.config.MIN_LOT_SIZE, symbol_info.volume_min or 0.0)
+        max_vol = min(self.config.MAX_LOT_SIZE, symbol_info.volume_max or self.config.MAX_LOT_SIZE)
+        if max_vol < min_vol:
+            max_vol = min_vol
+
+        vol = min(max(volume, min_vol), max_vol)
+        step = symbol_info.volume_step or 0.0
+        if step > 0:
+            vol = math.floor(vol / step) * step
+            if vol < min_vol:
+                vol = min_vol
+        return vol
     
     def send_order(self, signal: Signal) -> Optional[int]:
         """Send order to MT5 and return order ticket on success"""
@@ -200,7 +313,60 @@ class MT5Manager:
 
             price = tick.ask if signal.action == 'BUY' else tick.bid
 
-            lot_size = float(signal.lot_size or self.config.DEFAULT_LOT_SIZE)
+            pip_size = self._get_pip_size(symbol_info)
+            default_sl = self.config.DEFAULT_SL_PIPS * pip_size
+            default_tp = self.config.DEFAULT_TP_PIPS * pip_size
+
+            sl_value = signal.stop_loss
+            tp_value = signal.take_profit
+
+            # Preliminary lot for SL/TP sizing when provided lot is absent
+            provisional_lot = self._safe_float_optional(signal.lot_size)
+            if provisional_lot is None:
+                provisional_lot = self.config.DEFAULT_LOT_SIZE
+
+            account = mt5.account_info()
+            contract_size = symbol_info.trade_contract_size or 0.0
+            risk_amount = 0.0
+            if account:
+                risk_amount = account.equity * self.config.SL_TP_BALANCE_PCT
+
+            # If SL/TP missing/zero, first try monetary 5% balance-based distance; else use pip defaults
+            use_default_sl = sl_value is None or sl_value == 0.0
+            use_default_tp = tp_value is None or tp_value == 0.0
+
+            if (use_default_sl or use_default_tp) and risk_amount > 0 and contract_size > 0 and provisional_lot > 0:
+                sl_distance = risk_amount / (provisional_lot * contract_size)
+                if use_default_sl:
+                    sl_value = price - sl_distance if signal.action == 'BUY' else price + sl_distance
+                if use_default_tp:
+                    tp_value = price + sl_distance if signal.action == 'BUY' else price - sl_distance
+            else:
+                if use_default_sl and pip_size > 0:
+                    sl_value = price - default_sl if signal.action == 'BUY' else price + default_sl
+                if use_default_tp and pip_size > 0:
+                    tp_value = price + default_tp if signal.action == 'BUY' else price - default_tp
+
+            if sl_value is None:
+                sl_value = 0.0
+            if tp_value is None:
+                tp_value = 0.0
+
+            lot_size = self._safe_float_optional(signal.lot_size)
+            if lot_size is None:
+                sl_distance = abs(price - sl_value) if sl_value else 0.0
+                contract_size = symbol_info.trade_contract_size or 0.0
+                account = mt5.account_info()
+
+                if account and sl_distance > 0 and contract_size > 0:
+                    risk_amount = account.equity * self.config.RISK_PER_TRADE_PCT
+                    lot_size = risk_amount / (sl_distance * contract_size)
+                else:
+                    lot_size = self.config.DEFAULT_LOT_SIZE
+
+            lot_size = self._clamp_volume(float(lot_size), symbol_info)
+
+            # sl_value/tp_value already resolved above
 
             request_dict = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -208,8 +374,8 @@ class MT5Manager:
                 "volume": lot_size,
                 "type": order_type,
                 "price": price,
-                "sl": float(signal.stop_loss) if signal.stop_loss else 0.0,
-                "tp": float(signal.take_profit) if signal.take_profit else 0.0,
+                "sl": float(sl_value),
+                "tp": float(tp_value),
                 "deviation": self.config.SLIPPAGE,
                 "magic": 1234567,
                 "comment": f"{signal.comment}",
@@ -310,6 +476,9 @@ mt5_manager = MT5Manager(config)
 # Global state
 trades_history = []
 last_signal_time = None
+daily_start_date = None
+daily_start_equity = None
+trading_halted = False
 
 # Flask error handler for all exceptions
 @app.errorhandler(Exception)
@@ -349,6 +518,40 @@ def verify_webhook(f):
     return decorated_function
 
 
+def _reset_daily_limits_if_needed() -> bool:
+    """Reset daily loss tracking on new UTC day."""
+    global daily_start_date, daily_start_equity, trading_halted
+
+    today = datetime.now(timezone.utc).date()
+    if daily_start_date != today:
+        account = mt5.account_info()
+        if account is None:
+            return False
+        daily_start_date = today
+        daily_start_equity = account.equity
+        trading_halted = False
+    return True
+
+
+def _check_daily_loss_limit() -> Tuple[bool, str]:
+    """Return (allowed, message) based on max daily loss percentage."""
+    global trading_halted
+
+    if not _reset_daily_limits_if_needed():
+        return False, "Failed to fetch account info for daily limits"
+
+    account = mt5.account_info()
+    if account is None or daily_start_equity is None or daily_start_equity <= 0:
+        return False, "Failed to fetch account info for daily limits"
+
+    drawdown = (daily_start_equity - account.equity) / daily_start_equity
+    if drawdown >= config.MAX_DAILY_LOSS_PCT:
+        trading_halted = True
+        return False, f"Daily loss limit reached ({drawdown:.2%})"
+
+    return True, ""
+
+
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
@@ -364,11 +567,27 @@ def health_check():
 
 
 @app.route('/signal', methods=['POST'])
-# @verify_webhook  # Disabled for direct TradingView webhooks
 def receive_signal():
     """Receive trading signal from TradingView"""
     global last_signal_time
     
+    # Helpers to handle optional numeric fields
+    def safe_float(val, default=0.0):
+        if val is None or val == "":
+            return default
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    def optional_float(val) -> Optional[float]:
+        if val is None or val == "":
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
     try:
         data = request.get_json(silent=True)
         if data is None:
@@ -386,16 +605,17 @@ def receive_signal():
         if not raw_action:
             return jsonify({'error': 'Missing action'}), 400
 
-        lot_size = data.get('lot_size', data.get('size', 0.01))
-        take_profit = data.get('take_profit', data.get('tp', 0.0))
-        stop_loss = data.get('stop_loss', data.get('sl', 0.0))
+        # Extract values using the safe_float helper
+        lot_val = data.get('lot_size') or data.get('size')
+        tp_val = data.get('take_profit') or data.get('tp')
+        sl_val = data.get('stop_loss') or data.get('sl')
 
         signal = Signal(
             symbol=data.get('symbol', '').upper(),
             action=raw_action.upper(),
-            lot_size=float(lot_size),
-            take_profit=float(take_profit),
-            stop_loss=float(stop_loss),
+            lot_size=optional_float(lot_val),
+            take_profit=optional_float(tp_val),
+            stop_loss=optional_float(sl_val),
             timeframe=data.get('timeframe', 'H1'),
             comment=data.get('comment', 'TV Signal')
         )
@@ -404,6 +624,18 @@ def receive_signal():
 
         # Process signal: open trades
         if signal.action in ['BUY', 'SELL']:
+            if not mt5_manager.connected:
+                if not mt5_manager.connect():
+                    return jsonify({'status': 'failed', 'error': 'MT5 not connected'}), 503
+
+            allowed, message = _check_daily_loss_limit()
+            if not allowed:
+                logger.warning(message)
+                if config.ENABLE_NOTIFICATIONS:
+                    send_notification(f"🛑 Trading halted: {message}")
+                return jsonify({'status': 'failed', 'error': message}), 403
+
+            # Note: mt5_manager.send_order will use the updated _with_suffix internally
             order_id = mt5_manager.send_order(signal)
 
             if order_id:
@@ -415,8 +647,8 @@ def receive_signal():
 
                 return jsonify({'status': 'success', 'order_id': order_id}), 200
             else:
-                logger.error("Order execution failed: MT5 rejected order")
-                return jsonify({'status': 'failed', 'error': 'MT5 rejected order'}), 400
+                # mt5_manager logs the specific reason (suffix/visibility/balance)
+                return jsonify({'status': 'failed', 'error': 'MT5 rejected order. Check logs for details.'}), 400
 
         # Process signal: close specific side
         if signal.action in ['CLOSE_BUY', 'CLOSE_SELL']:
@@ -431,21 +663,12 @@ def receive_signal():
                 'action': 'position_closed'
             }), 200 if success else 400
 
-        # Process signal: close all positions (placeholder – implement if needed)
-        if signal.action == 'CLOSE_ALL':
-            return jsonify({
-                'status': 'success',
-                'action': 'all_positions_closing'
-            }), 200
-
-        # Any other action is currently ignored
         return jsonify({'status': 'ignored', 'message': 'Action not handled'}), 200
 
     except Exception as e:
         logger.error(f"Error processing signal: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+        
 @app.route('/account', methods=['GET'])
 def get_account():
     """Get account information and statistics"""
@@ -471,13 +694,14 @@ def get_positions():
         positions_list = []
         if positions:
             for pos in positions:
+                tick = mt5.symbol_info_tick(pos.symbol)
                 positions_list.append({
                     'ticket': pos.ticket,
                     'symbol': pos.symbol,
                     'type': 'BUY' if pos.type == 0 else 'SELL',
                     'volume': pos.volume,
                     'open_price': pos.price_open,
-                    'current_price': mt5.symbol_info_tick(pos.symbol).bid,
+                    'current_price': tick.bid if tick else None,
                     'profit': pos.profit,
                     'comment': pos.comment
                 })
@@ -510,6 +734,8 @@ def get_stats():
             return jsonify({'error': 'MT5 not connected'}), 503
         
         account = mt5.account_info()
+        if account is None:
+            return jsonify({'error': 'Failed to fetch account info'}), 503
         positions = mt5.positions_get()
         
         return jsonify({
