@@ -29,6 +29,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          aws s3 cp dist/PlatAlgoRelay.dmg s3://Platalgo/PlatAlgoRelay.dmg \
+          aws s3 cp dist/PlatAlgoRelay.dmg s3://platalgo/PlatAlgoRelay.dmg \
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
             --no-progress
