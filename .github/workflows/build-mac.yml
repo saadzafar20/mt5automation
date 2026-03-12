@@ -1,0 +1,59 @@
+name: Build Mac App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build .dmg
+        run: |
+          chmod +x build_relay_mac.sh
+          ./build_relay_mac.sh
+
+      - name: Get version + short SHA
+        id: meta
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "tag=v1.0.0-$SHA" >> $GITHUB_OUTPUT
+          echo "title=PlatAlgo Relay v1.0.0 ($SHA)" >> $GITHUB_OUTPUT
+
+      - name: Upload .dmg to platalgo-releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_PAT }}
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            dist/PlatAlgoRelay.dmg \
+            --repo saadzafar20/platalgo-releases \
+            --title "${{ steps.meta.outputs.title }}" \
+            --notes "$(cat <<'EOF'
+          ## PlatAlgo Relay — Mac App
+
+          ### Install
+          1. Download **PlatAlgoRelay.dmg** below
+          2. Open the DMG, drag PlatAlgoRelay to Applications
+          3. Launch from Applications (right-click → Open the first time if Gatekeeper blocks it)
+
+          ### What's included
+          - Connect to the PlatAlgo bridge for automated MT5 trading
+          - 24/7 VPS Mode — execute trades via cloud even when your Mac is off
+          - Glass morphism UI with native macOS transparency
+
+          Built from commit ${{ steps.meta.outputs.sha }}
+          EOF
+          )" \
+            --latest

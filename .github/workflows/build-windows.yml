@@ -1,0 +1,58 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build .exe
+        run: |
+          pip install --quiet --upgrade pip
+          pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
+          if (-not (Test-Path "config.json")) { '{}' | Out-File -Encoding utf8 config.json }
+          pyinstaller --noconfirm --onefile --windowed `
+            --name PlatAlgoRelay `
+            --add-data "config.json;." `
+            --hidden-import customtkinter `
+            --hidden-import PIL._tkinter_finder `
+            --hidden-import pystray `
+            --hidden-import keyring.backends.Windows `
+            --hidden-import keyring.backends.fail `
+            --collect-all customtkinter `
+            relay_gui.py
+        shell: pwsh
+
+      - name: Get version + short SHA
+        id: meta
+        run: |
+          $sha = (git rev-parse --short HEAD)
+          echo "sha=$sha" >> $env:GITHUB_OUTPUT
+          echo "tag=v1.0.0-win-$sha" >> $env:GITHUB_OUTPUT
+          echo "title=PlatAlgo Relay v1.0.0 Windows ($sha)" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Upload .exe to platalgo-releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_PAT }}
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" `
+            dist\PlatAlgoRelay.exe `
+            --repo saadzafar20/platalgo-releases `
+            --title "${{ steps.meta.outputs.title }}" `
+            --notes "## PlatAlgo Relay — Windows App`n`n### Install`n1. Download **PlatAlgoRelay.exe** below`n2. Run it directly — no installation needed`n3. Windows may show a SmartScreen warning; click 'More info' → 'Run anyway'`n`nBuilt from commit ${{ steps.meta.outputs.sha }}" `
+            --latest
+        shell: pwsh
