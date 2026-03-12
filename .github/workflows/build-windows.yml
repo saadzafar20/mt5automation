@@ -51,7 +51,7 @@ jobs:
         run: |
           gh release create "${{ steps.meta.outputs.tag }}" `
             dist\PlatAlgoRelay.exe `
-            --repo saadzafar20/platalgo-releases `
+            --repo ayanmalikshub/platalgoreleases `
             --title "${{ steps.meta.outputs.title }}" `
             --notes "## PlatAlgo Relay — Windows App`n`n### Install`n1. Download **PlatAlgoRelay.exe** below`n2. Run it directly — no installation needed`n3. Windows may show a SmartScreen warning; click 'More info' → 'Run anyway'`n`nBuilt from commit ${{ steps.meta.outputs.sha }}" `
             --latest

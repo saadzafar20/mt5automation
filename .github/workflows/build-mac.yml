@@ -38,7 +38,7 @@ jobs:
         run: |
           gh release create "${{ steps.meta.outputs.tag }}" \
             dist/PlatAlgoRelay.dmg \
-            --repo saadzafar20/platalgo-releases \
+            --repo ayanmalikshub/platalgoreleases \
             --title "${{ steps.meta.outputs.title }}" \
             --notes "$(cat <<'EOF'
           ## PlatAlgo Relay — Mac App
