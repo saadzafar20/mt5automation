@@ -8,6 +8,7 @@ Relay Service: Runs on user's machine (self-hosted) or in cloud (managed).
 - Reports results back
 """
 
+import concurrent.futures
 import os
 import sys
 import json
@@ -89,7 +90,7 @@ class RelayClient:
                 data = resp.json()
                 self.token = data["token"]
                 self.heartbeat_interval = data.get("heartbeat_interval", 10)
-                self.poll_timeout = data.get("poll_timeout", 5)
+                self.poll_timeout = data.get("poll_timeout", 25)
                 self.relay_type = relay_type
                 logger.info(f"Relay registered: {self.relay_id}, token={self.token[:8]}...")
                 return True
@@ -133,7 +134,7 @@ class RelayClient:
         }
 
         try:
-            resp = self.session.post(url, json={}, headers=headers, timeout=self.poll_timeout + 10)
+            resp = self.session.post(url, json={}, headers=headers, timeout=self.poll_timeout + 5)
             if resp.status_code == 200:
                 data = resp.json()
                 commands = data.get("commands", [])
@@ -323,13 +324,19 @@ class MT5Executor:
                 account not in (0, 12345678)
             )
 
-            if has_valid_creds:
-                # Login with specific credentials
-                init_ok = mt5.initialize(path=path, login=int(account), password=password, server=server)
-            else:
-                # Connect to whatever account is already logged in MT5
+            def _do_mt5_init():
+                if has_valid_creds:
+                    return mt5.initialize(path=path, login=int(account), password=password, server=server)
                 logger.info("No MT5 credentials configured - connecting to current MT5 session")
-                init_ok = mt5.initialize(path=path) if path else mt5.initialize()
+                return mt5.initialize(path=path) if path else mt5.initialize()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _ex:
+                _fut = _ex.submit(_do_mt5_init)
+                try:
+                    init_ok = _fut.result(timeout=15)
+                except concurrent.futures.TimeoutError:
+                    logger.warning("MT5 initialize() timed out after 15s — running in mock mode")
+                    init_ok = False
 
             if not init_ok:
                 logger.warning(f"MT5 initialization failed: {mt5.last_error()}")
@@ -489,6 +496,7 @@ class Relay:
         self.password = password
         self.executor = MT5Executor(config_path)
         self.running = False
+        self._hb_failures = 0
 
     def start(self, on_status=None, on_state=None):
         """Start relay loop."""
@@ -497,13 +505,21 @@ class Relay:
             on_status("Starting relay authentication...")
         
         auth_ok = False
-        if self.password:
-            auth_ok = self.client.login(self.password)
-        elif self.client.api_key:
-            auth_ok = self.client.register()
+        for attempt in range(1, 4):
+            if self.password:
+                auth_ok = self.client.login(self.password)
+            elif self.client.api_key:
+                auth_ok = self.client.register()
+            if auth_ok:
+                break
+            wait = 2 ** attempt  # 2, 4, 8 seconds
+            logger.warning(f"Auth attempt {attempt} failed; retrying in {wait}s")
+            if on_status:
+                on_status(f"Auth failed (attempt {attempt}/3); retrying in {wait}s…")
+            time.sleep(wait)
 
         if not auth_ok:
-            logger.error("Failed to authenticate relay with bridge")
+            logger.error("Failed to authenticate relay with bridge after 3 attempts")
             if on_status:
                 on_status("Authentication failed. Check credentials or API key.")
             return False
@@ -532,17 +548,32 @@ class Relay:
                     }
                     hb_ok = self.client.heartbeat(metadata)
                     last_heartbeat = now
+                    if hb_ok:
+                        self._hb_failures = 0
+                    else:
+                        self._hb_failures += 1
                     if on_status:
-                        on_status("Heartbeat sent")
+                        on_status("Heartbeat sent" if hb_ok else f"Bridge unreachable ({self._hb_failures}x)")
                     if on_state:
                         conn_state["cloud_connected"] = bool(hb_ok)
                         on_state(conn_state)
+                    # Exponential backoff after 3 consecutive failures (max 60s extra delay)
+                    if not hb_ok and self._hb_failures > 3:
+                        backoff = min(60, self.client.heartbeat_interval * (2 ** (self._hb_failures - 3)))
+                        logger.warning(f"Bridge unreachable; backing off next heartbeat by {backoff:.0f}s")
+                        last_heartbeat = now + backoff - self.client.heartbeat_interval
 
                 # Wait-poll for commands (low latency)
                 commands = self.client.poll()
                 for cmd in commands:
                     result = self.executor.execute_command(cmd)
-                    self.client.report_result(cmd["id"], result.get("status", "failed"), result)
+                    cmd_status = result.get("status", "failed")
+                    for _retry in range(3):
+                        if self.client.report_result(cmd["id"], cmd_status, result):
+                            break
+                        time.sleep(1)
+                    else:
+                        logger.error(f"Failed to report result for command {cmd['id']} after 3 attempts")
                     if on_status:
                         action = cmd.get("action", "")
                         symbol = cmd.get("symbol", "")
@@ -552,7 +583,7 @@ class Relay:
                         conn_state["cloud_connected"] = True
                         on_state(conn_state)
 
-                time.sleep(0.05)
+                # No sleep — poll() already does server-side long-polling (up to poll_timeout seconds)
 
         except KeyboardInterrupt:
             logger.info("Relay interrupted")
@@ -577,8 +608,18 @@ def main():
     parser.add_argument("--config", default="config.json", help="Config path")
     parser.add_argument("--bootstrap-managed", action="store_true", help="One-time MT5 managed setup to bridge and exit")
     parser.add_argument("--api-key", help="API key required for managed setup")
+    parser.add_argument("--headless", action="store_true", help="Run without GUI — for server/VPS mode")
+    parser.add_argument("--log-file", help="Write logs to file (useful for headless mode)")
     
     args = parser.parse_args()
+
+    if getattr(args, "log_file", None):
+        fh = logging.FileHandler(args.log_file)
+        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        logging.getLogger().addHandler(fh)
+
+    if getattr(args, "headless", False):
+        logger.info("Running in headless mode")
 
     if args.bootstrap_managed:
         if not args.api_key:

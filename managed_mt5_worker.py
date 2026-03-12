@@ -2,8 +2,12 @@
 
 This runs in a separate process via ProcessPoolExecutor.
 It connects to MT5 with user-specific credentials and executes trades.
+
+MT5 connection is kept alive across trades (module-level globals) to avoid
+the 1-2 second overhead of mt5.initialize() + mt5.shutdown() per trade.
 """
 
+import atexit
 from typing import Any, Dict
 
 # Import shared utilities - fall back to inline if import fails (subprocess isolation)
@@ -12,7 +16,7 @@ try:
     USE_SHARED_UTILS = True
 except ImportError:
     USE_SHARED_UTILS = False
-    
+
     MT5_RETCODE_MESSAGES = {
         10016: "Invalid stop loss or take profit.",
         10018: "Market is currently closed.",
@@ -25,23 +29,44 @@ except ImportError:
         return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
 
 
+# ── Persistent connection state (process-global) ──────────────────────────────
+_mt5_initialized = False
+_mt5_login = None
+
+
+def _worker_initializer():
+    """Called once per worker process by ProcessPoolExecutor initializer."""
+    pass
+
+
 def execute_managed_trade_worker(payload: Dict[str, Any]) -> Dict[str, Any]:
+    global _mt5_initialized, _mt5_login
+
     try:
         import MetaTrader5 as mt5
     except ImportError:
         return {"status": "failed", "error": "MetaTrader5 module unavailable in worker"}
 
-    login = int(payload.get("mt5_login", 0))
+    login    = int(payload.get("mt5_login", 0))
     password = payload.get("mt5_password", "")
-    server = payload.get("mt5_server", "")
-    path = payload.get("mt5_path") or None
+    server   = payload.get("mt5_server", "")
+    path     = payload.get("mt5_path") or None
 
-    initialized = mt5.initialize(path=path, login=login, password=password, server=server)
-    if not initialized:
-        return {"status": "failed", "error": f"mt5 init failed: {mt5.last_error()}"}
+    # Re-initialize only if not connected or account changed
+    needs_init = (not _mt5_initialized) or (_mt5_login != login)
+
+    if needs_init:
+        if _mt5_initialized:
+            mt5.shutdown()
+        initialized = mt5.initialize(path=path, login=login, password=password, server=server)
+        if not initialized:
+            _mt5_initialized = False
+            return {"status": "failed", "error": f"mt5 init failed: {mt5.last_error()}"}
+        _mt5_initialized = True
+        _mt5_login = login
+        atexit.register(mt5.shutdown)
 
     try:
-        # Build command dict from payload
         command = {
             "action": payload.get("action", ""),
             "symbol": payload.get("symbol", ""),
@@ -49,18 +74,16 @@ def execute_managed_trade_worker(payload: Dict[str, Any]) -> Dict[str, Any]:
             "sl": payload.get("sl"),
             "tp": payload.get("tp"),
         }
-        
-        # Use shared utilities if available, otherwise inline logic
         if USE_SHARED_UTILS:
             result = execute_command(mt5, command, comment_prefix="managed-bridge")
         else:
             result = _execute_command_inline(mt5, command)
-        
         return result
     except Exception as exc:
+        # Reset state so next call re-initializes
+        _mt5_initialized = False
         return {"status": "failed", "error": str(exc)}
-    finally:
-        mt5.shutdown()
+    # NOTE: No mt5.shutdown() in finally — connection stays alive for next trade
 
 
 def _execute_command_inline(mt5, command: Dict[str, Any]) -> Dict[str, Any]:

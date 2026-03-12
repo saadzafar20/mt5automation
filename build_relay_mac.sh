@@ -1,0 +1,82 @@
+#!/bin/bash
+# PlatAlgo Relay — Mac .app + .dmg Build Script
+# Run from the project root on a Mac with Python 3.11+
+set -e
+
+APP_NAME="PlatAlgoRelay"
+APP_VERSION="1.0.0"
+BUNDLE_ID="com.platalgo.relay"
+
+echo "================================================"
+echo "  PlatAlgo Relay - Mac Build"
+echo "================================================"
+echo ""
+
+# Ensure Python 3.11+
+PYTHON_CMD=""
+for cmd in python3.12 python3.11 python3; do
+    if command -v "$cmd" &>/dev/null; then
+        VER=$($cmd -c "import sys; print(sys.version_info >= (3, 11))" 2>/dev/null)
+        if [ "$VER" = "True" ]; then
+            PYTHON_CMD="$cmd"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON_CMD" ]; then
+    echo "Error: Python 3.11 or newer is required."
+    echo "Install via Homebrew: brew install python@3.11"
+    exit 1
+fi
+
+echo "Using: $($PYTHON_CMD --version)"
+
+# Create/activate venv
+if [ ! -d "venv" ]; then
+    echo "Creating virtual environment..."
+    $PYTHON_CMD -m venv venv
+fi
+source venv/bin/activate
+
+echo "Installing/updating dependencies..."
+pip install --quiet --upgrade pip
+pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
+
+# Ensure config.json exists
+[ -f config.json ] || echo '{}' > config.json
+
+echo "Building $APP_NAME.app..."
+pyinstaller --noconfirm --windowed \
+  --name "$APP_NAME" \
+  --add-data "config.json:." \
+  --hidden-import customtkinter \
+  --hidden-import PIL._tkinter_finder \
+  --hidden-import keyring.backends.macOS \
+  --hidden-import keyring.backends.fail \
+  --collect-all customtkinter \
+  --osx-bundle-identifier "$BUNDLE_ID" \
+  relay_gui.py
+
+if [ ! -d "dist/$APP_NAME.app" ]; then
+    echo ""
+    echo "BUILD FAILED — check output above for errors"
+    exit 1
+fi
+
+echo "Creating $APP_NAME.dmg..."
+hdiutil create \
+  -volname "$APP_NAME" \
+  -srcfolder "dist/$APP_NAME.app" \
+  -ov -format UDZO \
+  "dist/$APP_NAME.dmg"
+
+echo ""
+echo "================================================"
+echo "  Build complete!"
+echo "  App bundle : dist/$APP_NAME.app"
+echo "  Disk image : dist/$APP_NAME.dmg"
+echo "================================================"
+echo ""
+echo "To distribute: share dist/$APP_NAME.dmg"
+echo "Users: open the DMG, drag $APP_NAME to Applications, launch it."

@@ -26,6 +26,8 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from functools import wraps
+import queue as _queue
+import threading
 from threading import RLock
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
@@ -436,6 +438,7 @@ class BridgeStore:
                 CREATE INDEX IF NOT EXISTS idx_relays_user ON relays(user_id);
                 CREATE INDEX IF NOT EXISTS idx_commands_user_relay_status ON commands(user_id, relay_id, status);
                 CREATE INDEX IF NOT EXISTS idx_commands_user_script ON commands(user_id, script_name);
+                CREATE INDEX IF NOT EXISTS idx_commands_user_script_time ON commands(user_id, script_name, created_at);
                 """
             )
         self._migrate_schema_if_needed()
@@ -1217,7 +1220,14 @@ class ManagedMT5Executor:
     @property
     def pool(self):
         if self._pool is None:
-            self._pool = ProcessPoolExecutor(max_workers=max(1, MANAGED_EXECUTOR_WORKERS))
+            try:
+                from managed_mt5_worker import _worker_initializer
+                self._pool = ProcessPoolExecutor(
+                    max_workers=max(1, MANAGED_EXECUTOR_WORKERS),
+                    initializer=_worker_initializer,
+                )
+            except Exception:
+                self._pool = ProcessPoolExecutor(max_workers=max(1, MANAGED_EXECUTOR_WORKERS))
         return self._pool
 
     def execute(self, user_id: str, command: Command) -> dict:
@@ -1259,7 +1269,8 @@ managed_executor = ManagedMT5Executor()
 LAST_OFFLINE_NOTIFY = {}
 
 
-def notify_user(user_id: str, message: str):
+def _send_notifications(user_id: str, message: str):
+    """Send Telegram/Discord notifications synchronously — called from background worker."""
     settings = store.get_user_settings(user_id)
     if not settings.get("notifications_enabled"):
         return
@@ -1283,6 +1294,32 @@ def notify_user(user_id: str, message: str):
             requests.post(discord_webhook_url, json={"content": message}, timeout=6)
         except Exception as exc:
             logger.warning(f"Discord notify failed for {user_id}: {exc}")
+
+
+# Async notification queue — decouples Telegram/Discord HTTP calls from signal processing
+_notify_queue: "_queue.Queue[tuple]" = _queue.Queue(maxsize=500)
+
+def _notification_worker():
+    while True:
+        try:
+            user_id, message = _notify_queue.get(timeout=5)
+        except _queue.Empty:
+            continue
+        try:
+            _send_notifications(user_id, message)
+        except Exception as exc:
+            logger.warning(f"Notification worker error: {exc}")
+        _notify_queue.task_done()
+
+threading.Thread(target=_notification_worker, daemon=True, name="notify-worker").start()
+
+
+def notify_user(user_id: str, message: str):
+    """Enqueue a notification — returns immediately, delivery is async."""
+    try:
+        _notify_queue.put_nowait((user_id, message))
+    except _queue.Full:
+        logger.warning(f"Notification queue full; dropping message for {user_id}")
 
 # ==================== Auth Helpers ====================
 
@@ -2066,7 +2103,7 @@ def relay_poll():
     if wait_seconds > 0:
         # Non-blocking poll with early exit
         # Use smaller sleep intervals for responsiveness
-        poll_interval = 0.1  # 100ms
+        poll_interval = 0.01  # 10ms — reduces command delivery latency from up to 100ms to up to 10ms
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
             cmds = store.dequeue(user_id, relay_id, COMMAND_DEQUEUE_LIMIT)
