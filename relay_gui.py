@@ -70,17 +70,17 @@ FG_FAINT      = "#2e4e38"   # Very faint / disabled
 PRIMARY       = "#18c462"   # Vivid emerald
 PRIMARY_LT    = "#22e874"   # Bright emerald (hover)
 PRIMARY_DK    = "#0d7a3c"   # Deep emerald
-PRIMARY_GLOW  = "#18c46228" # Emerald glow for borders
+PRIMARY_GLOW  = "#163a22"   # Emerald glow for borders
 
 ACCENT        = "#e8c060"   # Warm gold
 ACCENT_LT     = "#f5d87a"   # Bright gold
 ACCENT_DK     = "#9c7e18"   # Deep gold
-ACCENT_GLOW   = "#e8c06018" # Gold glow
+ACCENT_GLOW   = "#2d240e"   # Gold glow
 
 BORDER        = "#132018"   # Subtle border
 BORDER_SOFT   = "#1c3526"   # Softer border
-BORDER_GLOW   = "#18c46240" # Active border glow (emerald)
-BORDER_GOLD   = "#9c7e1860" # Active border glow (gold)
+BORDER_GLOW   = "#1d6e3a"   # Active border glow (emerald)
+BORDER_GOLD   = "#5a4612"   # Active border glow (gold)
 
 DANGER        = "#d94f4f"   # Error red
 DANGER_BG     = "#200d0d"   # Error background
@@ -549,7 +549,7 @@ class RelayGuiApp:
                 height=40,
                 corner_radius=10,
                 border_width=1 if key == "connect" else 0,
-                border_color=BORDER_GLOW if key == "connect" else "transparent",
+                border_color=BORDER_GLOW if key == "connect" else BORDER,
             )
             btn.pack(fill="x", pady=2)
             self._nav_btns[key] = btn
@@ -594,7 +594,7 @@ class RelayGuiApp:
                 fg_color=NAV_ACTIVE_BG if active else "transparent",
                 text_color=PRIMARY_LT if active else FG_SOFT,
                 border_width=1 if active else 0,
-                border_color=BORDER_GLOW if active else "transparent",
+                border_color=BORDER_GLOW if active else BORDER,
             )
 
         if key == "tradingview":
@@ -1011,7 +1011,7 @@ class RelayGuiApp:
             row.pack(fill="x", padx=16, pady=(0, 6))
             _label(row, var, font=FONT_MONO_SM, color=PRIMARY_LT).pack(side="left")
             _label(row, f"  — {desc}", font=FONT_SMALL, color=FG_MUTED).pack(side="left")
-        _label(tip_card, "", font=FONT_SMALL, color="transparent").pack(pady=(0, 8))
+        ctk.CTkFrame(tip_card, height=8, fg_color="transparent").pack()
 
         # ── RIGHT: Message Builder ────────────────────────────────────────────
         builder_card = _card(right, gold=True)
