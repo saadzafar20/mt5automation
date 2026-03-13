@@ -13,7 +13,7 @@ load_dotenv(_os.path.join(_script_dir, ".env"))
 
 import argparse
 import base64
-from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
 import json
@@ -42,7 +42,7 @@ try:
 except ImportError:
     Fernet = None
 from werkzeug.security import check_password_hash, generate_password_hash
-from managed_mt5_worker import execute_managed_trade_worker
+from managed_mt5_worker import SessionManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -68,7 +68,6 @@ ADMIN_PASSWORD_HASH = os.getenv("BRIDGE_ADMIN_PASSWORD_HASH", "")
 ADMIN_PASSWORD = os.getenv("BRIDGE_ADMIN_PASSWORD", "")
 MANAGED_RELAY_PREFIX = "managed-"
 BRIDGE_CREDS_KEY = os.getenv("BRIDGE_CREDS_KEY", "")
-MANAGED_EXECUTOR_WORKERS = int(os.getenv("MANAGED_EXECUTOR_WORKERS", "4"))
 MANAGED_EXECUTOR_TIMEOUT_SECS = int(os.getenv("MANAGED_EXECUTOR_TIMEOUT_SECS", "20"))
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 RELAY_DOWNLOAD_URL = os.getenv("RELAY_DOWNLOAD_URL", "")
@@ -875,6 +874,17 @@ class BridgeStore:
             ).fetchone()
         return dict(row) if row else None
 
+    def get_all_managed_accounts(self) -> list:
+        """Return all enabled managed accounts (for session restore at startup)."""
+        with self.lock:
+            rows = self.conn.execute(
+                """
+                SELECT user_id, mt5_login, mt5_password_enc, mt5_server, mt5_path
+                FROM managed_accounts WHERE enabled = 1
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def is_managed_enabled(self, user_id: str) -> bool:
         row = self.get_managed_account(user_id)
         return bool(row and row.get("enabled") == 1)
@@ -1210,74 +1220,9 @@ store = BridgeStore(DB_PATH)
 PENDING_DESKTOP_STATES = {}
 _pending_state_lock = RLock()
 
-
-class ManagedMT5Executor:
-    """Execute trades on VPS using per-user managed MT5 credentials."""
-
-    def __init__(self):
-        self._pool = None  # Lazy init to avoid import-time issues
-        self._available = None  # Check on first use
-
-    @property
-    def available(self) -> bool:
-        if self._available is None:
-            try:
-                import MetaTrader5  # noqa: F401
-                self._available = True
-            except ImportError:
-                self._available = False
-                logger.warning("MetaTrader5 module not available on bridge host; managed execution disabled")
-        return self._available
-
-    @property
-    def pool(self):
-        if self._pool is None:
-            try:
-                from managed_mt5_worker import _worker_initializer
-                self._pool = ProcessPoolExecutor(
-                    max_workers=max(1, MANAGED_EXECUTOR_WORKERS),
-                    initializer=_worker_initializer,
-                )
-            except Exception:
-                self._pool = ProcessPoolExecutor(max_workers=max(1, MANAGED_EXECUTOR_WORKERS))
-        return self._pool
-
-    def execute(self, user_id: str, command: Command) -> dict:
-        if not self.available:
-            return {"status": "failed", "error": "MetaTrader5 module unavailable on bridge"}
-
-        account = store.get_managed_account(user_id)
-        if not account or account.get("enabled") != 1:
-            return {"status": "failed", "error": "managed account not configured"}
-
-        try:
-            password = decrypt_secret(account["mt5_password_enc"])
-        except Exception as exc:
-            return {"status": "failed", "error": f"credential decrypt failed: {exc}"}
-        payload = {
-            "mt5_login": int(account["mt5_login"]),
-            "mt5_password": password,
-            "mt5_server": account["mt5_server"],
-            "mt5_path": account.get("mt5_path") or "",
-            "action": (command.action or "").upper(),
-            "symbol": command.symbol,
-            "size": command.size or 0.1,
-            "sl": command.sl,
-            "tp": command.tp,
-        }
-        future = self.pool.submit(execute_managed_trade_worker, payload)
-        try:
-            result = future.result(timeout=MANAGED_EXECUTOR_TIMEOUT_SECS)
-            result["mode"] = "managed-vps"
-            return result
-        except FuturesTimeoutError:
-            future.cancel()
-            return {"status": "failed", "error": "managed execution timeout", "mode": "managed-vps"}
-        except Exception as exc:
-            return {"status": "failed", "error": f"managed executor error: {exc}", "mode": "managed-vps"}
-
-
-managed_executor = ManagedMT5Executor()
+# Persistent per-user MT5 sessions (initialized immediately, warm for every trade)
+session_manager = SessionManager()
+session_manager.load_from_store(store, decrypt_secret)
 LAST_OFFLINE_NOTIFY = {}
 
 
@@ -1849,7 +1794,9 @@ def _process_signal_for_user(user_id: str, data: dict):
     store.enqueue(cmd)
 
     if managed_mode:
-        result = managed_executor.execute(user_id, cmd)
+        cmd_dict = {"action": action, "symbol": symbol, "size": size or 0.1, "sl": sl, "tp": tp}
+        result = session_manager.execute(user_id, cmd_dict)
+        result["mode"] = "managed-vps"
         status = CommandStatus.EXECUTED if result.get("status") == "executed" else CommandStatus.FAILED
         store.update_result(user_id, target_relay, cmd.id, status, result)
         if status == CommandStatus.EXECUTED:
@@ -2008,6 +1955,11 @@ def managed_setup():
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
 
+    # Start (or restart) the persistent MT5 session immediately — warm before first trade
+    session_manager.start_session(
+        user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path) or None
+    )
+
     return jsonify({
         "status": "managed_setup_complete",
         "user_id": user_id,
@@ -2045,6 +1997,11 @@ def managed_setup_login():
         store.upsert_managed_account(user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path or ""))
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
+
+    # Start (or restart) the persistent MT5 session immediately — warm before first trade
+    session_manager.start_session(
+        user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path) or None
+    )
 
     return jsonify({"status": "managed_setup_complete", "user_id": user_id, "managed_execution": True}), 200
 
@@ -2352,7 +2309,9 @@ def panic_close_all():
     store.enqueue(cmd)
 
     if managed_mode:
-        result = managed_executor.execute(user_id, cmd)
+        cmd_dict = {"action": "CLOSE_ALL", "symbol": "", "size": 0.0, "sl": None, "tp": None}
+        result = session_manager.execute(user_id, cmd_dict)
+        result["mode"] = "managed-vps"
         status = CommandStatus.EXECUTED if result.get("status") == "executed" else CommandStatus.FAILED
         store.update_result(user_id, target_relay, cmd.id, status, result)
         notify_user(user_id, f"⚠️ Panic close-all executed: {result.get('status')}")

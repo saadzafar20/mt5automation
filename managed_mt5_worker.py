@@ -1,164 +1,249 @@
-"""Process worker for managed MT5 trade execution.
+"""Persistent per-user MT5 session for managed VPS execution.
 
-This runs in a separate process via ProcessPoolExecutor.
-It connects to MT5 with user-specific credentials and executes trades.
+Each managed user gets one dedicated thread. MT5 is initialized immediately
+when the session starts (not on first trade), so every trade is instant.
 
-MT5 connection is kept alive across trades (module-level globals) to avoid
-the 1-2 second overhead of mt5.initialize() + mt5.shutdown() per trade.
+The thread stays alive permanently, reconnecting automatically if the
+broker connection drops.
 """
 
-import atexit
-from typing import Any, Dict
+import logging
+import queue
+import threading
+import time
+from typing import Any, Dict, Optional
 
-# Import shared utilities - fall back to inline if import fails (subprocess isolation)
-try:
-    from mt5_order_utils import execute_command, map_mt5_retcode
-    USE_SHARED_UTILS = True
-except ImportError:
-    USE_SHARED_UTILS = False
+logger = logging.getLogger(__name__)
 
-    MT5_RETCODE_MESSAGES = {
-        10016: "Invalid stop loss or take profit.",
-        10018: "Market is currently closed.",
-        10019: "Not enough money in account to execute trade.",
-    }
-
-    def map_mt5_retcode(retcode):
-        if retcode is None:
-            return "Trade request failed."
-        return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
+TRADE_TIMEOUT_SECS = 20
+RECONNECT_DELAY_SECS = 5
+HEALTH_CHECK_INTERVAL_SECS = 5
 
 
-# ── Persistent connection state (process-global) ──────────────────────────────
-_mt5_initialized = False
-_mt5_login = None
+class MT5UserSession:
+    """
+    One per managed user. Owns a single dedicated thread that:
+      1. Calls mt5.initialize() immediately at startup (warm, ready to trade)
+      2. Loops waiting for trade commands on an internal queue
+      3. Reconnects automatically if the broker connection drops
+    """
 
+    def __init__(self, user_id: str, login: int, password: str,
+                 server: str, path: Optional[str] = None):
+        self.user_id  = user_id
+        self._login   = int(login)
+        self._password = str(password)
+        self._server  = str(server) if server else None
+        self._path    = path or None
 
-def _worker_initializer():
-    """Called once per worker process by ProcessPoolExecutor initializer."""
-    pass
+        self._queue     = queue.Queue()
+        self._connected = False
+        self._stopped   = False
 
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"mt5-session-{user_id}",
+            daemon=True,
+        )
+        self._thread.start()
 
-def execute_managed_trade_worker(payload: Dict[str, Any]) -> Dict[str, Any]:
-    global _mt5_initialized, _mt5_login
+    # ── Public API ────────────────────────────────────────────────────────────
 
-    try:
-        import MetaTrader5 as mt5
-    except ImportError:
-        return {"status": "failed", "error": "MetaTrader5 module unavailable in worker"}
+    def execute(self, command: Dict[str, Any]) -> Dict[str, Any]:
+        """Queue a trade command and block until the session thread executes it."""
+        if self._stopped:
+            return {"status": "failed", "error": "session is shut down"}
 
-    login    = int(payload.get("mt5_login", 0))
-    password = payload.get("mt5_password", "")
-    server   = payload.get("mt5_server", "")
-    path     = payload.get("mt5_path") or None
+        result_box: list = []
+        done = threading.Event()
+        self._queue.put((command, result_box, done))
 
-    # Re-initialize only if not connected or account changed
-    needs_init = (not _mt5_initialized) or (_mt5_login != login)
+        if done.wait(timeout=TRADE_TIMEOUT_SECS):
+            return result_box[0]
+        return {"status": "failed", "error": "trade execution timed out"}
 
-    if needs_init:
-        if _mt5_initialized:
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    def update_credentials(self, login: int, password: str,
+                           server: str, path: Optional[str] = None):
+        """Restart the session with new credentials (called after cred update)."""
+        self._login    = int(login)
+        self._password = str(password)
+        self._server   = str(server) if server else None
+        self._path     = path or None
+        # Signal the thread to reconnect by poisoning the queue
+        self._queue.put(("_reconnect", None, None))
+
+    def shutdown(self):
+        """Cleanly stop the session thread."""
+        self._stopped = True
+        self._queue.put(("_stop", None, None))
+
+    # ── Thread body ───────────────────────────────────────────────────────────
+
+    def _run(self):
+        try:
+            import MetaTrader5 as mt5
+        except ImportError:
+            logger.error(f"[{self.user_id}] MetaTrader5 not available — session cannot start")
+            return
+
+        while not self._stopped:
+            # ── Connect ───────────────────────────────────────────────────────
+            self._connected = self._connect(mt5)
+            if not self._connected:
+                time.sleep(RECONNECT_DELAY_SECS)
+                continue
+
+            # ── Trade loop ────────────────────────────────────────────────────
+            while not self._stopped:
+                try:
+                    item = self._queue.get(timeout=HEALTH_CHECK_INTERVAL_SECS)
+                except queue.Empty:
+                    # Periodic health check — ensure broker connection is alive
+                    if not self._is_alive(mt5):
+                        logger.warning(f"[{self.user_id}] MT5 broker connection lost, reconnecting")
+                        self._connected = False
+                        break
+                    continue
+
+                cmd, result_box, done = item
+
+                # Control signals
+                if cmd == "_stop":
+                    self._connected = False
+                    return
+                if cmd == "_reconnect":
+                    self._connected = False
+                    try:
+                        mt5.shutdown()
+                    except Exception:
+                        pass
+                    break
+
+                # Execute trade
+                try:
+                    from mt5_order_utils import execute_command
+                    result = execute_command(mt5, cmd, comment_prefix="managed-vps")
+                except Exception as exc:
+                    logger.exception(f"[{self.user_id}] Trade execution error")
+                    result = {"status": "failed", "error": str(exc)}
+                    self._connected = False
+
+                result_box.append(result)
+                done.set()
+
+                if not self._connected:
+                    break
+
+        try:
+            import MetaTrader5 as mt5
             mt5.shutdown()
-        initialized = mt5.initialize(path=path, login=login, password=password, server=server)
-        if not initialized:
-            _mt5_initialized = False
-            return {"status": "failed", "error": f"mt5 init failed: {mt5.last_error()}"}
-        _mt5_initialized = True
-        _mt5_login = login
-        atexit.register(mt5.shutdown)
+        except Exception:
+            pass
 
-    try:
-        command = {
-            "action": payload.get("action", ""),
-            "symbol": payload.get("symbol", ""),
-            "size": payload.get("size", 0.1),
-            "sl": payload.get("sl"),
-            "tp": payload.get("tp"),
-        }
-        if USE_SHARED_UTILS:
-            result = execute_command(mt5, command, comment_prefix="managed-bridge")
-        else:
-            result = _execute_command_inline(mt5, command)
-        return result
-    except Exception as exc:
-        # Reset state so next call re-initializes
-        _mt5_initialized = False
-        return {"status": "failed", "error": str(exc)}
-    # NOTE: No mt5.shutdown() in finally — connection stays alive for next trade
+    def _connect(self, mt5) -> bool:
+        """Initialize MT5 with user credentials. Returns True on success."""
+        try:
+            # Shut down any stale session cleanly first
+            try:
+                if mt5.terminal_info() is not None:
+                    mt5.shutdown()
+            except Exception:
+                pass
+
+            ok = mt5.initialize(
+                path=self._path,
+                login=self._login,
+                password=self._password,
+                server=self._server,
+            )
+            if ok:
+                info = mt5.account_info()
+                name = f"account {info.login} on {info.server}" if info else "unknown account"
+                logger.info(f"[{self.user_id}] MT5 connected: {name}")
+            else:
+                logger.warning(f"[{self.user_id}] MT5 init failed: {mt5.last_error()}")
+            return ok
+        except Exception as exc:
+            logger.error(f"[{self.user_id}] MT5 connect error: {exc}")
+            return False
+
+    def _is_alive(self, mt5) -> bool:
+        """Return True if MT5 terminal is still connected to the broker."""
+        try:
+            term = mt5.terminal_info()
+            return term is not None and bool(getattr(term, "connected", False))
+        except Exception:
+            return False
 
 
-def _execute_command_inline(mt5, command: Dict[str, Any]) -> Dict[str, Any]:
-    """Inline execution logic as fallback when shared utils unavailable."""
-    action = (command.get("action") or "").upper()
-    symbol = command.get("symbol", "")
-    size = float(command.get("size") or 0.1)
-    sl = command.get("sl")
-    tp = command.get("tp")
+class SessionManager:
+    """
+    Maintains one MT5UserSession per managed user.
+    Sessions are started immediately when credentials are registered,
+    and restored from the database when the bridge restarts.
+    """
 
-    if not symbol and action not in ("CLOSE_ALL",):
-        return {"status": "failed", "error": "missing symbol"}
+    def __init__(self):
+        self._sessions: Dict[str, MT5UserSession] = {}
+        self._lock = threading.Lock()
 
-    if action == "BUY":
-        tick = mt5.symbol_info_tick(symbol)
-        if not tick:
-            return {"status": "failed", "error": f"no tick data for {symbol}"}
-        request_data = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": size,
-            "type": mt5.ORDER_TYPE_BUY,
-            "price": tick.ask,
-            "sl": sl,
-            "tp": tp,
-            "comment": "managed-bridge-trade",
-            "type_filling": mt5.ORDER_FILLING_IOC,
-        }
-    elif action == "SELL":
-        tick = mt5.symbol_info_tick(symbol)
-        if not tick:
-            return {"status": "failed", "error": f"no tick data for {symbol}"}
-        request_data = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": size,
-            "type": mt5.ORDER_TYPE_SELL,
-            "price": tick.bid,
-            "sl": sl,
-            "tp": tp,
-            "comment": "managed-bridge-trade",
-            "type_filling": mt5.ORDER_FILLING_IOC,
-        }
-    elif action.startswith("CLOSE"):
-        positions = mt5.positions_get(symbol=symbol if action != "CLOSE_ALL" else None)
-        if not positions:
-            return {"status": "failed", "error": "no open positions"}
+    def start_session(self, user_id: str, login: int, password: str,
+                      server: str, path: Optional[str] = None):
+        """Create (or replace) the persistent MT5 session for a user."""
+        with self._lock:
+            existing = self._sessions.get(user_id)
+            if existing:
+                existing.shutdown()
+            session = MT5UserSession(user_id, login, password, server, path)
+            self._sessions[user_id] = session
+        logger.info(f"MT5 session initializing for user {user_id} (account {login})")
 
-        closed = []
-        for pos in positions:
-            close_req = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": pos.symbol,
-                "volume": pos.volume,
-                "type": mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
-                "position": pos.ticket,
-                "comment": "managed-bridge-close",
-                "type_filling": mt5.ORDER_FILLING_IOC,
-            }
-            close_res = mt5.order_send(close_req)
-            if close_res and close_res.retcode == mt5.TRADE_RETCODE_DONE:
-                closed.append(close_res.order)
+    def stop_session(self, user_id: str):
+        """Shut down and remove a user's session."""
+        with self._lock:
+            session = self._sessions.pop(user_id, None)
+        if session:
+            session.shutdown()
+            logger.info(f"MT5 session stopped for user {user_id}")
 
-        if closed:
-            return {"status": "executed", "order_ids": closed}
-        return {"status": "failed", "error": "close failed"}
-    else:
-        return {"status": "failed", "error": f"unsupported action: {action}"}
+    def execute(self, user_id: str, command: Dict[str, Any]) -> Dict[str, Any]:
+        """Dispatch a trade to the user's persistent MT5 session."""
+        with self._lock:
+            session = self._sessions.get(user_id)
+        if not session:
+            return {"status": "failed", "error": "no active MT5 session for this user"}
+        return session.execute(command)
 
-    result = mt5.order_send(request_data)
-    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-        return {"status": "executed", "order_id": result.order}
-    return {
-        "status": "failed",
-        "error": getattr(result, "comment", "order_send failed"),
-        "retcode": getattr(result, "retcode", None),
-        "error_message": map_mt5_retcode(getattr(result, "retcode", None)),
-    }
+    def session_status(self, user_id: str) -> Dict[str, Any]:
+        with self._lock:
+            session = self._sessions.get(user_id)
+        if not session:
+            return {"active": False, "connected": False}
+        return {"active": True, "connected": session.connected}
+
+    def load_from_store(self, store, decrypt_fn):
+        """
+        At bridge startup: restore sessions for all enabled managed accounts.
+        `store`      — BridgeStore instance
+        `decrypt_fn` — callable that decrypts a stored password
+        """
+        accounts = store.get_all_managed_accounts()
+        started = 0
+        for acct in accounts:
+            try:
+                password = decrypt_fn(acct["mt5_password_enc"])
+                self.start_session(
+                    acct["user_id"],
+                    int(acct["mt5_login"]),
+                    password,
+                    acct["mt5_server"],
+                    acct.get("mt5_path") or None,
+                )
+                started += 1
+            except Exception as exc:
+                logger.error(f"Failed to restore MT5 session for {acct['user_id']}: {exc}")
+        logger.info(f"Restored {started}/{len(accounts)} managed MT5 sessions from database")

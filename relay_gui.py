@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PlatAlgo Relay — desktop app matching the PlatAlgo web design system."""
+"""PlatAlgo Relay — premium execution console."""
 
 import ctypes
 import json
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import requests
 from tkinter import messagebox
+import tkinter as tk
 import tkinter.font as tkfont
 
 try:
@@ -39,7 +40,7 @@ except ImportError:
     winreg = None
 
 try:
-    import webview  # Optional; used to keep OAuth flows inside the app window
+    import webview
 except ImportError:
     webview = None
 
@@ -49,63 +50,68 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Glass Morphism Palette ────────────────────────────────────────────────────
-BG            = "#080d0b"        # Near-black deep base
-BG_ELEVATED   = "#0d1612"        # Slightly elevated background
-BG_CARD       = "#111e17"        # Card surface
-BG_INPUT      = "#0f1a13"        # Input fields
-GLASS         = "#162b1e"        # Glass panel base
-GLASS_EMERALD = "#1c3d2b"        # Green-tinted glass chip
-GLASS_GOLD    = "#3d3218"        # Gold-tinted glass chip
-GLASS_WHITE   = "#1e2e26"        # Near-white glass overlay
+# ── Color Palette ─────────────────────────────────────────────────────────────
+BG            = "#07110a"   # Deepest background
+BG_ELEVATED   = "#0b1610"   # Sidebar / elevated surfaces
+BG_CARD       = "#0f1c14"   # Card surfaces
+BG_INPUT      = "#0c1710"   # Input fields
+BG_PANEL      = "#09130c"   # Content area base
 
-FG            = "#eef4ec"        # Primary text — warm white
-FG_MUTED      = "#7fa68a"        # Secondary text
-FG_SOFT       = "#b8ccbf"        # Tertiary text
+GLASS         = "#131f17"   # Glass base
+GLASS_EMERALD = "#162e1e"   # Green-tinted glass
+GLASS_GOLD    = "#2b2108"   # Gold-tinted glass
+GLASS_DARK    = "#0d170f"   # Darker glass overlay
 
-PRIMARY       = "#1db368"        # Vivid emerald
-PRIMARY_LT    = "#28d47e"        # Bright emerald hover
-PRIMARY_DK    = "#127a48"        # Deep emerald
-ACCENT        = "#e8c060"        # Warm gold
-ACCENT_LT     = "#f5d878"        # Bright gold
-ACCENT_DK     = "#a88530"        # Deep gold
+FG            = "#e8f0ea"   # Primary text
+FG_MUTED      = "#5e8a6e"   # Muted / secondary text
+FG_SOFT       = "#9dbfaa"   # Tertiary text
+FG_FAINT      = "#2e4e38"   # Very faint / disabled
 
-BORDER        = "#1e3529"        # Subtle card border
-BORDER_SOFT   = "#2d4d3c"        # Softer border / divider
-BORDER_GLOW   = "#28664a"        # Emerald glow border (active states)
-DANGER        = "#e85c5c"
-DANGER_BG     = "#2e1414"
+PRIMARY       = "#18c462"   # Vivid emerald
+PRIMARY_LT    = "#22e874"   # Bright emerald (hover)
+PRIMARY_DK    = "#0d7a3c"   # Deep emerald
+PRIMARY_GLOW  = "#18c46228" # Emerald glow for borders
+
+ACCENT        = "#e8c060"   # Warm gold
+ACCENT_LT     = "#f5d87a"   # Bright gold
+ACCENT_DK     = "#9c7e18"   # Deep gold
+ACCENT_GLOW   = "#e8c06018" # Gold glow
+
+BORDER        = "#132018"   # Subtle border
+BORDER_SOFT   = "#1c3526"   # Softer border
+BORDER_GLOW   = "#18c46240" # Active border glow (emerald)
+BORDER_GOLD   = "#9c7e1860" # Active border glow (gold)
+
+DANGER        = "#d94f4f"   # Error red
+DANGER_BG     = "#200d0d"   # Error background
+DANGER_BORDER = "#5c1818"   # Error border
+
+NAV_ACTIVE_BG = "#111f16"   # Active nav item bg
+NAV_HOVER_BG  = "#0e1a12"   # Hover nav item bg
+
+# ── Typography ────────────────────────────────────────────────────────────────
+DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
+TEXT_FONT_CANDIDATES    = ["SF Pro Text",    "Segoe UI Variable Text",    "Aptos",         "Segoe UI"]
+MONO_FONT_CANDIDATES    = ["SF Mono", "Cascadia Mono", "JetBrains Mono", "Consolas", "Courier New"]
+
+FONT_TITLE   = ("Segoe UI", 26, "bold")
+FONT_HERO    = ("Segoe UI", 16, "bold")
+FONT_LABEL   = ("Segoe UI", 13, "bold")
+FONT_BODY    = ("Segoe UI", 12)
+FONT_SMALL   = ("Segoe UI", 10)
+FONT_CAPTION = ("Segoe UI", 9, "bold")
+FONT_MONO    = ("Consolas", 11)
+FONT_MONO_SM = ("Consolas", 10)
 
 # ── App constants ─────────────────────────────────────────────────────────────
 PRODUCTION_BRIDGE_URL = "https://app.platalgo.com"
 KEYRING_SERVICE       = "platalgo-relay"
 LAST_USER_FILE        = "relay_last_user.json"
+WIN_TASK_NAME         = "PlatAlgoRelay"
+MAC_PLIST_LABEL       = "com.platalgo.relay"
+MAC_PLIST_PATH        = Path.home() / "Library" / "LaunchAgents" / f"{MAC_PLIST_LABEL}.plist"
 
-WIN_TASK_NAME   = "PlatAlgoRelay"
-MAC_PLIST_LABEL = "com.platalgo.relay"
-MAC_PLIST_PATH  = Path.home() / "Library" / "LaunchAgents" / f"{MAC_PLIST_LABEL}.plist"
-
-DISPLAY_FONT_CANDIDATES = [
-    "SF Pro Display",
-    "Segoe UI Variable Display",
-    "Aptos Display",
-    "Segoe UI",
-]
-TEXT_FONT_CANDIDATES = [
-    "SF Pro Text",
-    "Segoe UI Variable Text",
-    "Aptos",
-    "Segoe UI",
-]
-MONO_FONT_CANDIDATES = ["SF Mono", "Cascadia Mono", "Consolas", "Courier New"]
-
-FONT_TITLE   = ("Segoe UI", 30, "bold")
-FONT_HERO    = ("Segoe UI", 18, "bold")
-FONT_LABEL   = ("Segoe UI", 15, "bold")
-FONT_BODY    = ("Segoe UI", 13)
-FONT_SMALL   = ("Segoe UI", 11)
-FONT_CAPTION = ("Segoe UI", 10, "bold")
-FONT_MONO    = ("Consolas", 11)
+APP_VERSION = os.getenv("RELAY_APP_VERSION", "1.0.0")
 
 
 def _pick_font_family(candidates, fallback: str) -> str:
@@ -113,25 +119,21 @@ def _pick_font_family(candidates, fallback: str) -> str:
         families = set(tkfont.families())
     except Exception:
         families = set()
-    for family in candidates:
-        if family in families:
-            return family
+    for f in candidates:
+        if f in families:
+            return f
     return fallback
 
 
 # ── MT5 path detection ────────────────────────────────────────────────────────
 def detect_mt5_path() -> str:
     if winreg:
-        keys = [
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-        ]
         for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
-            for key_path in keys:
+            for key_path in [r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"]:
                 try:
                     with winreg.OpenKey(root, key_path) as base:
-                        count = winreg.QueryInfoKey(base)[0]
-                        for idx in range(count):
+                        for idx in range(winreg.QueryInfoKey(base)[0]):
                             sub_name = winreg.EnumKey(base, idx)
                             with winreg.OpenKey(base, sub_name) as sub:
                                 try:
@@ -159,22 +161,20 @@ def detect_mt5_path() -> str:
 # ── Startup registration ──────────────────────────────────────────────────────
 def _startup_enabled() -> bool:
     if IS_WINDOWS:
-        r = subprocess.run(["schtasks", "/query", "/tn", WIN_TASK_NAME],
-                           capture_output=True, text=True)
-        return r.returncode == 0
+        return subprocess.run(["schtasks", "/query", "/tn", WIN_TASK_NAME],
+                              capture_output=True, text=True).returncode == 0
     if IS_MAC:
         return MAC_PLIST_PATH.exists()
     return False
 
+
 def _enable_startup():
-    exe    = sys.executable
+    exe = sys.executable
     script = os.path.abspath(sys.argv[0])
     if IS_WINDOWS:
-        subprocess.run([
-            "schtasks", "/create", "/tn", WIN_TASK_NAME,
-            "/tr", f'"{exe}" "{script}"',
-            "/sc", "ONSTART", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f",
-        ], check=True)
+        subprocess.run(["schtasks", "/create", "/tn", WIN_TASK_NAME,
+                        "/tr", f'"{exe}" "{script}"',
+                        "/sc", "ONSTART", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"], check=True)
     elif IS_MAC:
         plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -185,51 +185,51 @@ def _enable_startup():
   <array><string>{exe}</string><string>{script}</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key>
-  <string>{Path.home()}/Library/Logs/platalgo-relay.log</string>
-  <key>StandardErrorPath</key>
-  <string>{Path.home()}/Library/Logs/platalgo-relay-error.log</string>
+  <key>StandardOutPath</key><string>{Path.home()}/Library/Logs/platalgo-relay.log</string>
+  <key>StandardErrorPath</key><string>{Path.home()}/Library/Logs/platalgo-relay-error.log</string>
 </dict></plist>"""
         MAC_PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
         MAC_PLIST_PATH.write_text(plist)
         subprocess.run(["launchctl", "load", str(MAC_PLIST_PATH)], check=True)
 
+
 def _disable_startup():
     if IS_WINDOWS:
-        subprocess.run(["schtasks", "/delete", "/tn", WIN_TASK_NAME, "/f"],
-                       check=False)
+        subprocess.run(["schtasks", "/delete", "/tn", WIN_TASK_NAME, "/f"], check=False)
     elif IS_MAC:
         if MAC_PLIST_PATH.exists():
             subprocess.run(["launchctl", "unload", str(MAC_PLIST_PATH)], check=False)
             MAC_PLIST_PATH.unlink(missing_ok=True)
 
 
-# ── UI Helpers ────────────────────────────────────────────────────────────────
-def _card(parent, glow=False, **kwargs) -> "ctk.CTkFrame":
+# ── UI Primitives ─────────────────────────────────────────────────────────────
+def _card(parent, glow=False, gold=False, **kwargs):
     defaults = dict(
         fg_color=BG_CARD,
-        corner_radius=18,
+        corner_radius=16,
         border_width=1,
-        border_color=BORDER_GLOW if glow else BORDER,
+        border_color=BORDER_GOLD if gold else (BORDER_GLOW if glow else BORDER),
     )
     defaults.update(kwargs)
     return ctk.CTkFrame(parent, **defaults)
+
 
 def _label(parent, text, color=FG, font=FONT_BODY, **kwargs):
     return ctk.CTkLabel(parent, text=text, text_color=color,
                         font=font, fg_color="transparent", **kwargs)
 
+
 def _entry(parent, textvariable=None, placeholder="", show=None, **kwargs):
+    kwargs.setdefault("height", 44)
     e = ctk.CTkEntry(
         parent,
         textvariable=textvariable,
         placeholder_text=placeholder,
-        placeholder_text_color=FG_MUTED,
+        placeholder_text_color=FG_FAINT,
         fg_color=BG_INPUT,
         border_color=BORDER_SOFT,
         text_color=FG,
-        height=48,
-        corner_radius=14,
+        corner_radius=12,
         font=FONT_BODY,
         **kwargs,
     )
@@ -237,52 +237,68 @@ def _entry(parent, textvariable=None, placeholder="", show=None, **kwargs):
         e.configure(show=show)
     return e
 
+
+def _btn_primary(parent, text, command, **kwargs):
+    kwargs.setdefault("height", 44)
+    return ctk.CTkButton(
+        parent, text=text, command=command,
+        fg_color=PRIMARY_DK, hover_color=PRIMARY,
+        text_color=FG, font=FONT_LABEL,
+        corner_radius=12, **kwargs
+    )
+
+
 def _btn_gold(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 48)
+    kwargs.setdefault("height", 44)
     return ctk.CTkButton(
         parent, text=text, command=command,
         fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
         text_color=ACCENT_LT, border_width=1, border_color=ACCENT_DK,
-        font=FONT_LABEL, corner_radius=14, **kwargs
+        font=FONT_LABEL, corner_radius=12, **kwargs
     )
 
+
 def _btn_outline(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 48)
+    kwargs.setdefault("height", 44)
     return ctk.CTkButton(
         parent, text=text, command=command,
         fg_color="transparent", hover_color=GLASS,
         text_color=FG_SOFT, border_color=BORDER_SOFT, border_width=1,
-        font=FONT_BODY, corner_radius=14, **kwargs
+        font=FONT_BODY, corner_radius=12, **kwargs
     )
+
 
 def _btn_danger(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 48)
+    kwargs.setdefault("height", 44)
     return ctk.CTkButton(
         parent, text=text, command=command,
-        fg_color=DANGER_BG, hover_color="#3d1515",
-        text_color="#ffd0d0", border_color="#7f1d1d", border_width=1,
-        font=FONT_BODY, corner_radius=14, **kwargs
+        fg_color=DANGER_BG, hover_color="#2e1212",
+        text_color="#ffbbbb", border_color=DANGER_BORDER, border_width=1,
+        font=FONT_BODY, corner_radius=12, **kwargs
     )
+
 
 def _chip(parent, text, fg_color, text_color=FG, font=FONT_CAPTION, **kwargs):
-    return ctk.CTkLabel(
-        parent,
-        text=text,
-        fg_color=fg_color,
-        text_color=text_color,
-        font=font,
-        corner_radius=999,
-        padx=12,
-        pady=6,
-        **kwargs,
-    )
-
-def _divider(parent):
-    ctk.CTkFrame(parent, height=1, fg_color=BORDER,
-                 corner_radius=0).pack(fill="x", padx=16, pady=6)
+    return ctk.CTkLabel(parent, text=text, fg_color=fg_color, text_color=text_color,
+                        font=font, corner_radius=999, padx=10, pady=4, **kwargs)
 
 
-# ── Main app ──────────────────────────────────────────────────────────────────
+def _divider(parent, color=BORDER):
+    ctk.CTkFrame(parent, height=1, fg_color=color, corner_radius=0).pack(fill="x", padx=0, pady=8)
+
+
+def _section_header(parent, title, subtitle=None, chip=None, chip_color=None):
+    """Consistent section header with optional chip badge."""
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    row.pack(fill="x", padx=20, pady=(18, 4))
+    _label(row, title, color=FG, font=FONT_LABEL).pack(side="left")
+    if chip and chip_color:
+        _chip(row, chip, chip_color, text_color=ACCENT_LT).pack(side="right")
+    if subtitle:
+        _label(parent, subtitle, color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 10))
+
+
+# ── Main App ──────────────────────────────────────────────────────────────────
 class RelayGuiApp:
     def __init__(self, root):
         self.root      = root
@@ -297,74 +313,107 @@ class RelayGuiApp:
             ctk.set_default_color_theme("green")
 
         self.root.title("PlatAlgo Relay")
-        self.root.geometry("1220x920")
+        self.root.geometry("1300x860")
         if hasattr(self.root, "minsize"):
-            self.root.minsize(1080, 820)
+            self.root.minsize(1100, 760)
         if hasattr(self.root, "configure"):
             self.root.configure(fg_color=BG)
 
-        # StringVars
-        self.user_id_var    = ctk.StringVar()
-        self.password_var   = ctk.StringVar()
-        self.remember_var   = ctk.BooleanVar(value=True)
-        self.startup_var    = ctk.BooleanVar(value=False)
-        self.bridge_url_var = ctk.StringVar(value=PRODUCTION_BRIDGE_URL)
-        self.mt5_path_var   = ctk.StringVar(value=detect_mt5_path() if IS_WINDOWS else "")
-        self.status_var     = ctk.StringVar(value="Idle")
-        self.mt5_acct_var   = ctk.StringVar()
-        self.mt5_pw_var     = ctk.StringVar()
-        self.mt5_server_var = ctk.StringVar()
-        self.api_key        = None
+        # ── StringVars ────────────────────────────────────────────────────────
+        self.user_id_var     = ctk.StringVar()
+        self.password_var    = ctk.StringVar()
+        self.remember_var    = ctk.BooleanVar(value=True)
+        self.startup_var     = ctk.BooleanVar(value=False)
+        self.bridge_url_var  = ctk.StringVar(value=PRODUCTION_BRIDGE_URL)
+        self.mt5_path_var    = ctk.StringVar(value=detect_mt5_path() if IS_WINDOWS else "")
+        self.status_var      = ctk.StringVar(value="Idle")
+        self.mt5_acct_var    = ctk.StringVar()
+        self.mt5_pw_var      = ctk.StringVar()
+        self.mt5_server_var  = ctk.StringVar()
 
-        self.log_visible     = False
-        self.adv_visible     = False
-        self.status_dots     = {}
-        self.vps_active      = False
-        self.vps_status_chip = None
-        self.vps_card        = None
+        # Dashboard data vars
+        self.webhook_url_var = ctk.StringVar(value="Sign in to view your webhook URL")
+        self.api_key_var     = ctk.StringVar(value="")
+
+        # TradingView message generator vars
+        self.tv_action_var   = ctk.StringVar(value="BUY")
+        self.tv_symbol_var   = ctk.StringVar(value="{{ticker}}")
+        self.tv_size_var     = ctk.StringVar(value="0.1")
+        self.tv_sl_var       = ctk.StringVar(value="")
+        self.tv_tp_var       = ctk.StringVar(value="")
+        self.tv_script_var   = ctk.StringVar(value="")
+        self.tv_dynamic_var  = ctk.BooleanVar(value=True)
+
+        # State
+        self.api_key          = None
+        self.api_key_visible  = False
+        self.vps_active       = False
+        self.current_panel    = "connect"
+
+        # Required widget refs (set during build)
+        self.status_dots      = {}   # dashboard (large) dots — updated when on Dashboard
+        self._header_dots     = {}   # header (small) dots — always visible
+        self.vps_card         = None
+        self.vps_btn          = None
+        self.vps_disable_btn  = None
+        self.vps_status_chip  = None
+        self.connect_btn      = None
+        self.summary_text     = None
+        self._live_dot        = None
+        self._avatar          = None
+        self._status_pill     = None
+        self._nav_btns        = {}
+        self._panels          = {}
+        self._webhook_copy_btn = None
+        self._apikey_entry    = None
+        self._tv_preview      = None
+        self._adv_frame       = None  # kept for compat
+        self.adv_visible      = False
+        self.log_box          = None
 
         self._build_ui()
         self._load_cached_credentials()
         self.startup_var.set(_startup_enabled())
+
+        # Trace TV vars for live preview
+        for var in (self.tv_action_var, self.tv_symbol_var, self.tv_size_var,
+                    self.tv_sl_var, self.tv_tp_var, self.tv_script_var,
+                    self.tv_dynamic_var, self.user_id_var, self.api_key_var):
+            var.trace_add("write", lambda *_: self.root.after(10, self._update_tv_preview))
+
         threading.Thread(target=self._check_updates, daemon=True).start()
         self._auto_connect_if_cached()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.after(300, self._apply_glass_effect)
 
+    # ── Font config ───────────────────────────────────────────────────────────
     def _configure_fonts(self):
-        global FONT_TITLE, FONT_HERO, FONT_LABEL, FONT_BODY, FONT_SMALL, FONT_CAPTION, FONT_MONO
-        display_family = _pick_font_family(DISPLAY_FONT_CANDIDATES, "Segoe UI")
-        text_family    = _pick_font_family(TEXT_FONT_CANDIDATES, "Segoe UI")
-        mono_family    = _pick_font_family(MONO_FONT_CANDIDATES, "Consolas")
-        FONT_TITLE   = (display_family, 30, "bold")
-        FONT_HERO    = (display_family, 18, "bold")
-        FONT_LABEL   = (text_family, 15, "bold")
-        FONT_BODY    = (text_family, 13)
-        FONT_SMALL   = (text_family, 11)
-        FONT_CAPTION = (text_family, 10, "bold")
-        FONT_MONO    = (mono_family, 11)
+        global FONT_TITLE, FONT_HERO, FONT_LABEL, FONT_BODY, FONT_SMALL
+        global FONT_CAPTION, FONT_MONO, FONT_MONO_SM
+        d = _pick_font_family(DISPLAY_FONT_CANDIDATES, "Segoe UI")
+        t = _pick_font_family(TEXT_FONT_CANDIDATES, "Segoe UI")
+        m = _pick_font_family(MONO_FONT_CANDIDATES, "Consolas")
+        FONT_TITLE   = (d, 26, "bold")
+        FONT_HERO    = (d, 16, "bold")
+        FONT_LABEL   = (t, 13, "bold")
+        FONT_BODY    = (t, 12)
+        FONT_SMALL   = (t, 10)
+        FONT_CAPTION = (t, 9, "bold")
+        FONT_MONO    = (m, 11)
+        FONT_MONO_SM = (m, 10)
 
+    # ── Glass effect ──────────────────────────────────────────────────────────
     def _apply_glass_effect(self):
-        """Enable platform-level glass/transparency (Windows 11 Mica, macOS transparency)."""
         try:
             if IS_WINDOWS:
                 self.root.update()
-                hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-                if not hwnd:
-                    hwnd = self.root.winfo_id()
-                # Force dark title bar (DWMWA_USE_IMMERSIVE_DARK_MODE = 20)
+                hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
                 dark = ctypes.c_int(1)
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark)
-                )
-                # Windows 11 Mica backdrop (DWMWA_SYSTEMBACKDROP_TYPE = 38, value 2 = Mica)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
                 mica = ctypes.c_int(2)
                 try:
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                        hwnd, 38, ctypes.byref(mica), ctypes.sizeof(mica)
-                    )
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(mica), ctypes.sizeof(mica))
                 except Exception:
-                    # Windows 10 fallback — slight alpha transparency
                     self.root.wm_attributes("-alpha", 0.97)
             elif IS_MAC:
                 try:
@@ -373,356 +422,918 @@ class RelayGuiApp:
                 except Exception:
                     self.root.wm_attributes("-alpha", 0.97)
         except Exception:
-            pass  # Glass unavailable — fall back silently
+            pass
 
-    # ── Build ─────────────────────────────────────────────────────────────────
+    # =========================================================================
+    # UI Build
+    # =========================================================================
     def _build_ui(self):
         outer = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
         outer.pack(fill="both", expand=True)
 
-        # Dual accent stripe at the top
-        ctk.CTkFrame(outer, fg_color=ACCENT_DK, height=2, corner_radius=0).pack(fill="x")
-        ctk.CTkFrame(outer, fg_color=PRIMARY_DK, height=1, corner_radius=0).pack(fill="x")
+        # Top accent stripe
+        stripe = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0, height=3)
+        stripe.pack(fill="x")
+        ctk.CTkFrame(stripe, fg_color=ACCENT_DK, height=2, corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(stripe, fg_color=PRIMARY_DK, height=1, corner_radius=0).pack(fill="x")
 
         self._build_header(outer)
-        self._build_status_bar(outer)
 
-        body = ctk.CTkScrollableFrame(outer, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=18, pady=(8, 18))
-        body.grid_columnconfigure(0, weight=3)
-        body.grid_columnconfigure(1, weight=4)
+        # Body: sidebar + content
+        body = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True)
 
-        self._build_left(body)
-        self._build_right(body)
+        # Sidebar separator
+        ctk.CTkFrame(body, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y")
+
+        self._build_sidebar(body)
+
+        ctk.CTkFrame(body, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y")
+
+        self._build_content(body)
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _build_header(self, parent):
-        hdr = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, border_width=0)
+        hdr = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, height=68)
         hdr.pack(fill="x")
+        hdr.pack_propagate(False)
 
         inner = ctk.CTkFrame(hdr, fg_color="transparent")
-        inner.pack(fill="x", padx=24, pady=(20, 18))
+        inner.pack(fill="both", expand=True, padx=20, pady=0)
 
-        left = ctk.CTkFrame(inner, fg_color="transparent")
-        left.pack(side="left", fill="x", expand=True)
-        _chip(left, "PRIVATE EXECUTION CONSOLE", GLASS_GOLD, text_color=ACCENT_LT).pack(anchor="w", pady=(0, 10))
+        # ── Left: Logo ────────────────────────────────────────────────────────
+        logo_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        logo_frame.pack(side="left", fill="y")
 
-        logo_frame = ctk.CTkFrame(left, fg_color="transparent")
-        logo_frame.pack(anchor="w")
-        _label(logo_frame, "Plat", color=ACCENT, font=FONT_TITLE).pack(side="left")
-        _label(logo_frame, "Algo", color=FG, font=FONT_TITLE).pack(side="left")
-        _label(logo_frame, "  Relay", color=FG_SOFT, font=(FONT_BODY[0], 18)).pack(side="left", padx=(8, 0), pady=(8, 0))
+        logo_row = ctk.CTkFrame(logo_frame, fg_color="transparent")
+        logo_row.pack(side="left", fill="y")
 
-        _label(
-            left,
-            "Emerald execution routing with managed VPS switching and live bridge state.",
-            color=FG_MUTED,
-            font=FONT_BODY,
-            justify="left",
-        ).pack(anchor="w", pady=(10, 0))
+        # Gold dot accent
+        ctk.CTkLabel(logo_row, text="◆", text_color=ACCENT, font=(FONT_TITLE[0], 14),
+                     fg_color="transparent").pack(side="left", padx=(0, 8), pady=22)
+        _label(logo_row, "Plat", color=ACCENT, font=(FONT_TITLE[0], 18, "bold")).pack(side="left", pady=22)
+        _label(logo_row, "Algo", color=FG, font=(FONT_TITLE[0], 18, "bold")).pack(side="left", pady=22)
+        _label(logo_row, "  Relay", color=FG_MUTED, font=(FONT_BODY[0], 12)).pack(side="left", pady=(26, 20))
 
+        # ── Center: Connection status dots ────────────────────────────────────
+        dots_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        dots_frame.pack(side="left", fill="y", padx=(40, 0))
+
+        for name in ["Bridge", "MT5", "Broker"]:
+            f = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
+                             border_width=1, border_color=BORDER)
+            f.pack(side="left", padx=(0, 10), pady=18)
+
+            dot = ctk.CTkLabel(f, text="●", text_color=DANGER,
+                               font=(FONT_BODY[0], 13), fg_color="transparent")
+            dot.pack(side="left", padx=(12, 0), pady=6)
+
+            lbl = _label(f, f"{name}: Offline", color=FG_MUTED, font=FONT_SMALL)
+            lbl.pack(side="left", padx=(6, 14), pady=6)
+
+            self.status_dots[name]  = (dot, lbl)
+            self._header_dots[name] = (dot, lbl)
+
+        # ── Right: Status pill + avatar ───────────────────────────────────────
         right = ctk.CTkFrame(inner, fg_color="transparent")
-        right.pack(side="right", padx=(16, 0))
+        right.pack(side="right", fill="y")
+
+        self._live_dot = ctk.CTkLabel(right, text="●", text_color=DANGER,
+                                      font=(FONT_BODY[0], 10), fg_color="transparent")
+        self._live_dot.pack(side="left", padx=(0, 4), pady=26)
 
         self._status_pill = ctk.CTkLabel(
             right, textvariable=self.status_var,
-            text_color=FG, font=FONT_SMALL,
-            fg_color=GLASS_EMERALD, corner_radius=999,
-            padx=16, pady=8
+            text_color=FG_MUTED, font=FONT_SMALL,
+            fg_color=GLASS, corner_radius=999, padx=14, pady=6
         )
-        self._status_pill.pack(side="left", padx=(0, 12), pady=(18, 0))
+        self._status_pill.pack(side="left", padx=(0, 14), pady=22)
 
         self._avatar = ctk.CTkLabel(
             right, text="--",
-            fg_color=GLASS_GOLD, text_color=FG,
-            font=FONT_SMALL,
-            width=42, height=42, corner_radius=21
+            fg_color=GLASS_GOLD, text_color=ACCENT,
+            font=(FONT_LABEL[0], 11, "bold"),
+            width=36, height=36, corner_radius=18
         )
-        self._avatar.pack(side="left", pady=(14, 0))
+        self._avatar.pack(side="left", pady=16)
 
-        lines = ctk.CTkFrame(parent, fg_color="transparent")
-        lines.pack(fill="x")
-        ctk.CTkFrame(lines, height=2, fg_color=ACCENT, corner_radius=0).pack(fill="x")
-        ctk.CTkFrame(lines, height=1, fg_color=PRIMARY, corner_radius=0).pack(fill="x")
-
-    # ── Status bar ────────────────────────────────────────────────────────────
-    def _build_status_bar(self, parent):
-        bar = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, border_width=0)
-        bar.pack(fill="x", padx=0, pady=0)
-
-        inner = ctk.CTkFrame(bar, fg_color="transparent")
-        inner.pack(padx=24, pady=12, anchor="w")
-
-        for name in ["Bridge", "MT5", "Broker"]:
-            f = ctk.CTkFrame(inner, fg_color=BG_CARD, corner_radius=18,
-                             border_width=1, border_color=BORDER)
-            f.pack(side="left", padx=(0, 28))
-
-            dot = ctk.CTkLabel(f, text="●", text_color=DANGER,
-                               font=(FONT_BODY[0], 16), fg_color="transparent")
-            dot.pack(side="left", padx=(14, 0), pady=8)
-
-            lbl = _label(f, f"{name}: Offline", color=FG_MUTED, font=FONT_SMALL)
-            lbl.pack(side="left", padx=(8, 14), pady=8)
-
-            self.status_dots[name] = (dot, lbl)
-
+        # Bottom border
         ctk.CTkFrame(parent, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
 
-    # ── Left panel ────────────────────────────────────────────────────────────
-    def _build_left(self, parent):
-        frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=8)
-        frame.columnconfigure(0, weight=1)
+    # ── Sidebar ───────────────────────────────────────────────────────────────
+    def _build_sidebar(self, parent):
+        sidebar = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, width=210, corner_radius=0)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        # ── Dashboard Login ───────────────────────────────────────────────────
-        login_card = _card(frame)
-        login_card.pack(fill="x", pady=(0, 8))
+        nav_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
+        nav_frame.pack(fill="x", padx=8, pady=(20, 0))
 
-        _chip(login_card, "ACCESS", GLASS_EMERALD, text_color=PRIMARY_LT).pack(anchor="w", padx=18, pady=(18, 8))
-        _label(login_card, "Dashboard Login", font=FONT_LABEL, color=FG).pack(anchor="w", padx=18)
-        _label(login_card, "Sign in once, then switch between local relay and managed cloud execution.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=18, pady=(4, 12))
+        nav_items = [
+            ("connect",     "Connect",     "⟳"),
+            ("dashboard",   "Dashboard",   "◈"),
+            ("tradingview", "TradingView", "◉"),
+            ("settings",    "Settings",    "⚙"),
+        ]
+
+        for key, label, icon in nav_items:
+            btn = ctk.CTkButton(
+                nav_frame,
+                text=f"  {icon}   {label}",
+                command=lambda k=key: self._switch_panel(k),
+                fg_color=NAV_ACTIVE_BG if key == "connect" else "transparent",
+                hover_color=NAV_HOVER_BG,
+                text_color=PRIMARY_LT if key == "connect" else FG_SOFT,
+                anchor="w",
+                font=FONT_BODY,
+                height=40,
+                corner_radius=10,
+                border_width=1 if key == "connect" else 0,
+                border_color=BORDER_GLOW if key == "connect" else "transparent",
+            )
+            btn.pack(fill="x", pady=2)
+            self._nav_btns[key] = btn
+
+        # Divider
+        ctk.CTkFrame(sidebar, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=16, pady=(20, 16))
+
+        # VPS status chip in sidebar
+        self.vps_status_chip = _chip(sidebar, "● VPS INACTIVE", GLASS, text_color=FG_FAINT)
+        self.vps_status_chip.pack(padx=16, anchor="w")
+
+        # Bottom: version
+        ver_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
+        ver_frame.pack(side="bottom", fill="x", padx=16, pady=16)
+        _label(ver_frame, f"v{APP_VERSION}", color=FG_FAINT, font=FONT_SMALL).pack(anchor="w")
+        _label(ver_frame, "PlatAlgo Relay", color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(anchor="w")
+
+    # ── Content area ──────────────────────────────────────────────────────────
+    def _build_content(self, parent):
+        self._content_host = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=0)
+        self._content_host.pack(side="left", fill="both", expand=True)
+
+        self._panels["connect"]     = self._build_connect_panel(self._content_host)
+        self._panels["dashboard"]   = self._build_dashboard_panel(self._content_host)
+        self._panels["tradingview"] = self._build_tradingview_panel(self._content_host)
+        self._panels["settings"]    = self._build_settings_panel(self._content_host)
+
+        # Show default panel
+        self._panels["connect"].pack(fill="both", expand=True)
+
+    def _switch_panel(self, key: str):
+        if key == self.current_panel:
+            return
+        self._panels[self.current_panel].pack_forget()
+        self._panels[key].pack(fill="both", expand=True)
+        self.current_panel = key
+
+        for k, btn in self._nav_btns.items():
+            active = k == key
+            btn.configure(
+                fg_color=NAV_ACTIVE_BG if active else "transparent",
+                text_color=PRIMARY_LT if active else FG_SOFT,
+                border_width=1 if active else 0,
+                border_color=BORDER_GLOW if active else "transparent",
+            )
+
+        if key == "tradingview":
+            self._update_tv_preview()
+
+    # =========================================================================
+    # CONNECT PANEL
+    # =========================================================================
+    def _build_connect_panel(self, parent) -> ctk.CTkFrame:
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
+                                       scrollbar_button_color=BORDER_SOFT,
+                                       scrollbar_button_hover_color=BORDER_GLOW)
+
+        # ── Two-column layout ──────────────────────────────────────────────────
+        cols = ctk.CTkFrame(frame, fg_color="transparent")
+        cols.pack(fill="both", expand=True, padx=20, pady=20)
+        cols.columnconfigure(0, weight=5)
+        cols.columnconfigure(1, weight=7)
+
+        left_col = ctk.CTkFrame(cols, fg_color="transparent")
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        right_col = ctk.CTkFrame(cols, fg_color="transparent")
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+
+        # ── LEFT: Dashboard Login ─────────────────────────────────────────────
+        login_card = _card(left_col, glow=False)
+        login_card.pack(fill="x", pady=(0, 12))
+
+        _chip(login_card, "STEP 1", GLASS_EMERALD, text_color=PRIMARY_LT).pack(
+            anchor="w", padx=20, pady=(20, 8))
+        _label(login_card, "Sign In", font=FONT_HERO, color=FG).pack(anchor="w", padx=20)
+        _label(login_card, "Your PlatAlgo dashboard credentials",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(2, 16))
 
         self.user_entry = _entry(login_card, self.user_id_var, "Username")
-        self.user_entry.pack(fill="x", padx=18, pady=(0, 8))
+        self.user_entry.pack(fill="x", padx=20, pady=(0, 8))
 
         self.pass_entry = _entry(login_card, self.password_var, "Password", show="*")
-        self.pass_entry.pack(fill="x", padx=18, pady=(0, 8))
+        self.pass_entry.pack(fill="x", padx=20, pady=(0, 8))
 
         opts = ctk.CTkFrame(login_card, fg_color="transparent")
-        opts.pack(fill="x", padx=18, pady=(2, 12))
+        opts.pack(fill="x", padx=20, pady=(0, 12))
         ctk.CTkCheckBox(opts, text="Remember me", variable=self.remember_var,
                         text_color=FG_MUTED, font=FONT_SMALL,
                         fg_color=PRIMARY, hover_color=PRIMARY_LT,
-                        checkmark_color=BG).pack(side="left", padx=(0, 16))
-        ctk.CTkCheckBox(opts, text="Start on boot", variable=self.startup_var,
+                        checkmark_color=BG).pack(side="left")
+        ctk.CTkCheckBox(opts, text="Launch on startup", variable=self.startup_var,
                         command=self._toggle_startup,
                         text_color=FG_MUTED, font=FONT_SMALL,
                         fg_color=PRIMARY, hover_color=PRIMARY_LT,
-                        checkmark_color=BG).pack(side="left")
+                        checkmark_color=BG).pack(side="left", padx=(16, 0))
 
-        _btn_gold(login_card, "Sign In", self._sign_in, height=44).pack(fill="x", padx=18, pady=(0, 8))
+        _btn_gold(login_card, "Sign In  →", self._sign_in, height=46).pack(
+            fill="x", padx=20, pady=(0, 12))
+
+        _divider(login_card)
 
         oauth_row = ctk.CTkFrame(login_card, fg_color="transparent")
-        oauth_row.pack(fill="x", padx=18, pady=(0, 18))
+        oauth_row.pack(fill="x", padx=20, pady=(0, 20))
         oauth_row.columnconfigure(0, weight=1)
         oauth_row.columnconfigure(1, weight=1)
-        _btn_outline(oauth_row, "G  Continue with Google",
-                     lambda: self._open_oauth("google"),
-                     height=36).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        _btn_outline(oauth_row, "f  Continue with Facebook",
-                     lambda: self._open_oauth("facebook"),
-                     height=36).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        _btn_outline(oauth_row, "G  Google", lambda: self._open_oauth("google"),
+                     height=38).grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        _btn_outline(oauth_row, "f  Facebook", lambda: self._open_oauth("facebook"),
+                     height=38).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
-        # ── MT5 Broker Credentials ────────────────────────────────────────────
-        mt5_card = _card(frame)
-        mt5_card.pack(fill="x", pady=(0, 8))
+        # ── LEFT: MT5 Broker Credentials ─────────────────────────────────────
+        mt5_card = _card(left_col)
+        mt5_card.pack(fill="x", pady=(0, 12))
 
-        hdr = ctk.CTkFrame(mt5_card, fg_color="transparent")
-        hdr.pack(fill="x", padx=18, pady=(18, 4))
-        _label(hdr, "MT5 Broker Credentials", font=FONT_LABEL, color=FG).pack(side="left")
-        _chip(hdr, "VPS 24/7", GLASS_GOLD, text_color=ACCENT_LT).pack(side="right")
+        _chip(mt5_card, "STEP 2", GLASS_GOLD, text_color=ACCENT_LT).pack(
+            anchor="w", padx=20, pady=(20, 8))
+        _label(mt5_card, "MT5 Broker Credentials", font=FONT_HERO, color=FG).pack(anchor="w", padx=20)
+        _label(mt5_card, "Used by the VPS to execute trades 24/7 on your account",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(2, 16))
 
-        _label(mt5_card, "Cloud server executes trades on your behalf",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=18, pady=(0, 10))
-
-        self.mt5_acct_entry = _entry(mt5_card, self.mt5_acct_var, "MT5 Account Number")
-        self.mt5_acct_entry.pack(fill="x", padx=18, pady=(0, 8))
+        self.mt5_acct_entry = _entry(mt5_card, self.mt5_acct_var, "Account Number  (e.g. 123456789)")
+        self.mt5_acct_entry.pack(fill="x", padx=20, pady=(0, 8))
 
         self.mt5_pw_entry = _entry(mt5_card, self.mt5_pw_var, "MT5 Password", show="*")
-        self.mt5_pw_entry.pack(fill="x", padx=18, pady=(0, 8))
+        self.mt5_pw_entry.pack(fill="x", padx=20, pady=(0, 8))
 
         self.mt5_server_entry = _entry(mt5_card, self.mt5_server_var,
-                                       "MT5 Server  (e.g. ICMarkets-Live01)")
-        self.mt5_server_entry.pack(fill="x", padx=18, pady=(0, 10))
+                                       "Broker Server  (e.g. ICMarkets-Live01)")
+        self.mt5_server_entry.pack(fill="x", padx=20, pady=(0, 20))
 
-        self.mt5_login_btn = _btn_gold(mt5_card, "Login to MT5 on VPS",
-                                       self.enable_managed_mode, height=44)
-        self.mt5_login_btn.pack(fill="x", padx=18, pady=(0, 18))
+        # ── RIGHT: Mode Selection ─────────────────────────────────────────────
+        _label(right_col, "Choose Execution Mode", font=FONT_HERO, color=FG).pack(
+            anchor="w", pady=(0, 4))
+        _label(right_col, "Select how the relay connects MT5 to your trading signals.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", pady=(0, 16))
 
-        # ── 24/7 VPS Mode ────────────────────────────────────────────────────
-        self.vps_card = _card(frame)
-        self.vps_card.pack(fill="x", pady=(0, 8))
+        # VPS Mode card (recommended)
+        self.vps_card = _card(right_col, gold=True)
+        self.vps_card.pack(fill="x", pady=(0, 10))
 
-        _chip(self.vps_card, "24/7 VPS MODE", GLASS_GOLD, text_color=ACCENT_LT).pack(
-            anchor="w", padx=18, pady=(18, 8))
-        _label(self.vps_card, "Cloud-Managed Execution", font=FONT_LABEL, color=FG).pack(
-            anchor="w", padx=18)
-        _label(self.vps_card,
-               "Your MT5 runs on our server — no need to keep your computer on.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=18, pady=(4, 12))
+        vps_hdr = ctk.CTkFrame(self.vps_card, fg_color="transparent")
+        vps_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(vps_hdr, "☁  VPS Mode", font=FONT_HERO, color=ACCENT).pack(side="left")
+        _chip(vps_hdr, "RECOMMENDED", GLASS_GOLD, text_color=ACCENT_LT).pack(side="right")
+
+        _label(self.vps_card, "Your MT5 runs on our server — trade 24/7 even when your computer is off.",
+               color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 0))
+
+        # Benefit bullets
+        benefits = ["Trades execute 24 hours, 7 days a week",
+                    "No MT5 needed on your machine",
+                    "Works on Mac, Windows, or any device"]
+        for b in benefits:
+            row = ctk.CTkFrame(self.vps_card, fg_color="transparent")
+            row.pack(anchor="w", padx=20, pady=(4, 0))
+            _label(row, "✓", color=PRIMARY, font=FONT_SMALL).pack(side="left", padx=(0, 8))
+            _label(row, b, color=FG_MUTED, font=FONT_SMALL).pack(side="left")
 
         _divider(self.vps_card)
 
-        vps_status_row = ctk.CTkFrame(self.vps_card, fg_color="transparent")
-        vps_status_row.pack(fill="x", padx=18, pady=(10, 4))
-        self.vps_status_chip = _chip(vps_status_row, "● VPS INACTIVE", GLASS, text_color=FG_MUTED)
-        self.vps_status_chip.pack(side="left")
+        self.vps_btn = _btn_gold(self.vps_card, "Login to MT5 on VPS  →",
+                                 self.enable_managed_mode, height=46)
+        self.vps_btn.pack(fill="x", padx=20, pady=(0, 8))
 
-        self.vps_btn = _btn_gold(self.vps_card, "Enable 24/7 VPS Mode",
-                                 self.enable_managed_mode, height=44)
-        self.vps_btn.pack(fill="x", padx=18, pady=(8, 6))
-
-        self.vps_disable_btn = _btn_outline(self.vps_card, "Disable VPS Mode",
+        self.vps_disable_btn = _btn_outline(self.vps_card, "Disconnect VPS",
                                             self.disable_managed_mode, height=36)
-        self.vps_disable_btn.pack(fill="x", padx=18, pady=(0, 18))
+        self.vps_disable_btn.pack(fill="x", padx=20, pady=(0, 20))
 
-        # ── Local Execution ───────────────────────────────────────────────────
-        actions_card = _card(frame)
-        actions_card.pack(fill="x", pady=(0, 8))
-        _chip(actions_card, "LOCAL EXECUTION", GLASS_EMERALD, text_color=PRIMARY_LT).pack(
-            anchor="w", padx=18, pady=(18, 8))
-        _label(actions_card, "Direct MT5 Connection", font=FONT_LABEL, color=FG).pack(anchor="w", padx=18)
-        _label(actions_card, "Connect to MT5 running on this computer for direct low-latency execution.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=18, pady=(4, 12))
+        # Local Mode card
+        local_card = _card(right_col)
+        local_card.pack(fill="x", pady=(0, 10))
 
-        self.connect_btn = _btn_outline(actions_card,
-                                        "Connect Local MT5" if IS_WINDOWS else "Connect via Bridge",
-                                        self.start_relay, height=38)
-        self.connect_btn.pack(fill="x", padx=18, pady=(0, 8))
+        local_hdr = ctk.CTkFrame(local_card, fg_color="transparent")
+        local_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(local_hdr, "⬡  Local Mode", font=FONT_HERO, color=FG_SOFT).pack(side="left")
+        if not IS_WINDOWS:
+            _chip(local_hdr, "WINDOWS ONLY", DANGER_BG, text_color=DANGER).pack(side="right")
 
-        _btn_danger(actions_card, "Stop / Disconnect",
-                    self.stop_relay, height=38).pack(fill="x", padx=18, pady=(0, 18))
+        _label(local_card, "Connect to an MT5 terminal running on this computer.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 0))
 
-        # ── Advanced ─────────────────────────────────────────────────────────
-        adv_card = _card(frame)
-        adv_card.pack(fill="x", pady=(0, 8))
+        caveats = [
+            ("✓", "Low latency — direct connection", FG_MUTED),
+            ("✗", "Requires MT5 open on this machine", DANGER),
+            ("✗", "No 24/7 — stops when computer sleeps", DANGER),
+        ]
+        for icon, text, color in caveats:
+            row = ctk.CTkFrame(local_card, fg_color="transparent")
+            row.pack(anchor="w", padx=20, pady=(4, 0))
+            _label(row, icon, color=PRIMARY if icon == "✓" else DANGER, font=FONT_SMALL).pack(side="left", padx=(0, 8))
+            _label(row, text, color=color, font=FONT_SMALL).pack(side="left")
 
-        adv_toggle = ctk.CTkFrame(adv_card, fg_color="transparent", cursor="hand2")
-        adv_toggle.pack(fill="x", padx=18, pady=12)
-        _label(adv_toggle, "Advanced Routing", color=FG_SOFT, font=FONT_SMALL).pack(side="left")
-        self._adv_arrow = _label(adv_toggle, "▸", color=FG_MUTED, font=FONT_SMALL)
-        self._adv_arrow.pack(side="left", padx=4)
-        adv_toggle.bind("<Button-1>", lambda _: self.toggle_advanced())
-        for child in adv_toggle.winfo_children():
-            child.bind("<Button-1>", lambda _: self.toggle_advanced())
+        _divider(local_card)
 
-        self.adv_frame = ctk.CTkFrame(adv_card, fg_color="transparent")
+        local_btns = ctk.CTkFrame(local_card, fg_color="transparent")
+        local_btns.pack(fill="x", padx=20, pady=(0, 20))
+        local_btns.columnconfigure(0, weight=1)
+        local_btns.columnconfigure(1, weight=1)
 
-        _label(self.adv_frame, "Bridge URL", color=FG_MUTED,
-               font=FONT_SMALL).pack(anchor="w", padx=18, pady=(4, 2))
-        _entry(self.adv_frame, self.bridge_url_var,
-               "Bridge URL").pack(fill="x", padx=18, pady=(0, 8))
-
-        if IS_WINDOWS:
-            _label(self.adv_frame, "MT5 Terminal Path", color=FG_MUTED,
-                   font=FONT_SMALL).pack(anchor="w", padx=18, pady=(0, 2))
-            _entry(self.adv_frame, self.mt5_path_var,
-                   "terminal64.exe path").pack(fill="x", padx=18, pady=(0, 18))
-
-        # ── Logs ──────────────────────────────────────────────────────────────
-        log_card = _card(frame)
-        log_card.pack(fill="x", pady=(0, 0))
-
-        log_toggle = ctk.CTkFrame(log_card, fg_color="transparent", cursor="hand2")
-        log_toggle.pack(fill="x", padx=18, pady=12)
-        _label(log_toggle, "Execution Logs", color=FG_SOFT, font=FONT_SMALL).pack(side="left")
-        self._log_arrow = _label(log_toggle, "▸", color=FG_MUTED, font=FONT_SMALL)
-        self._log_arrow.pack(side="left", padx=4)
-        log_toggle.bind("<Button-1>", lambda _: self.toggle_logs())
-        for child in log_toggle.winfo_children():
-            child.bind("<Button-1>", lambda _: self.toggle_logs())
-
-        self.log_box = ctk.CTkTextbox(
-            log_card, height=110,
-            fg_color=BG_INPUT, text_color=FG_SOFT,
-            border_color=BORDER_SOFT, border_width=1,
-            font=FONT_MONO, corner_radius=14
+        self.connect_btn = _btn_outline(
+            local_btns,
+            "Connect Local MT5" if IS_WINDOWS else "Windows Only",
+            self.start_relay if IS_WINDOWS else lambda: None,
+            height=42,
+            state="normal" if IS_WINDOWS else "disabled"
         )
+        self.connect_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5))
 
-    # ── Right panel ───────────────────────────────────────────────────────────
-    def _build_right(self, parent):
-        right = ctk.CTkFrame(parent, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=8)
+        _btn_danger(local_btns, "Stop / Disconnect", self.stop_relay,
+                    height=42).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
-        overview_card = _card(right, glow=True)
-        overview_card.pack(fill="x", pady=(0, 10))
+        return frame
 
-        top = ctk.CTkFrame(overview_card, fg_color="transparent")
-        top.pack(fill="x", padx=18, pady=(18, 10))
-        text_col = ctk.CTkFrame(top, fg_color="transparent")
-        text_col.pack(side="left", fill="x", expand=True)
-        _chip(text_col, "PREMIUM ROUTING", GLASS_GOLD, text_color=ACCENT_LT).pack(anchor="w", pady=(0, 10))
-        _label(text_col, "Execution Overview", font=FONT_HERO, color=FG).pack(anchor="w")
-        _label(text_col, "Bridge state, dashboard mirror, and managed execution context in one view.",
-               color=FG_MUTED, font=FONT_BODY, justify="left").pack(anchor="w", pady=(6, 0))
+    # =========================================================================
+    # DASHBOARD PANEL
+    # =========================================================================
+    def _build_dashboard_panel(self, parent) -> ctk.CTkFrame:
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
+                                       scrollbar_button_color=BORDER_SOFT,
+                                       scrollbar_button_hover_color=BORDER_GLOW)
 
-        chip_row = ctk.CTkFrame(top, fg_color="transparent")
-        chip_row.pack(side="right", padx=(12, 0))
-        _chip(chip_row, "Emerald", GLASS_EMERALD, text_color=PRIMARY_LT).pack(anchor="e", pady=(0, 8))
-        _chip(chip_row, "Gold", GLASS_GOLD, text_color=ACCENT_LT).pack(anchor="e")
+        # ── Header row ────────────────────────────────────────────────────────
+        hdr_row = ctk.CTkFrame(frame, fg_color="transparent")
+        hdr_row.pack(fill="x", padx=20, pady=(20, 0))
+        _label(hdr_row, "Dashboard", font=FONT_TITLE, color=FG).pack(side="left")
 
-        mirror_card = _card(right)
-        mirror_card.pack(fill="both", expand=True)
+        refresh_row = ctk.CTkFrame(hdr_row, fg_color="transparent")
+        refresh_row.pack(side="right")
+        self._live_dot2 = ctk.CTkLabel(refresh_row, text="●", text_color=DANGER,
+                                       font=(FONT_BODY[0], 10), fg_color="transparent")
+        self._live_dot2.pack(side="left", padx=(0, 6), pady=10)
+        _btn_outline(refresh_row, "↺  Refresh", self._do_refresh,
+                     height=34, width=110).pack(side="left", pady=8)
+        _btn_outline(refresh_row, "Open Web Dashboard",
+                     lambda: webbrowser.open(self.bridge_url_var.get().rstrip("/") + "/dashboard"),
+                     height=34).pack(side="left", padx=(8, 0), pady=8)
 
-        hdr = ctk.CTkFrame(mirror_card, fg_color="transparent")
-        hdr.pack(fill="x", padx=18, pady=(18, 0))
-        _label(hdr, "Dashboard Mirror", font=FONT_LABEL, color=FG).pack(side="left")
+        _label(frame, "Your live connection state, webhook URL, and API key.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 20))
 
-        self._live_dot = ctk.CTkLabel(hdr, text="●", text_color=DANGER,
-                                      font=(FONT_BODY[0], 12), fg_color="transparent")
-        self._live_dot.pack(side="left", padx=(8, 0))
+        # ── Connection status cards ───────────────────────────────────────────
+        status_row = ctk.CTkFrame(frame, fg_color="transparent")
+        status_row.pack(fill="x", padx=20, pady=(0, 20))
+        status_row.columnconfigure(0, weight=1)
+        status_row.columnconfigure(1, weight=1)
+        status_row.columnconfigure(2, weight=1)
 
-        _chip(hdr, "Live Summary", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
+        conn_labels = {
+            "Bridge": ("◈", "Connected to PlatAlgo servers"),
+            "MT5":    ("◉", "MT5 terminal active & ready"),
+            "Broker": ("◆", "Broker server reachable"),
+        }
+        for col_i, (name, (icon, desc)) in enumerate(conn_labels.items()):
+            c = _card(status_row)
+            c.grid(row=0, column=col_i, sticky="ew",
+                   padx=(0 if col_i == 0 else 6, 6 if col_i < 2 else 0))
 
-        ctk.CTkFrame(mirror_card, height=1, fg_color=BORDER,
-                     corner_radius=0).pack(fill="x", padx=0, pady=(12, 0))
+            dot, lbl = self.status_dots[name]
+            # Re-parent dots to this new card
+            dot_new = ctk.CTkLabel(c, text="●", text_color=DANGER,
+                                   font=(FONT_BODY[0], 22), fg_color="transparent")
+            dot_new.pack(pady=(20, 4))
+
+            _label(c, name, font=FONT_LABEL, color=FG).pack()
+            lbl_new = _label(c, f"{name}: Offline", color=FG_MUTED, font=FONT_SMALL)
+            lbl_new.pack(pady=(2, 6))
+            _label(c, desc, color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(pady=(0, 18))
+
+            # Override the status_dots entry with dashboard versions
+            self.status_dots[name] = (dot_new, lbl_new)
+
+        # ── Webhook URL ───────────────────────────────────────────────────────
+        webhook_card = _card(frame, glow=True)
+        webhook_card.pack(fill="x", padx=20, pady=(0, 14))
+
+        wh_hdr = ctk.CTkFrame(webhook_card, fg_color="transparent")
+        wh_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(wh_hdr, "Your Webhook URL", font=FONT_LABEL, color=FG).pack(side="left")
+        _chip(wh_hdr, "PASTE INTO TRADINGVIEW", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
+
+        _label(webhook_card,
+               "Paste this URL into TradingView alert → Notifications → Webhook URL",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 10))
+
+        url_row = ctk.CTkFrame(webhook_card, fg_color="transparent")
+        url_row.pack(fill="x", padx=20, pady=(0, 20))
+
+        url_entry = ctk.CTkEntry(
+            url_row,
+            textvariable=self.webhook_url_var,
+            fg_color=BG_INPUT, border_color=BORDER_GLOW,
+            text_color=PRIMARY_LT, font=FONT_MONO,
+            height=46, corner_radius=12, state="readonly"
+        )
+        url_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self._webhook_copy_btn = _btn_primary(url_row, "Copy", height=46, width=90,
+                                              command=lambda: self._copy_to_clipboard(
+                                                  self.webhook_url_var.get(),
+                                                  self._webhook_copy_btn))
+        self._webhook_copy_btn.pack(side="right")
+
+        # ── API Key ───────────────────────────────────────────────────────────
+        api_card = _card(frame)
+        api_card.pack(fill="x", padx=20, pady=(0, 14))
+
+        ak_hdr = ctk.CTkFrame(api_card, fg_color="transparent")
+        ak_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(ak_hdr, "API Key", font=FONT_LABEL, color=FG).pack(side="left")
+        _chip(ak_hdr, "KEEP SECRET", DANGER_BG, text_color=DANGER).pack(side="right")
+
+        _label(api_card,
+               "Include this in every TradingView alert message to authenticate your trades.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 10))
+
+        ak_row = ctk.CTkFrame(api_card, fg_color="transparent")
+        ak_row.pack(fill="x", padx=20, pady=(0, 20))
+
+        self._apikey_entry = ctk.CTkEntry(
+            ak_row,
+            textvariable=self.api_key_var,
+            fg_color=BG_INPUT, border_color=BORDER_SOFT,
+            text_color=ACCENT_LT, font=FONT_MONO,
+            height=46, corner_radius=12, state="readonly",
+            show="•"
+        )
+        self._apikey_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self._ak_reveal_btn = _btn_outline(ak_row, "Show", height=46, width=70,
+                                           command=self._toggle_api_key_reveal)
+        self._ak_reveal_btn.pack(side="left", padx=(0, 8))
+
+        self._ak_copy_btn = _btn_outline(ak_row, "Copy", height=46, width=70,
+                                         command=lambda: self._copy_to_clipboard(
+                                             self.api_key_var.get(), self._ak_copy_btn))
+        self._ak_copy_btn.pack(side="left")
+
+        _label(api_card,
+               "Don't have an API key? Sign in with Google / Facebook OAuth or visit your web dashboard.",
+               color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(anchor="w", padx=20, pady=(0, 20))
+
+        # ── Live Summary Mirror ───────────────────────────────────────────────
+        mirror_card = _card(frame)
+        mirror_card.pack(fill="x", padx=20, pady=(0, 20))
+
+        mir_hdr = ctk.CTkFrame(mirror_card, fg_color="transparent")
+        mir_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(mir_hdr, "Account Summary", font=FONT_LABEL, color=FG).pack(side="left")
+        _chip(mir_hdr, "Live", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
+
+        ctk.CTkFrame(mirror_card, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=0, pady=(12, 0))
 
         self.summary_text = ctk.CTkTextbox(
-            mirror_card,
-            fg_color=BG_INPUT, text_color=FG,
+            mirror_card, height=180,
+            fg_color=BG_INPUT, text_color=FG_SOFT,
             border_color=BORDER_SOFT, border_width=1,
-            font=FONT_MONO, corner_radius=14,
+            font=FONT_MONO, corner_radius=12,
         )
-        self.summary_text.pack(fill="both", expand=True, padx=18, pady=(14, 12))
-        self.summary_text.insert("end", "Sign in to load the dashboard summary and current routing footprint.")
+        self.summary_text.pack(fill="x", padx=20, pady=(12, 20))
+        self.summary_text.insert("end", "Sign in to load your dashboard summary.")
         self.summary_text.configure(state="disabled")
 
-        btns = ctk.CTkFrame(mirror_card, fg_color="transparent")
-        btns.pack(fill="x", padx=18, pady=(0, 18))
+        return frame
 
-        _btn_outline(btns, "Refresh", self._do_refresh,
-                     width=100, height=38).pack(side="left", padx=(0, 8))
-        _btn_gold(btns, "Open Web Dashboard",
-                  lambda: webbrowser.open(
-                      self.bridge_url_var.get().rstrip("/") + "/dashboard"
-                  ), height=38).pack(side="left")
+    # =========================================================================
+    # TRADINGVIEW SETUP PANEL
+    # =========================================================================
+    def _build_tradingview_panel(self, parent) -> ctk.CTkFrame:
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
+                                       scrollbar_button_color=BORDER_SOFT,
+                                       scrollbar_button_hover_color=BORDER_GLOW)
 
-    # ── UI helpers ────────────────────────────────────────────────────────────
+        _label(frame, "TradingView Setup", font=FONT_TITLE, color=FG).pack(
+            anchor="w", padx=20, pady=(20, 4))
+        _label(frame, "Build your alert message and copy it straight into TradingView.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 20))
+
+        # ── Two-column layout ─────────────────────────────────────────────────
+        cols = ctk.CTkFrame(frame, fg_color="transparent")
+        cols.pack(fill="both", expand=True, padx=20)
+        cols.columnconfigure(0, weight=5)
+        cols.columnconfigure(1, weight=7)
+
+        left = ctk.CTkFrame(cols, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        right = ctk.CTkFrame(cols, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+
+        # ── LEFT: Step-by-step guide ──────────────────────────────────────────
+        guide_card = _card(left)
+        guide_card.pack(fill="x", pady=(0, 10))
+
+        _label(guide_card, "How to set up alerts", font=FONT_LABEL, color=FG).pack(
+            anchor="w", padx=20, pady=(20, 16))
+
+        steps = [
+            ("1", "Get your Webhook URL",
+             "Find it in the Dashboard tab. Copy it."),
+            ("2", "Open TradingView",
+             "Go to a chart → click the Alert (bell) icon."),
+            ("3", "Set alert condition",
+             "Choose your indicator or strategy conditions."),
+            ("4", "Set Webhook URL",
+             "In Notifications → check Webhook URL → paste your URL."),
+            ("5", "Set alert message",
+             "Copy the JSON from the Message Builder and paste it into the Message field."),
+            ("6", "Save and test",
+             "Click Save. Trigger a test alert and watch the relay execute."),
+        ]
+
+        for num, title, desc in steps:
+            step_row = ctk.CTkFrame(guide_card, fg_color="transparent")
+            step_row.pack(fill="x", padx=20, pady=(0, 14))
+
+            num_badge = ctk.CTkLabel(step_row, text=num,
+                                     fg_color=PRIMARY_DK, text_color=PRIMARY_LT,
+                                     font=(FONT_LABEL[0], 11, "bold"),
+                                     width=26, height=26, corner_radius=13)
+            num_badge.pack(side="left", padx=(0, 12))
+
+            text_col = ctk.CTkFrame(step_row, fg_color="transparent")
+            text_col.pack(side="left", fill="x", expand=True)
+            _label(text_col, title, font=(FONT_BODY[0], 11, "bold"), color=FG).pack(anchor="w")
+            _label(text_col, desc, font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
+
+        _divider(guide_card)
+
+        # Quick webhook URL copy
+        _label(guide_card, "Your Webhook URL", color=FG_MUTED, font=FONT_SMALL).pack(
+            anchor="w", padx=20, pady=(0, 6))
+        wh_row = ctk.CTkFrame(guide_card, fg_color="transparent")
+        wh_row.pack(fill="x", padx=20, pady=(0, 20))
+        ctk.CTkEntry(wh_row, textvariable=self.webhook_url_var,
+                     fg_color=BG_INPUT, border_color=BORDER_SOFT,
+                     text_color=PRIMARY_LT, font=FONT_MONO_SM,
+                     height=36, corner_radius=10,
+                     state="readonly").pack(side="left", fill="x", expand=True, padx=(0, 8))
+        _tv_wh_copy = _btn_primary(wh_row, "Copy", height=36, width=70,
+                                   command=lambda: self._copy_to_clipboard(
+                                       self.webhook_url_var.get(), _tv_wh_copy))
+        _tv_wh_copy.pack(side="right")
+
+        # Dynamic vars tip
+        tip_card = _card(left, fg_color=GLASS_DARK)
+        tip_card.pack(fill="x", pady=(0, 10))
+        _label(tip_card, "TradingView Variables", font=(FONT_LABEL[0], 11, "bold"),
+               color=ACCENT).pack(anchor="w", padx=16, pady=(14, 6))
+        tips = [
+            ("{{ticker}}", "Current chart symbol"),
+            ("{{strategy.order.action}}", "BUY or SELL (strategy only)"),
+            ("{{close}}", "Last close price"),
+        ]
+        for var, desc in tips:
+            row = ctk.CTkFrame(tip_card, fg_color="transparent")
+            row.pack(fill="x", padx=16, pady=(0, 6))
+            _label(row, var, font=FONT_MONO_SM, color=PRIMARY_LT).pack(side="left")
+            _label(row, f"  — {desc}", font=FONT_SMALL, color=FG_MUTED).pack(side="left")
+        _label(tip_card, "", font=FONT_SMALL, color="transparent").pack(pady=(0, 8))
+
+        # ── RIGHT: Message Builder ────────────────────────────────────────────
+        builder_card = _card(right, gold=True)
+        builder_card.pack(fill="x", pady=(0, 10))
+
+        bld_hdr = ctk.CTkFrame(builder_card, fg_color="transparent")
+        bld_hdr.pack(fill="x", padx=20, pady=(20, 0))
+        _label(bld_hdr, "Alert Message Builder", font=FONT_HERO, color=FG).pack(side="left")
+        _chip(bld_hdr, "LIVE PREVIEW", GLASS_GOLD, text_color=ACCENT_LT).pack(side="right")
+
+        _label(builder_card, "Fill in the fields — JSON updates instantly as you type.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 16))
+
+        # Action
+        _label(builder_card, "Action", color=FG_SOFT, font=FONT_SMALL).pack(
+            anchor="w", padx=20, pady=(0, 4))
+        action_frame = ctk.CTkFrame(builder_card, fg_color="transparent")
+        action_frame.pack(fill="x", padx=20, pady=(0, 12))
+        for action_val in ["BUY", "SELL", "CLOSE", "CLOSE_ALL"]:
+            is_sel = self.tv_action_var.get() == action_val
+            btn = ctk.CTkButton(
+                action_frame, text=action_val,
+                height=36, width=80, corner_radius=8,
+                fg_color=PRIMARY_DK if is_sel else GLASS,
+                hover_color=PRIMARY_DK,
+                text_color=PRIMARY_LT if is_sel else FG_MUTED,
+                font=(FONT_BODY[0], 11, "bold"),
+                command=lambda v=action_val: self._set_tv_action(v)
+            )
+            btn.pack(side="left", padx=(0, 6))
+            if not hasattr(self, "_tv_action_btns"):
+                self._tv_action_btns = {}
+            self._tv_action_btns[action_val] = btn
+
+        # Symbol / Size / SL / TP / Script in a grid
+        fields_grid = ctk.CTkFrame(builder_card, fg_color="transparent")
+        fields_grid.pack(fill="x", padx=20, pady=(0, 12))
+        fields_grid.columnconfigure(0, weight=1)
+        fields_grid.columnconfigure(1, weight=1)
+
+        field_data = [
+            ("Symbol",      self.tv_symbol_var, "{{ticker}} or EURUSD", 0, 0),
+            ("Lot Size",    self.tv_size_var,   "0.1",                  0, 1),
+            ("SL (pips)",   self.tv_sl_var,     "20  (optional)",       1, 0),
+            ("TP (pips)",   self.tv_tp_var,     "40  (optional)",       1, 1),
+            ("Script Name", self.tv_script_var, "MyStrategy (optional)", 2, 0),
+        ]
+        for label_text, var, ph, row_i, col_i in field_data:
+            fc = ctk.CTkFrame(fields_grid, fg_color="transparent")
+            fc.grid(row=row_i, column=col_i, sticky="ew",
+                    padx=(0 if col_i == 0 else 6, 6 if col_i == 0 else 0),
+                    pady=(0, 8))
+            _label(fc, label_text, color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", pady=(0, 4))
+            _entry(fc, var, ph, height=38).pack(fill="x")
+
+        # Use dynamic action variable checkbox
+        dyn_row = ctk.CTkFrame(builder_card, fg_color="transparent")
+        dyn_row.pack(fill="x", padx=20, pady=(0, 12))
+        ctk.CTkCheckBox(
+            dyn_row,
+            text='Use  {{strategy.order.action}}  for action (Pine Script strategies)',
+            variable=self.tv_dynamic_var,
+            text_color=FG_MUTED, font=FONT_SMALL,
+            fg_color=PRIMARY, hover_color=PRIMARY_LT, checkmark_color=BG
+        ).pack(side="left")
+
+        # Preview
+        _divider(builder_card)
+        _label(builder_card, "Generated JSON  (copy into TradingView alert message)",
+               color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._tv_preview = ctk.CTkTextbox(
+            builder_card, height=200,
+            fg_color=BG_INPUT, text_color=PRIMARY_LT,
+            border_color=BORDER_GLOW, border_width=1,
+            font=FONT_MONO, corner_radius=12, wrap="none"
+        )
+        self._tv_preview.pack(fill="x", padx=20, pady=(0, 12))
+
+        copy_row = ctk.CTkFrame(builder_card, fg_color="transparent")
+        copy_row.pack(fill="x", padx=20, pady=(0, 20))
+
+        self._tv_copy_btn = _btn_gold(copy_row, "Copy Alert Message  →", height=46,
+                                      command=self._copy_tv_message)
+        self._tv_copy_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        _btn_outline(copy_row, "Reset", height=46, width=80,
+                     command=self._reset_tv_fields).pack(side="right")
+
+        self._update_tv_preview()
+        return frame
+
+    # =========================================================================
+    # SETTINGS PANEL
+    # =========================================================================
+    def _build_settings_panel(self, parent) -> ctk.CTkFrame:
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
+                                       scrollbar_button_color=BORDER_SOFT,
+                                       scrollbar_button_hover_color=BORDER_GLOW)
+
+        _label(frame, "Settings", font=FONT_TITLE, color=FG).pack(
+            anchor="w", padx=20, pady=(20, 4))
+        _label(frame, "Advanced configuration and execution logs.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 20))
+
+        # ── Connection Settings ───────────────────────────────────────────────
+        conn_card = _card(frame)
+        conn_card.pack(fill="x", padx=20, pady=(0, 14))
+
+        _section_header(conn_card, "Bridge Connection",
+                        "Override only if using a self-hosted bridge server.")
+
+        _label(conn_card, "Bridge URL", color=FG_MUTED, font=FONT_SMALL).pack(
+            anchor="w", padx=20, pady=(0, 4))
+        _entry(conn_card, self.bridge_url_var, "https://app.platalgo.com").pack(
+            fill="x", padx=20, pady=(0, 20))
+
+        # ── MT5 Settings (Windows only) ───────────────────────────────────────
+        if IS_WINDOWS:
+            mt5_card = _card(frame)
+            mt5_card.pack(fill="x", padx=20, pady=(0, 14))
+
+            _section_header(mt5_card, "MT5 Terminal Path",
+                            "Path to terminal64.exe. Auto-detected if left blank.")
+
+            _label(mt5_card, "Terminal Path", color=FG_MUTED, font=FONT_SMALL).pack(
+                anchor="w", padx=20, pady=(0, 4))
+            path_row = ctk.CTkFrame(mt5_card, fg_color="transparent")
+            path_row.pack(fill="x", padx=20, pady=(0, 20))
+            _entry(path_row, self.mt5_path_var, r"C:\Program Files\MetaTrader 5\terminal64.exe").pack(
+                side="left", fill="x", expand=True, padx=(0, 8))
+            _btn_outline(path_row, "Auto-detect", height=44, width=110,
+                         command=lambda: self.mt5_path_var.set(detect_mt5_path())).pack(side="right")
+
+        # ── Startup ───────────────────────────────────────────────────────────
+        startup_card = _card(frame)
+        startup_card.pack(fill="x", padx=20, pady=(0, 14))
+
+        _section_header(startup_card, "Startup Behavior",
+                        "Control whether the relay launches automatically with your system.")
+
+        startup_row = ctk.CTkFrame(startup_card, fg_color="transparent")
+        startup_row.pack(fill="x", padx=20, pady=(0, 20))
+        ctk.CTkSwitch(
+            startup_row,
+            text="Launch relay on system startup",
+            variable=self.startup_var,
+            command=self._toggle_startup,
+            text_color=FG_SOFT, font=FONT_BODY,
+            button_color=PRIMARY, button_hover_color=PRIMARY_LT,
+            progress_color=PRIMARY_DK,
+        ).pack(side="left")
+
+        # ── Danger Zone ───────────────────────────────────────────────────────
+        danger_card = _card(frame, fg_color=DANGER_BG, border_color=DANGER_BORDER)
+        danger_card.pack(fill="x", padx=20, pady=(0, 14))
+
+        _label(danger_card, "Danger Zone", font=FONT_LABEL, color=DANGER).pack(
+            anchor="w", padx=20, pady=(18, 4))
+        _label(danger_card, "Stop all active connections. This will interrupt any running relay loops.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 12))
+
+        dz_row = ctk.CTkFrame(danger_card, fg_color="transparent")
+        dz_row.pack(fill="x", padx=20, pady=(0, 20))
+        _btn_danger(dz_row, "Stop All Connections", self.stop_relay, height=44).pack(
+            side="left", padx=(0, 10))
+        _btn_danger(dz_row, "Disable VPS Mode", self.disable_managed_mode, height=44).pack(side="left")
+
+        # ── Execution Logs ────────────────────────────────────────────────────
+        log_card = _card(frame)
+        log_card.pack(fill="x", padx=20, pady=(0, 20))
+
+        log_hdr = ctk.CTkFrame(log_card, fg_color="transparent")
+        log_hdr.pack(fill="x", padx=20, pady=(18, 0))
+        _label(log_hdr, "Execution Logs", font=FONT_LABEL, color=FG).pack(side="left")
+        _btn_outline(log_hdr, "Clear", height=30, width=70,
+                     command=self._clear_logs).pack(side="right")
+
+        ctk.CTkFrame(log_card, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=0, pady=(12, 0))
+
+        self.log_box = ctk.CTkTextbox(
+            log_card, height=200,
+            fg_color=BG_INPUT, text_color=FG_MUTED,
+            border_color=BORDER_SOFT, border_width=1,
+            font=FONT_MONO_SM, corner_radius=12, wrap="word"
+        )
+        self.log_box.pack(fill="x", padx=20, pady=(12, 20))
+
+        return frame
+
+    # =========================================================================
+    # UI Helpers & Actions
+    # =========================================================================
+    def _set_tv_action(self, value: str):
+        self.tv_action_var.set(value)
+        for v, btn in self._tv_action_btns.items():
+            active = v == value
+            btn.configure(
+                fg_color=PRIMARY_DK if active else GLASS,
+                text_color=PRIMARY_LT if active else FG_MUTED,
+            )
+
+    def _update_tv_preview(self):
+        if not self._tv_preview:
+            return
+        uid = self.user_id_var.get().strip() or "your_username"
+        ak  = self.api_key_var.get().strip() or "your_api_key"
+        action = ("{{strategy.order.action}}"
+                  if self.tv_dynamic_var.get()
+                  else self.tv_action_var.get())
+        symbol = self.tv_symbol_var.get().strip() or "{{ticker}}"
+        msg = {
+            "user_id": uid,
+            "api_key": ak,
+            "action":  action,
+            "symbol":  symbol,
+        }
+        try:
+            size = float(self.tv_size_var.get())
+            msg["size"] = size
+        except ValueError:
+            pass
+        sl = self.tv_sl_var.get().strip()
+        if sl:
+            try:
+                msg["sl"] = float(sl)
+            except ValueError:
+                pass
+        tp = self.tv_tp_var.get().strip()
+        if tp:
+            try:
+                msg["tp"] = float(tp)
+            except ValueError:
+                pass
+        sc = self.tv_script_var.get().strip()
+        if sc:
+            msg["script_name"] = sc
+
+        preview = json.dumps(msg, indent=2)
+        self._tv_preview.configure(state="normal")
+        self._tv_preview.delete("1.0", "end")
+        self._tv_preview.insert("end", preview)
+        self._tv_preview.configure(state="disabled")
+
+    def _copy_tv_message(self):
+        if not self._tv_preview:
+            return
+        self._tv_preview.configure(state="normal")
+        text = self._tv_preview.get("1.0", "end").strip()
+        self._tv_preview.configure(state="disabled")
+        self._copy_to_clipboard(text, self._tv_copy_btn)
+
+    def _reset_tv_fields(self):
+        self.tv_symbol_var.set("{{ticker}}")
+        self.tv_size_var.set("0.1")
+        self.tv_sl_var.set("")
+        self.tv_tp_var.set("")
+        self.tv_script_var.set("")
+        self.tv_dynamic_var.set(True)
+        self._set_tv_action("BUY")
+
+    def _copy_to_clipboard(self, text: str, btn=None):
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.root.update()
+        except Exception:
+            pass
+        if btn:
+            orig = btn.cget("text")
+            btn.configure(text="✓ Copied!", fg_color=PRIMARY_DK, text_color=PRIMARY_LT)
+            self.root.after(2000, lambda: btn.configure(
+                text=orig, fg_color=GLASS_GOLD if "→" in orig else "transparent",
+                text_color=ACCENT_LT if "→" in orig else FG_SOFT))
+
+    def _toggle_api_key_reveal(self):
+        self.api_key_visible = not self.api_key_visible
+        if self._apikey_entry:
+            self._apikey_entry.configure(show="" if self.api_key_visible else "•")
+        if self._ak_reveal_btn:
+            self._ak_reveal_btn.configure(text="Hide" if self.api_key_visible else "Show")
+
+    def _clear_logs(self):
+        if self.log_box:
+            self.log_box.configure(state="normal")
+            self.log_box.delete("1.0", "end")
+            self.log_box.configure(state="disabled")
+
     def toggle_advanced(self):
-        self.adv_visible = not self.adv_visible
-        if self.adv_visible:
-            self.adv_frame.pack(fill="x")
-            self._adv_arrow.configure(text="▾")
-        else:
-            self.adv_frame.pack_forget()
-            self._adv_arrow.configure(text="▸")
+        """Kept for compatibility."""
+        self._switch_panel("settings")
 
     def toggle_logs(self):
-        self.log_visible = not self.log_visible
-        if self.log_visible:
-            self.log_box.pack(fill="x", padx=18, pady=(0, 18))
-            self._log_arrow.configure(text="▾")
-        else:
-            self.log_box.pack_forget()
-            self._log_arrow.configure(text="▸")
+        """Kept for compatibility."""
+        self._switch_panel("settings")
 
     def _set_dot(self, name: str, online: bool):
-        dot, lbl = self.status_dots[name]
-        dot.configure(text_color=PRIMARY if online else DANGER)
-        lbl.configure(text_color=FG if online else FG_MUTED)
-        lbl.configure(text=f"{name}: {'Online' if online else 'Offline'}")
+        color = PRIMARY if online else DANGER
+        label = f"{name}: {'Online' if online else 'Offline'}"
+        # Update dashboard (large) dot
+        if name in self.status_dots:
+            dot, lbl = self.status_dots[name]
+            dot.configure(text_color=color)
+            lbl.configure(text_color=FG if online else FG_MUTED, text=label)
+        # Always update header (small) dot too
+        if name in self._header_dots:
+            hdot, hlbl = self._header_dots[name]
+            hdot.configure(text_color=color)
+            hlbl.configure(text_color=FG_SOFT if online else FG_MUTED, text=label)
 
     def _set_status(self, bridge=None, mt5=None, broker=None):
         if bridge is not None: self._set_dot("Bridge", bridge)
         if mt5    is not None: self._set_dot("MT5",    mt5)
         if broker is not None: self._set_dot("Broker", broker)
         any_on = any(x is True for x in (bridge, mt5, broker))
-        if any_on:
-            self._live_dot.configure(text_color=PRIMARY)
-        elif all(x is False for x in (bridge, mt5, broker)):
-            self._live_dot.configure(text_color=DANGER)
+        color = PRIMARY if any_on else DANGER
+        if self._live_dot:
+            self._live_dot.configure(text_color=color)
+        # Also update the second live dot on Dashboard
+        if hasattr(self, "_live_dot2"):
+            self._live_dot2.configure(text_color=color)
 
     def _set_state_callback(self, state: dict):
         self.root.after(0, lambda: self._set_status(
@@ -731,11 +1342,14 @@ class RelayGuiApp:
             broker=bool(state.get("broker_connected")),
         ))
 
-    def append_log(self, text):
-        self.log_box.insert("end", text + "\n")
-        self.log_box.see("end")
+    def append_log(self, text: str):
+        if self.log_box:
+            self.log_box.configure(state="normal")
+            self.log_box.insert("end", text + "\n")
+            self.log_box.see("end")
+            self.log_box.configure(state="disabled")
 
-    def update_status(self, text):
+    def update_status(self, text: str):
         self.root.after(0, lambda: self.status_var.set(text))
         self.root.after(0, lambda: self.append_log(text))
 
@@ -789,7 +1403,7 @@ class RelayGuiApp:
         try:
             if self.startup_var.get():
                 _enable_startup()
-                self.update_status("Start-on-boot enabled (headless, runs without login)")
+                self.update_status("Start-on-boot enabled")
             else:
                 _disable_startup()
                 self.update_status("Start-on-boot disabled")
@@ -799,23 +1413,13 @@ class RelayGuiApp:
 
     # ── MT5 credentials ───────────────────────────────────────────────────────
     def _get_mt5_creds(self) -> dict:
-        acct   = self.mt5_acct_var.get().strip()
-        pw     = self.mt5_pw_var.get()
-        server = self.mt5_server_var.get().strip()
-        path   = self.mt5_path_var.get().strip() if IS_WINDOWS else ""
-        if not (acct and pw and server):
-            cfg_path = os.path.join(os.getcwd(), "config.json")
-            if os.path.exists(cfg_path):
-                try:
-                    with open(cfg_path) as f:
-                        mt5 = (json.load(f) or {}).get("mt5", {})
-                    acct   = acct   or str(mt5.get("login", ""))
-                    pw     = pw     or mt5.get("password", "")
-                    server = server or mt5.get("server", "")
-                    path   = path   or mt5.get("path", "")
-                except Exception:
-                    pass
-        return {"login": acct, "password": pw, "server": server, "path": path}
+        """Return MT5 credentials from GUI fields only. No config.json fallback."""
+        return {
+            "login":    self.mt5_acct_var.get().strip(),
+            "password": self.mt5_pw_var.get(),
+            "server":   self.mt5_server_var.get().strip(),
+            "path":     self.mt5_path_var.get().strip() if IS_WINDOWS else "",
+        }
 
     # ── Actions ───────────────────────────────────────────────────────────────
     def _sign_in(self):
@@ -835,11 +1439,8 @@ class RelayGuiApp:
     def _open_oauth(self, provider: str):
         base = self.bridge_url_var.get().rstrip("/")
         try:
-            resp = requests.post(
-                f"{base}/auth/desktop/start",
-                json={"provider": provider},
-                timeout=8,
-            )
+            resp = requests.post(f"{base}/auth/desktop/start",
+                                 json={"provider": provider}, timeout=8)
             if resp.status_code != 200:
                 messagebox.showerror("OAuth error", resp.text or "Could not start OAuth")
                 return
@@ -858,21 +1459,21 @@ class RelayGuiApp:
 
         if webview:
             def launch_webview():
-                window = webview.create_window("PlatAlgo Login", auth_url, width=1024, height=760, resizable=True)
+                window = webview.create_window("PlatAlgo Login", auth_url,
+                                               width=1024, height=760, resizable=True)
                 if hasattr(window, "events"):
-                    window.events.closed += lambda: self.root.after(0, lambda: self.update_status("Login window closed"))
+                    window.events.closed += lambda: self.root.after(
+                        0, lambda: self.update_status("Login window closed"))
                 webview.start()
             threading.Thread(target=launch_webview, daemon=True).start()
         else:
-            messagebox.showinfo(
-                "Opening browser",
-                "Install 'pywebview' to keep Google/Facebook login inside the app."
-            )
+            messagebox.showinfo("Opening browser",
+                                "Install 'pywebview' to keep login inside the app.")
             webbrowser.open(auth_url)
 
     def _poll_desktop_token(self, state: str):
         base = self.bridge_url_var.get().rstrip("/")
-        for i in range(180):  # up to 3 minutes
+        for i in range(180):
             try:
                 resp = requests.get(f"{base}/auth/desktop/consume/{state}", timeout=6)
                 if resp.status_code == 200:
@@ -881,6 +1482,7 @@ class RelayGuiApp:
                     api_key = data.get("api_key", "")
                     if uid and api_key:
                         self.api_key = api_key
+                        self.api_key_var.set(api_key)
                         self.password_var.set("")
                         self.user_id_var.set(uid)
                         self._avatar.configure(text=uid[:2].upper())
@@ -913,10 +1515,18 @@ class RelayGuiApp:
         if password:
             self._save_cached_credentials(user_id, password)
         self._avatar.configure(text=user_id[:2].upper())
-        bridge     = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
-        self.relay = Relay(bridge, user_id, password, config_path="config.json", api_key=self.api_key)
+        bridge = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
+        mt5    = self._get_mt5_creds()
+        self.relay = Relay(
+            bridge, user_id, password,
+            api_key=self.api_key,
+            mt5_login=mt5.get("login") or None,
+            mt5_password=mt5.get("password") or None,
+            mt5_server=mt5.get("server") or None,
+            mt5_path=mt5.get("path") or None,
+        )
         if not self.relay.executor.get_connection_state().get("mt5_connected"):
-            self.update_status("Warning: MT5 not connected — check terminal is open")
+            self.update_status("MT5 not connected — open your MT5 terminal or use VPS mode")
         self.connect_btn.configure(state="disabled")
         self.update_status("Connecting to bridge…")
         def run():
@@ -935,7 +1545,8 @@ class RelayGuiApp:
         password = self.password_var.get()
         api_key  = self.api_key
         if not user_id or not (password or api_key):
-            messagebox.showerror("Missing fields", "Sign in first (username/password or Google/Facebook).")
+            messagebox.showerror("Missing fields",
+                                 "Sign in first (username/password or Google/Facebook).")
             return
         mt5 = self._get_mt5_creds()
         if not mt5.get("login") or not mt5.get("password") or not mt5.get("server"):
@@ -950,26 +1561,25 @@ class RelayGuiApp:
         self._avatar.configure(text=user_id[:2].upper())
         self.vps_btn.configure(state="disabled", text="Connecting…")
         self.update_status("Enabling VPS 24/7 mode…")
+
         def run_setup():
             bridge = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
             client = RelayClient(bridge, user_id)
             if api_key:
                 ok = client.setup_managed_execution(
-                    api_key, mt5, mt5_path_override=mt5.get("path") or None
-                )
+                    api_key, mt5, mt5_path_override=mt5.get("path") or None)
             else:
                 ok = client.setup_managed_execution_with_login(
-                    password, mt5, mt5_path_override=mt5.get("path") or None
-                )
+                    password, mt5, mt5_path_override=mt5.get("path") or None)
             if ok is True:
                 self.update_status("VPS 24/7 mode active — cloud is trading on your behalf")
-                self._set_status(bridge=True)
+                self._set_status(bridge=True, mt5=True, broker=True)
                 self.vps_active = True
                 def _activate():
                     self.vps_btn.configure(
-                        text="✓  VPS 24/7 Active",
+                        text="✓  VPS Active — 24/7",
                         fg_color=GLASS_EMERALD, hover_color=PRIMARY_DK,
-                        border_color=PRIMARY_LT, text_color=FG, state="normal"
+                        border_color=BORDER_GLOW, text_color=PRIMARY_LT, state="normal"
                     )
                     if self.vps_status_chip:
                         self.vps_status_chip.configure(
@@ -983,11 +1593,9 @@ class RelayGuiApp:
             else:
                 err_detail = ok if isinstance(ok, str) else "unknown error"
                 self.update_status(f"VPS setup failed: {err_detail}")
-                self.root.after(0, lambda: messagebox.showerror(
-                    "VPS Setup Failed", err_detail
-                ))
+                self.root.after(0, lambda: messagebox.showerror("VPS Setup Failed", err_detail))
                 self.root.after(0, lambda: self.vps_btn.configure(
-                    text="Enable 24/7 VPS Mode",
+                    text="Login to MT5 on VPS  →",
                     fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
                     border_color=ACCENT_DK, text_color=ACCENT_LT, state="normal"
                 ))
@@ -1011,14 +1619,14 @@ class RelayGuiApp:
                 if ok:
                     if self.vps_status_chip:
                         self.vps_status_chip.configure(
-                            text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_MUTED)
+                            text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_FAINT)
                     self.vps_btn.configure(
-                        text="Enable 24/7 VPS Mode",
+                        text="Login to MT5 on VPS  →",
                         fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
                         border_color=ACCENT_DK, text_color=ACCENT_LT, state="normal"
                     )
                     if self.vps_card:
-                        self.vps_card.configure(border_color=BORDER)
+                        self.vps_card.configure(border_color=BORDER_GOLD)
                     self.vps_active = False
                     self.update_status("VPS mode disabled")
                 else:
@@ -1031,18 +1639,19 @@ class RelayGuiApp:
             self.relay.stop()
         self._set_status(bridge=False, mt5=False, broker=False)
         self.update_status("Stopped")
-        if hasattr(self, "connect_btn"):
+        if hasattr(self, "connect_btn") and self.connect_btn:
             self.connect_btn.configure(state="normal")
-        self.vps_btn.configure(
-            text="Enable 24/7 VPS Mode",
-            fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
-            border_color=ACCENT_DK, text_color=ACCENT_LT
-        )
+        if self.vps_btn:
+            self.vps_btn.configure(
+                text="Login to MT5 on VPS  →",
+                fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
+                border_color=ACCENT_DK, text_color=ACCENT_LT
+            )
         if self.vps_status_chip:
             self.vps_status_chip.configure(
-                text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_MUTED)
+                text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_FAINT)
         if self.vps_card:
-            self.vps_card.configure(border_color=BORDER)
+            self.vps_card.configure(border_color=BORDER_GOLD)
         self.vps_active = False
 
     # ── Dashboard mirror ──────────────────────────────────────────────────────
@@ -1062,26 +1671,44 @@ class RelayGuiApp:
         try:
             resp = requests.post(
                 f"{self.bridge_url_var.get().rstrip('/')}/dashboard/summary/login",
-                json=payload,
-                timeout=8,
+                json=payload, timeout=8,
             )
             if resp.status_code != 200:
                 return
+
+            self.root.after(0, lambda: self._set_dot("Bridge", True))
+
             d       = resp.json()
             dash    = d.get("dashboard", {})
             scripts = dash.get("scripts", [])
-            lines   = [
-                f"Webhook URL : {d.get('webhook_url', '')}",
-                f"Relays      : {dash.get('relay_online', 0)}/{dash.get('relay_total', 0)} online",
-                f"Scripts     : {len(scripts)}",
-                "",
+
+            # Update webhook URL
+            wh_url = d.get("webhook_url", "")
+            if wh_url:
+                self.root.after(0, lambda u=wh_url: self.webhook_url_var.set(u))
+
+            # Update API key if returned
+            ak = d.get("api_key", "")
+            if ak and not self.api_key:
+                self.api_key = ak
+                self.root.after(0, lambda k=ak: self.api_key_var.set(k))
+
+            # Build summary text
+            lines = [
+                f"Account      : {uid}",
+                f"Webhook URL  : {wh_url}",
+                f"Relays       : {dash.get('relay_online', 0)}/{dash.get('relay_total', 0)} online",
+                f"Scripts      : {len(scripts)}",
             ]
-            for s in scripts:
-                lines.append(
-                    f"  {s.get('script_name')}  —  "
-                    f"{s.get('executed_count')} executed  /  "
-                    f"{s.get('signals_count')} signals"
-                )
+            if scripts:
+                lines.append("")
+                lines.append("── Script Performance ──")
+                for s in scripts:
+                    lines.append(
+                        f"  {s.get('script_name', '—'):<24} "
+                        f"{s.get('executed_count', 0)} executed  /  "
+                        f"{s.get('signals_count', 0)} signals"
+                    )
             txt = "\n".join(lines)
             self.root.after(0, lambda: self._update_summary_text(txt))
         except Exception:
@@ -1096,19 +1723,16 @@ class RelayGuiApp:
     def _check_updates(self):
         try:
             resp = requests.get(
-                f"{self.bridge_url_var.get().rstrip('/')}/version", timeout=5
-            )
+                f"{self.bridge_url_var.get().rstrip('/')}/version", timeout=5)
             if resp.status_code != 200:
                 return
             info   = resp.json()
             latest = info.get("app_version", "")
             url    = info.get("relay_download_url", "")
-            if latest and latest != os.getenv("RELAY_APP_VERSION", "1.0.0") and url:
+            if latest and latest != APP_VERSION and url:
                 def prompt():
-                    if messagebox.askyesno(
-                        "Update available",
-                        f"New version {latest} is available. Open download page?"
-                    ):
+                    if messagebox.askyesno("Update available",
+                                           f"Version {latest} is available. Open download page?"):
                         webbrowser.open(url)
                 self.root.after(0, prompt)
         except Exception:
@@ -1118,9 +1742,9 @@ class RelayGuiApp:
     def _create_tray_icon(self):
         if not pystray or not Image or not ImageDraw:
             return None
-        img  = Image.new("RGB", (64, 64), color=(8, 13, 11))
+        img  = Image.new("RGB", (64, 64), color=(7, 17, 10))
         draw = ImageDraw.Draw(img)
-        draw.ellipse((8, 8, 56, 56), fill=(232, 192, 96))
+        draw.ellipse((8, 8, 56, 56), fill=(24, 196, 98))
         menu = pystray.Menu(
             pystray.MenuItem("Open", lambda: self._restore_window()),
             pystray.MenuItem("Exit", lambda: self._quit_from_tray()),

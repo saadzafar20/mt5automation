@@ -298,44 +298,31 @@ def calculate_sl_tp(symbol: str, action: str, price: float, sl_pips, tp_pips):
 
 class MT5Executor:
     """Execute trades via MT5."""
-    
-    def __init__(self, config_path: str = "config.json"):
-        self.config_path = config_path
-        self.config = self._load_config()
+
+    def __init__(self, mt5_login=None, mt5_password=None, mt5_server=None, mt5_path=None):
         self.mt5_connected = False
-        self._init_mt5()
+        self._init_mt5(mt5_login, mt5_password, mt5_server, mt5_path)
 
-    def _load_config(self) -> dict:
-        """Load config.json."""
-        try:
-            with open(self.config_path) as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Error loading config: {e}")
-            return {}
-
-    def _init_mt5(self):
-        """Initialize MT5 connection."""
+    def _init_mt5(self, login, password, server, path):
+        """Initialize MT5 connection using explicit credentials."""
         try:
             import MetaTrader5 as mt5
-            mt5_config = self.config.get("mt5", {})
-            account = mt5_config.get("login")
-            password = mt5_config.get("password")
-            server = mt5_config.get("server")
-            path = mt5_config.get("path")
 
-            # Check if credentials are empty/placeholder - if so, connect to current session
             has_valid_creds = (
-                account and 
-                password and 
-                password not in ("", "your_password_here", "changeme") and
-                account not in (0, 12345678)
+                login and password and
+                str(login) not in ("", "0") and
+                str(password) not in ("", "your_password_here", "changeme")
             )
 
             def _do_mt5_init():
                 if has_valid_creds:
-                    return mt5.initialize(path=path, login=int(account), password=password, server=server)
-                logger.info("No MT5 credentials configured - connecting to current MT5 session")
+                    return mt5.initialize(
+                        path=path or None,
+                        login=int(login),
+                        password=str(password),
+                        server=str(server) if server else None,
+                    )
+                logger.info("No MT5 credentials provided — attaching to current MT5 session")
                 return mt5.initialize(path=path) if path else mt5.initialize()
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _ex:
@@ -352,12 +339,12 @@ class MT5Executor:
             else:
                 info = mt5.account_info()
                 if info:
-                    logger.info(f"MT5 connected to account {info.login} on {info.server}")
+                    logger.info(f"MT5 connected: account {info.login} on {info.server}")
                 else:
                     logger.info("MT5 initialized but no account info available")
                 self.mt5_connected = True
         except ImportError:
-            logger.warning("MetaTrader5 module not available; relay will run in mock mode")
+            logger.warning("MetaTrader5 module not available — relay running in mock mode")
             self.mt5_connected = False
         except Exception as e:
             logger.warning(f"MT5 init error: {e}")
@@ -496,13 +483,24 @@ class MT5Executor:
 
 class Relay:
     """Main relay loop."""
-    
-    def __init__(self, bridge_url: str, user_id: str, password: str, config_path: str = "config.json", relay_id: Optional[str] = None, api_key: Optional[str] = None):
+
+    def __init__(
+        self,
+        bridge_url: str,
+        user_id: str,
+        password: str,
+        relay_id: Optional[str] = None,
+        api_key: Optional[str] = None,
+        mt5_login=None,
+        mt5_password=None,
+        mt5_server=None,
+        mt5_path=None,
+    ):
         self.client = RelayClient(bridge_url, user_id, relay_id=relay_id, api_key=api_key)
         if relay_id:
             self.client.relay_id = relay_id
         self.password = password
-        self.executor = MT5Executor(config_path)
+        self.executor = MT5Executor(mt5_login, mt5_password, mt5_server, mt5_path)
         self.running = False
         self._hb_failures = 0
 
@@ -609,16 +607,20 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="TradingView-MT5 Relay")
-    parser.add_argument("--bridge-url", required=True, help="Cloud bridge URL (e.g., http://localhost:5001)")
+    parser.add_argument("--bridge-url", required=True, help="Cloud bridge URL")
     parser.add_argument("--user-id", required=True, help="User ID")
-    parser.add_argument("--password", required=True, help="User password (dashboard credentials)")
-    parser.add_argument("--relay-id", help="Relay ID (optional, auto-generated if omitted)")
-    parser.add_argument("--config", default="config.json", help="Config path")
-    parser.add_argument("--bootstrap-managed", action="store_true", help="One-time MT5 managed setup to bridge and exit")
-    parser.add_argument("--api-key", help="API key required for managed setup")
-    parser.add_argument("--headless", action="store_true", help="Run without GUI — for server/VPS mode")
-    parser.add_argument("--log-file", help="Write logs to file (useful for headless mode)")
-    
+    parser.add_argument("--password", required=True, help="Dashboard password")
+    parser.add_argument("--relay-id", help="Relay ID (auto-generated if omitted)")
+    parser.add_argument("--api-key", help="API key (for managed setup)")
+    parser.add_argument("--mt5-login", help="MT5 account number")
+    parser.add_argument("--mt5-password", help="MT5 account password")
+    parser.add_argument("--mt5-server", help="MT5 broker server name")
+    parser.add_argument("--mt5-path", help="Path to terminal64.exe (Windows only)")
+    parser.add_argument("--bootstrap-managed", action="store_true",
+                        help="Send MT5 creds to bridge for VPS execution, then exit")
+    parser.add_argument("--headless", action="store_true", help="Run without GUI")
+    parser.add_argument("--log-file", help="Write logs to file")
+
     args = parser.parse_args()
 
     if getattr(args, "log_file", None):
@@ -633,20 +635,24 @@ def main():
         if not args.api_key:
             logger.error("--api-key is required with --bootstrap-managed")
             raise SystemExit(2)
-
-        mt5_config = {}
-        try:
-            with open(args.config) as cfg:
-                mt5_config = (json.load(cfg) or {}).get("mt5", {})
-        except Exception as exc:
-            logger.error(f"Failed to read config for managed bootstrap: {exc}")
-            raise SystemExit(1)
-
+        mt5_config = {
+            "login": args.mt5_login,
+            "password": args.mt5_password,
+            "server": args.mt5_server,
+            "path": args.mt5_path or "",
+        }
         client = RelayClient(args.bridge_url, args.user_id, relay_id=args.relay_id)
         ok = client.setup_managed_execution(args.api_key, mt5_config)
         raise SystemExit(0 if ok else 1)
 
-    relay = Relay(args.bridge_url, args.user_id, args.password, args.config, relay_id=args.relay_id)
+    relay = Relay(
+        args.bridge_url, args.user_id, args.password,
+        relay_id=args.relay_id,
+        mt5_login=args.mt5_login,
+        mt5_password=args.mt5_password,
+        mt5_server=args.mt5_server,
+        mt5_path=args.mt5_path,
+    )
     relay.start()
 
 if __name__ == "__main__":
