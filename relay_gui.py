@@ -933,8 +933,9 @@ class RelayGuiApp:
     def enable_managed_mode(self):
         user_id  = self.user_id_var.get().strip()
         password = self.password_var.get()
-        if not user_id or not password:
-            messagebox.showerror("Missing fields", "Username and password are required.")
+        api_key  = self.api_key
+        if not user_id or not (password or api_key):
+            messagebox.showerror("Missing fields", "Sign in first (username/password or Google/Facebook).")
             return
         mt5 = self._get_mt5_creds()
         if not mt5.get("login") or not mt5.get("password") or not mt5.get("server"):
@@ -944,16 +945,22 @@ class RelayGuiApp:
                 "The cloud server will execute trades 24/7 on your behalf."
             )
             return
-        self._save_cached_credentials(user_id, password)
+        if password:
+            self._save_cached_credentials(user_id, password)
         self._avatar.configure(text=user_id[:2].upper())
         self.vps_btn.configure(state="disabled", text="Connecting…")
         self.update_status("Enabling VPS 24/7 mode…")
         def run_setup():
             bridge = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
             client = RelayClient(bridge, user_id)
-            ok     = client.setup_managed_execution_with_login(
-                password, mt5, mt5_path_override=mt5.get("path") or None
-            )
+            if api_key:
+                ok = client.setup_managed_execution(
+                    api_key, mt5, mt5_path_override=mt5.get("path") or None
+                )
+            else:
+                ok = client.setup_managed_execution_with_login(
+                    password, mt5, mt5_path_override=mt5.get("path") or None
+                )
             if ok is True:
                 self.update_status("VPS 24/7 mode active — cloud is trading on your behalf")
                 self._set_status(bridge=True)
