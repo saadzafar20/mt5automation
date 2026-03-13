@@ -326,15 +326,27 @@ def get_fernet():
 def encrypt_secret(raw: str) -> str:
     fernet = get_fernet()
     if not fernet:
-        raise RuntimeError("Encryption is not configured. Set BRIDGE_CREDS_KEY and install cryptography.")
-    return fernet.encrypt(raw.encode("utf-8")).decode("utf-8")
+        logger.warning("BRIDGE_CREDS_KEY not set — storing credentials unencrypted. Set BRIDGE_CREDS_KEY for production.")
+        return "plain:" + raw
+    return "enc:" + fernet.encrypt(raw.encode("utf-8")).decode("utf-8")
 
 
 def decrypt_secret(token: str) -> str:
+    if token.startswith("plain:"):
+        return token[6:]
+    if token.startswith("enc:"):
+        fernet = get_fernet()
+        if not fernet:
+            raise RuntimeError("Credential was encrypted but BRIDGE_CREDS_KEY is not set. Set the key to decrypt.")
+        return fernet.decrypt(token[4:].encode("utf-8")).decode("utf-8")
+    # Legacy: no prefix — try fernet decrypt, fall back to plaintext
     fernet = get_fernet()
-    if not fernet:
-        raise RuntimeError("Encryption is not configured. Set BRIDGE_CREDS_KEY and install cryptography.")
-    return fernet.decrypt(token.encode("utf-8")).decode("utf-8")
+    if fernet:
+        try:
+            return fernet.decrypt(token.encode("utf-8")).decode("utf-8")
+        except Exception:
+            pass
+    return token
 
 
 class BridgeStore:
@@ -1987,7 +1999,12 @@ def managed_setup():
         return jsonify({"error": "missing mt5_login, mt5_password, or mt5_server"}), 400
 
     try:
-        store.upsert_managed_account(user_id, int(mt5_login), str(mt5_password), str(mt5_server), str(mt5_path or ""))
+        mt5_login_int = int(mt5_login)
+    except (ValueError, TypeError):
+        return jsonify({"error": f"MT5 Account Number must be a number, got: {mt5_login!r}"}), 400
+
+    try:
+        store.upsert_managed_account(user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path or ""))
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -2020,7 +2037,12 @@ def managed_setup_login():
         return jsonify({"error": "missing mt5_login, mt5_password, or mt5_server"}), 400
 
     try:
-        store.upsert_managed_account(user_id, int(mt5_login), str(mt5_password), str(mt5_server), str(mt5_path or ""))
+        mt5_login_int = int(mt5_login)
+    except (ValueError, TypeError):
+        return jsonify({"error": f"MT5 Account Number must be a number, got: {mt5_login!r}"}), 400
+
+    try:
+        store.upsert_managed_account(user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path or ""))
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
 
