@@ -213,11 +213,15 @@ class RelayClient:
             if resp.status_code == 200:
                 logger.info("Managed execution setup complete")
                 return True
-            logger.error(f"Managed setup (login) failed: {resp.status_code} {resp.text}")
-            return False
+            try:
+                detail = resp.json().get("error", resp.text)
+            except Exception:
+                detail = resp.text
+            logger.error(f"Managed setup (login) failed: {resp.status_code} — {detail}")
+            return detail or False
         except Exception as e:
             logger.error(f"Managed setup (login) error: {e}")
-            return False
+            return str(e)
 
     def get_managed_status(self, api_key: str) -> Dict[str, Any]:
         """Read managed mode status for current user."""

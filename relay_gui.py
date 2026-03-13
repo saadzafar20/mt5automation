@@ -954,7 +954,7 @@ class RelayGuiApp:
             ok     = client.setup_managed_execution_with_login(
                 password, mt5, mt5_path_override=mt5.get("path") or None
             )
-            if ok:
+            if ok is True:
                 self.update_status("VPS 24/7 mode active — cloud is trading on your behalf")
                 self._set_status(bridge=True)
                 self.vps_active = True
@@ -974,7 +974,11 @@ class RelayGuiApp:
                 self.root.after(0, _activate)
                 threading.Thread(target=self._refresh_dashboard_summary, daemon=True).start()
             else:
-                self.update_status("VPS setup failed — check credentials")
+                err_detail = ok if isinstance(ok, str) else "unknown error"
+                self.update_status(f"VPS setup failed: {err_detail}")
+                self.root.after(0, lambda: messagebox.showerror(
+                    "VPS Setup Failed", err_detail
+                ))
                 self.root.after(0, lambda: self.vps_btn.configure(
                     text="Enable 24/7 VPS Mode",
                     fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
