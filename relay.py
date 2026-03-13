@@ -191,11 +191,15 @@ class RelayClient:
             if resp.status_code == 200:
                 logger.info("Managed execution setup complete")
                 return True
-            logger.error(f"Managed setup failed: {resp.status_code} {resp.text}")
-            return False
+            try:
+                detail = resp.json().get("error", resp.text)
+            except Exception:
+                detail = resp.text
+            logger.error(f"Managed setup failed: {resp.status_code} — {detail}")
+            return detail or False
         except Exception as e:
             logger.error(f"Managed setup error: {e}")
-            return False
+            return str(e)
     def setup_managed_execution_with_login(self, password: str, mt5_config: Dict[str, Any], mt5_path_override: Optional[str] = None) -> bool:
         """One-time setup authenticated by dashboard credentials."""
         url = f"{self.bridge_url}/managed/setup/login"
