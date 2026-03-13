@@ -65,7 +65,7 @@ GLASS_DARK    = "#0d170f"   # Darker glass overlay
 FG            = "#e8f0ea"   # Primary text
 FG_MUTED      = "#5e8a6e"   # Muted / secondary text
 FG_SOFT       = "#9dbfaa"   # Tertiary text
-FG_FAINT      = "#2e4e38"   # Very faint / disabled
+FG_FAINT      = "#4a7a5e"   # Faint / placeholder text
 
 PRIMARY       = "#18c462"   # Vivid emerald
 PRIMARY_LT    = "#22e874"   # Bright emerald (hover)
@@ -1451,7 +1451,13 @@ class RelayGuiApp:
                 messagebox.showerror("OAuth error", "Missing auth URL or state")
                 return
         except Exception as exc:
-            messagebox.showerror("OAuth error", str(exc))
+            messagebox.showerror(
+                "Cannot connect to OAuth",
+                f"Could not reach the PlatAlgo server.\n\n"
+                f"Bridge URL: {base}\n\n"
+                f"Check your internet connection or verify the Bridge URL in Settings.\n\n"
+                f"Details: {exc}"
+            )
             return
 
         self.update_status(f"Login with {provider.title()}…")
