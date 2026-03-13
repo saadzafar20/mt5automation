@@ -1,9 +1,7 @@
 """Tests for relay client and executor."""
 
-import json
 import os
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -106,47 +104,55 @@ class TestRelayClient(unittest.TestCase):
 class TestMT5Executor(unittest.TestCase):
     """Test MT5Executor trade execution."""
 
-    def setUp(self):
-        # Create temp config
-        self.config_fd, self.config_path = tempfile.mkstemp(suffix=".json")
-        with os.fdopen(self.config_fd, "w") as f:
-            json.dump({
-                "mt5": {
-                    "login": 12345,
-                    "password": "pass",
-                    "server": "Demo",
-                }
-            }, f)
+    @patch("relay.concurrent.futures.ThreadPoolExecutor")
+    def test_mock_mode_when_mt5_init_fails(self, mock_pool):
+        """Test executor runs in mock mode when MT5 init returns False."""
+        # Make the thread pool executor return False from initialize()
+        mock_future = MagicMock()
+        mock_future.result.return_value = False
+        mock_executor = MagicMock()
+        mock_executor.__enter__ = MagicMock(return_value=mock_executor)
+        mock_executor.__exit__ = MagicMock(return_value=False)
+        mock_executor.submit.return_value = mock_future
+        mock_pool.return_value = mock_executor
 
-    def tearDown(self):
-        os.unlink(self.config_path)
+        executor = MT5Executor(mt5_login=99999, mt5_password="badpass", mt5_server="FakeServer")
 
-    def test_mock_mode_when_mt5_unavailable(self):
-        """Test executor runs in mock mode without MT5."""
-        executor = MT5Executor(self.config_path)
-        
-        # Should be in mock mode (MT5 not available in test env)
         self.assertFalse(executor.mt5_connected)
-        
-        # Execute should return mock result
+
         result = executor.execute_command({
             "action": "BUY",
             "symbol": "EURUSD",
             "size": 0.1,
         })
-        
         self.assertEqual(result["status"], "executed")
         self.assertEqual(result["mode"], "mock")
 
+    @patch("relay.concurrent.futures.ThreadPoolExecutor")
+    def test_mock_mode_no_credentials(self, mock_pool):
+        """Test executor skips MT5 init and stays disconnected when no creds given."""
+        # MT5 available but init returns False (no running terminal)
+        mock_future = MagicMock()
+        mock_future.result.return_value = False
+        mock_executor = MagicMock()
+        mock_executor.__enter__ = MagicMock(return_value=mock_executor)
+        mock_executor.__exit__ = MagicMock(return_value=False)
+        mock_executor.submit.return_value = mock_future
+        mock_pool.return_value = mock_executor
+
+        executor = MT5Executor()
+        self.assertFalse(executor.mt5_connected)
+
     def test_missing_symbol_error(self):
-        """Test execution fails without symbol."""
-        executor = MT5Executor(self.config_path)
-        
+        """Test execution fails without symbol regardless of MT5 state."""
+        executor = MT5Executor.__new__(MT5Executor)
+        executor.mt5_connected = False  # force mock mode without touching MT5
+
         result = executor.execute_command({
             "action": "BUY",
             "size": 0.1,
         })
-        
+
         self.assertEqual(result["status"], "failed")
         self.assertIn("missing symbol", result["error"])
 

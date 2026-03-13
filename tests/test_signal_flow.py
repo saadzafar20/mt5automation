@@ -278,21 +278,21 @@ class TestManagedExecution(unittest.TestCase):
         
         self.assertEqual(resp.status_code, 200)
 
-    @patch("cloud_bridge.managed_executor")
-    def test_signal_uses_managed_executor_when_enabled(self, mock_executor):
-        """Test that signals use managed executor when enabled."""
-        # Setup managed account
+    @patch("cloud_bridge.session_manager")
+    def test_signal_uses_session_manager_when_managed_enabled(self, mock_session_mgr):
+        """Test that signals route through session_manager when managed mode is enabled."""
+        # Setup managed account in DB so is_managed_enabled() returns True
         self.store.upsert_managed_account(
             self.user_id, 12345, "pass", "MetaQuotes-Demo"
         )
-        
-        # Mock executor response
-        mock_executor.execute.return_value = {
+
+        # Mock session_manager.execute response
+        mock_session_mgr.execute.return_value = {
             "status": "executed",
             "order_id": 999,
             "mode": "managed-vps",
         }
-        
+
         resp = self.client.post("/signal", json={
             "user_id": self.user_id,
             "api_key": self.api_key,
@@ -300,11 +300,11 @@ class TestManagedExecution(unittest.TestCase):
             "symbol": "EURUSD",
             "size": 0.1,
         })
-        
+
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data["mode"], "managed-vps")
-        mock_executor.execute.assert_called_once()
+        mock_session_mgr.execute.assert_called_once()
 
 
 if __name__ == "__main__":
