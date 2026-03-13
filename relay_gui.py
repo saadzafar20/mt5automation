@@ -535,7 +535,11 @@ class RelayGuiApp:
 
         self.mt5_server_entry = _entry(mt5_card, self.mt5_server_var,
                                        "MT5 Server  (e.g. ICMarkets-Live01)")
-        self.mt5_server_entry.pack(fill="x", padx=18, pady=(0, 18))
+        self.mt5_server_entry.pack(fill="x", padx=18, pady=(0, 10))
+
+        self.mt5_login_btn = _btn_gold(mt5_card, "Login to MT5 on VPS",
+                                       self.enable_managed_mode, height=44)
+        self.mt5_login_btn.pack(fill="x", padx=18, pady=(0, 18))
 
         # ── 24/7 VPS Mode ────────────────────────────────────────────────────
         self.vps_card = _card(frame)
