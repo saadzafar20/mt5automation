@@ -2220,25 +2220,6 @@ def get_stats():
     })
 
 
-@app.route("/download", methods=["GET"])
-def download_page():
-    """Public download landing page — fetches manifest for version + URLs."""
-    manifest = {}
-    if RELAY_MANIFEST_URL:
-        try:
-            r = requests.get(RELAY_MANIFEST_URL, timeout=5)
-            if r.status_code == 200:
-                manifest = r.json()
-        except Exception:
-            pass
-    windows_url = manifest.get("windows_url") or RELAY_DOWNLOAD_URL or "#"
-    mac_url     = manifest.get("mac_url")     or RELAY_DOWNLOAD_URL or "#"
-    version     = manifest.get("version")     or APP_VERSION
-    return render_template("download.html",
-                           windows_url=windows_url,
-                           mac_url=mac_url,
-                           version=version)
-
 
 @app.route("/version", methods=["GET"])
 def get_version():

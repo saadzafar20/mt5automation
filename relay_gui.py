@@ -1509,9 +1509,9 @@ class RelayGuiApp:
 
             fq = ctk.CTkFrame(faq_card, fg_color="transparent")
             fq.pack(fill="x", padx=20, pady=(16, 0))
-            _label(fq, "?", fg_color=PRIMARY_GLOW, text_color=PRIMARY_LT,
-                   font=(FONT_LABEL[0], 11, "bold"),
-                   width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 12))
+            ctk.CTkLabel(fq, text="?", fg_color=PRIMARY_GLOW, text_color=PRIMARY_LT,
+                         font=(FONT_LABEL[0], 11, "bold"),
+                         width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 12))
             _label(fq, q, font=(FONT_BODY[0], 12, "bold"), color=FG).pack(side="left", anchor="w")
 
             ctk.CTkFrame(faq_card, height=1, fg_color=BORDER, corner_radius=0).pack(
