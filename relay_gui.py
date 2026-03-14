@@ -50,53 +50,55 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette — Midnight Navy (2026 Fintech) ─────────────────────────────
-BG            = "#070810"   # Deep blue-black
-BG_ELEVATED   = "#080E1E"   # Navy sidebar/header — clearly blue
-BG_CARD       = "#0D1428"   # Blue-tinted card surfaces
-BG_INPUT      = "#111D35"   # Input fields — clearly navy
-BG_PANEL      = "#07080E"   # Content area
+# ── Color Palette — Obsidian Gold (Premium Fintech) ──────────────────────────
+# Zinc neutrals + Amber gold + Violet interactive + Emerald success
+# Exact shades from Tailwind v3 color system, used by Stripe/Linear/Mercury
+BG            = "#09090B"   # Zinc-950  — true near-black, premium depth
+BG_ELEVATED   = "#111113"   # Zinc-900+ — sidebar, header surfaces
+BG_CARD       = "#18181B"   # Zinc-900  — card surfaces, clear lift
+BG_INPUT      = "#27272A"   # Zinc-800  — inputs, well-defined fields
+BG_PANEL      = "#0C0C0E"   # Zinc-950+ — main content background
 
-GLASS         = "#0F1828"   # Glass tile
-GLASS_GOLD    = "#130B00"   # Gold-tinted glass
-GLASS_EMERALD = "#071525"   # Blue-tinted glass
-GLASS_DARK    = "#050810"   # Darkest overlay
+GLASS         = "#1C1C1F"   # Glass overlay tile
+GLASS_GOLD    = "#1A1000"   # Amber-tinted dark glass
+GLASS_EMERALD = "#0A1A10"   # Emerald-tinted dark glass
+GLASS_DARK    = "#050507"   # Deepest overlay
 
-FG            = "#E8EAF6"   # Cool-lavender white
-FG_MUTED      = "#8892AA"   # Muted blue-grey
-FG_SOFT       = "#4E5870"   # Soft blue-grey
-FG_FAINT      = "#252D40"   # Near-invisible
+FG            = "#F4F4F5"   # Zinc-100  — near-pure white, not harsh
+FG_MUTED      = "#A1A1AA"   # Zinc-400  — comfortable secondary text
+FG_SOFT       = "#71717A"   # Zinc-500  — tertiary, labels
+FG_FAINT      = "#52525B"   # Zinc-600  — near-invisible dividers
 
-GOLD          = "#C8960C"
-GOLD_LT       = "#F5C842"
-GOLD_DK       = "#8B6508"
-GOLD_GLOW     = "#120A00"
-GOLD_BORDER   = "#3E2A00"
-GOLD_SHINE    = "#FFD660"
+GOLD          = "#D97706"   # Amber-600 — rich warm gold, brand anchor
+GOLD_LT       = "#F59E0B"   # Amber-500 — lighter gold, headings
+GOLD_DK       = "#92400E"   # Amber-800 — dark gold depth
+GOLD_GLOW     = "#0D0700"   # Amber deep shadow
+GOLD_BORDER   = "#78350F"   # Amber-900 — gold border tint
+GOLD_SHINE    = "#FCD34D"   # Amber-300 — highlight shimmer
 
-PRIMARY       = "#3D8EF5"   # Bright blue
-PRIMARY_LT    = "#6AABFF"
-PRIMARY_DK    = "#1F5FCC"
-PRIMARY_GLOW  = "#060E28"
+PRIMARY       = "#7C3AED"   # Violet-600 — premium interactive, pairs with gold
+PRIMARY_LT    = "#8B5CF6"   # Violet-500 — lighter interactive states
+PRIMARY_DK    = "#5B21B6"   # Violet-800 — pressed / deep
+PRIMARY_GLOW  = "#0A0520"   # Violet deep shadow
 
-ACCENT        = "#3FD68A"   # Jade green
-ACCENT_LT     = "#6EE8A8"
-ACCENT_DK     = "#1D8A58"
-ACCENT_GLOW   = "#041409"
+ACCENT        = "#10B981"   # Emerald-500 — connected / live
+ACCENT_LT     = "#34D399"   # Emerald-400 — lighter success
+ACCENT_DK     = "#065F46"   # Emerald-900 — deep success
+ACCENT_GLOW   = "#010A05"   # Emerald deep shadow
 
-SUCCESS       = "#3FD68A"
-SUCCESS_BG    = "#051409"
-DANGER        = "#FF5A4D"
-DANGER_BG     = "#1A0400"
-DANGER_BORDER = "#5C0E08"
+SUCCESS       = "#10B981"   # Emerald-500
+SUCCESS_BG    = "#022C22"   # Emerald-950 background
+DANGER        = "#F43F5E"   # Rose-500    — warm refined red
+DANGER_BG     = "#1C0008"   # Rose deep background
+DANGER_BORDER = "#881337"   # Rose-900
 
-BORDER        = "#1A2340"   # Blue-tinted border — clearly not grey
-BORDER_SOFT   = "#222E4A"
-BORDER_GLOW   = "#C8960C"
-BORDER_GOLD   = "#30200A"
+BORDER        = "#27272A"   # Zinc-800  — crisp, clean separator
+BORDER_SOFT   = "#3F3F46"   # Zinc-700  — softer dividers
+BORDER_GLOW   = "#D97706"   # Amber-600 — gold accent border
+BORDER_GOLD   = "#78350F"   # Amber-900 — deep gold border
 
-NAV_ACTIVE_BG = "#0E1525"   # Active nav — clearly blue-navy
-NAV_HOVER_BG  = "#0B1120"
+NAV_ACTIVE_BG = "#18181B"   # Zinc-900  — active nav item fill
+NAV_HOVER_BG  = "#141417"   # Between 950-900 — hover state
 
 # ── Typography ────────────────────────────────────────────────────────────────
 DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
