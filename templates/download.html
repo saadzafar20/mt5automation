@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PlatAlgo — Download</title>
+  <meta name="description" content="Download PlatAlgo Relay — automated MT5 trading execution for TradingView alerts.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #080809;
+      --bg-card:      rgba(16, 16, 21, 0.9);
+      --bg-elevated:  #0D0D11;
+      --fg:           #F5F5F7;
+      --fg-muted:     #8E8E93;
+      --fg-faint:     #48484A;
+      --gold:         #C8960C;
+      --gold-lt:      #F0C040;
+      --gold-shine:   #FFD060;
+      --gold-glow:    rgba(200,150,12,0.12);
+      --gold-border:  rgba(200,150,12,0.2);
+      --success:      #32D74B;
+      --primary:      #0A84FF;
+      --border:       rgba(255,255,255,0.06);
+      --border-soft:  rgba(255,255,255,0.04);
+      --radius-card:  20px;
+      --radius-btn:   12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Ambient background ─────────────────────────────────────── */
+    .ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+    .orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(130px); animation: breathe 5s ease-in-out infinite;
+    }
+    .orb-1 { top: -10%; left: 20%; width: 700px; height: 700px;
+              background: radial-gradient(circle, rgba(200,150,12,0.09) 0%, transparent 70%); }
+    .orb-2 { bottom: 5%; right: -5%; width: 500px; height: 500px;
+              background: radial-gradient(circle, rgba(200,150,12,0.06) 0%, transparent 70%);
+              animation-delay: 2.5s; }
+    @keyframes breathe {
+      0%,100% { opacity:0.7; transform:scale(1); }
+      50%      { opacity:1;   transform:scale(1.06); }
+    }
+
+    /* ── Nav ──────────────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,8,9,0.82);
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1080px; margin: 0 auto;
+      padding: 0 32px;
+      height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none;
+    }
+    .nav-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--gold); box-shadow: 0 0 10px var(--gold);
+    }
+    .nav-wordmark { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+    .nav-wordmark span { color: var(--gold-lt); }
+    .nav-badge {
+      font-size: 11px; font-weight: 600; color: var(--fg-faint);
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 3px 8px; border-radius: 6px;
+    }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+    .nav-version {
+      font-size: 12px; color: var(--fg-faint);
+    }
+    .nav-link {
+      font-size: 13px; color: var(--fg-muted); text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-link:hover { color: var(--fg); }
+
+    /* ── Main container ───────────────────────────────────────────── */
+    .container {
+      position: relative; z-index: 1;
+      max-width: 1080px; margin: 0 auto; padding: 0 32px;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      padding: 100px 0 80px;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+    }
+
+    .hero-chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(200,150,12,0.08);
+      border: 1px solid var(--gold-border);
+      border-radius: 999px;
+      padding: 5px 14px;
+      font-size: 12px; font-weight: 600;
+      color: var(--gold-lt);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .hero-chip::before {
+      content: ''; width: 6px; height: 6px;
+      border-radius: 50%; background: var(--gold);
+      box-shadow: 0 0 6px var(--gold);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .hero-title {
+      font-size: clamp(38px, 6vw, 64px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+      margin-bottom: 20px;
+    }
+    .hero-title .gold { color: var(--gold-lt); }
+    .hero-title .dim  { color: var(--fg-muted); font-weight: 400; }
+
+    .hero-sub {
+      font-size: clamp(15px, 2vw, 18px);
+      color: var(--fg-muted);
+      line-height: 1.7;
+      max-width: 540px;
+      margin-bottom: 52px;
+    }
+
+    /* ── Download buttons ─────────────────────────────────────────── */
+    .dl-buttons {
+      display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .btn-dl {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 15px 28px;
+      border-radius: var(--radius-btn);
+      font-size: 14px; font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .btn-dl::before {
+      content: '';
+      position: absolute; inset: 0;
+      opacity: 0; transition: opacity 0.2s;
+      background: rgba(255,255,255,0.06);
+    }
+    .btn-dl:hover::before { opacity: 1; }
+    .btn-dl:hover { transform: translateY(-2px); }
+    .btn-dl:active { transform: translateY(0); }
+
+    .btn-dl-win {
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-shine) 100%);
+      color: #0A0600;
+      box-shadow: 0 4px 24px -6px rgba(200,150,12,0.5);
+    }
+    .btn-dl-mac {
+      background: rgba(255,255,255,0.05);
+      color: var(--fg);
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 4px 20px -6px rgba(0,0,0,0.3);
+    }
+    .btn-dl-mac:hover { border-color: rgba(255,255,255,0.12); }
+
+    .btn-dl-icon { font-size: 20px; line-height: 1; }
+    .btn-dl-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+    .btn-dl-label { font-size: 11px; font-weight: 500; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
+    .btn-dl-name  { font-size: 15px; font-weight: 700; }
+
+    .hero-meta {
+      font-size: 12px; color: var(--fg-faint);
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center;
+    }
+    .hero-meta span::before { content: '· '; }
+    .hero-meta span:first-child::before { content: ''; }
+
+    /* ── Features ────────────────────────────────────────────────── */
+    .features { padding: 80px 0; }
+
+    .section-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--gold);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(24px, 3.5vw, 36px);
+      font-weight: 700; letter-spacing: -0.025em;
+      line-height: 1.2; margin-bottom: 14px;
+    }
+    .section-sub {
+      font-size: 15px; color: var(--fg-muted);
+      line-height: 1.7; max-width: 500px;
+      margin-bottom: 52px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .feat-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 28px;
+      transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+    }
+    .feat-card:hover {
+      border-color: var(--gold-border);
+      transform: translateY(-3px);
+      box-shadow: 0 16px 48px -12px rgba(0,0,0,0.4), 0 0 24px -8px var(--gold-glow);
+    }
+    .feat-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: rgba(200,150,12,0.08);
+      border: 1px solid var(--gold-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 18px;
+    }
+    .feat-title {
+      font-size: 15px; font-weight: 600;
+      letter-spacing: -0.01em; margin-bottom: 8px;
+    }
+    .feat-desc {
+      font-size: 13px; color: var(--fg-muted); line-height: 1.65;
+    }
+
+    /* ── Steps ────────────────────────────────────────────────────── */
+    .steps { padding: 80px 0; }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 2px;
+      background: var(--border);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+    }
+
+    .step {
+      background: var(--bg-card);
+      padding: 32px 28px;
+      position: relative;
+    }
+    .step-num {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      color: var(--gold); text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .step-title {
+      font-size: 15px; font-weight: 600;
+      margin-bottom: 8px; letter-spacing: -0.01em;
+    }
+    .step-desc { font-size: 13px; color: var(--fg-muted); line-height: 1.65; }
+
+    /* ── CTA ──────────────────────────────────────────────────────── */
+    .cta-section {
+      padding: 80px 0 100px;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+    }
+
+    .cta-card {
+      background: var(--bg-card);
+      border: 1px solid var(--gold-border);
+      border-radius: 24px;
+      padding: 56px 48px;
+      max-width: 600px; width: 100%;
+      box-shadow:
+        0 0 0 1px rgba(200,150,12,0.06),
+        0 32px 80px -16px rgba(0,0,0,0.5),
+        0 0 80px -30px var(--gold-glow);
+      position: relative;
+    }
+    .cta-card::before {
+      content: '';
+      position: absolute; top: 0; left: 20%; right: 20%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold-lt), transparent);
+      border-radius: 999px;
+    }
+
+    .cta-title {
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 700; letter-spacing: -0.025em;
+      margin-bottom: 12px;
+    }
+    .cta-sub {
+      font-size: 15px; color: var(--fg-muted);
+      line-height: 1.65; margin-bottom: 36px;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 0;
+    }
+    .footer-inner {
+      max-width: 1080px; margin: 0 auto; padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-brand {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600;
+    }
+    .footer-brand span { color: var(--gold-lt); }
+    .footer-copy { font-size: 12px; color: var(--fg-faint); }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .container { padding: 0 20px; }
+      .hero { padding: 72px 0 60px; }
+      .cta-card { padding: 40px 24px; }
+      .nav-inner { padding: 0 20px; }
+      .footer-inner { padding: 0 20px; }
+      .dl-buttons { flex-direction: column; align-items: stretch; }
+      .btn-dl { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a class="nav-logo" href="#">
+        <div class="nav-dot"></div>
+        <div class="nav-wordmark"><span>Plat</span>Algo</div>
+        <div class="nav-badge">RELAY</div>
+      </a>
+      <div class="nav-right">
+        {% if version %}
+        <span class="nav-version">v{{ version }}</span>
+        {% endif %}
+        <a class="nav-link" href="/dashboard">Dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="container">
+    <section class="hero">
+
+      <div class="hero-chip">Free Download</div>
+
+      <h1 class="hero-title">
+        Your signals.<br>
+        <span class="gold">Executed automatically.</span>
+      </h1>
+
+      <p class="hero-sub">
+        PlatAlgo Relay connects TradingView alerts directly to your MT5 broker —
+        with zero delay, 24/7 execution, and no code required.
+      </p>
+
+      <div class="dl-buttons">
+        <a href="{{ windows_url }}" class="btn-dl btn-dl-win">
+          <div class="btn-dl-icon">⊞</div>
+          <div class="btn-dl-text">
+            <span class="btn-dl-label">Download for</span>
+            <span class="btn-dl-name">Windows</span>
+          </div>
+        </a>
+        <a href="{{ mac_url }}" class="btn-dl btn-dl-mac">
+          <div class="btn-dl-icon">&#63743;</div>
+          <div class="btn-dl-text">
+            <span class="btn-dl-label">Download for</span>
+            <span class="btn-dl-name">macOS</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="hero-meta">
+        <span>Free</span>
+        {% if version %}<span>Version {{ version }}</span>{% endif %}
+        <span>Windows 10+ &amp; macOS 12+</span>
+        <span>No subscription required</span>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- Features -->
+  <div class="container">
+    <section class="features">
+      <div class="section-label">Why PlatAlgo</div>
+      <h2 class="section-title">Everything you need.<br>Nothing you don't.</h2>
+      <p class="section-sub">Built for traders who want execution, not complexity.</p>
+
+      <div class="features-grid">
+        <div class="feat-card">
+          <div class="feat-icon">⚡</div>
+          <div class="feat-title">Instant Execution</div>
+          <div class="feat-desc">Trades fire the moment your TradingView alert triggers — sub-second latency from signal to broker.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">☁</div>
+          <div class="feat-title">24/7 VPS Mode</div>
+          <div class="feat-desc">Run your strategy around the clock even when your computer is off, using our managed cloud execution.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🔒</div>
+          <div class="feat-title">Secure by Design</div>
+          <div class="feat-desc">API keys encrypted at rest, OAuth login, no plaintext credential storage — ever.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">◎</div>
+          <div class="feat-title">TradingView Native</div>
+          <div class="feat-desc">Built-in alert message generator. Copy one JSON payload into TradingView and you're live.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">⊞</div>
+          <div class="feat-title">MT5 Compatible</div>
+          <div class="feat-desc">Works with any MetaTrader 5 broker — forex, gold, indices, crypto, and more.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">↺</div>
+          <div class="feat-title">Auto-Updates</div>
+          <div class="feat-desc">Updates download and apply silently in the background. You're always on the latest version.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Steps -->
+  <div class="container">
+    <section class="steps">
+      <div class="section-label">Get started in minutes</div>
+      <h2 class="section-title">From download to live trades<br>in 4 steps.</h2>
+
+      <div class="steps-grid">
+        <div class="step">
+          <div class="step-num">Step 01</div>
+          <div class="step-title">Download &amp; install</div>
+          <div class="step-desc">Download the relay app for your platform, run the installer, and launch.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">Step 02</div>
+          <div class="step-title">Sign in</div>
+          <div class="step-desc">Use Google or Facebook OAuth — no password to remember. One click and you're in.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">Step 03</div>
+          <div class="step-title">Connect MT5</div>
+          <div class="step-desc">Enter your MT5 broker credentials. Enable VPS mode for 24/7 execution.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">Step 04</div>
+          <div class="step-title">Paste &amp; trade</div>
+          <div class="step-desc">Copy your webhook URL into TradingView alerts. Your signals now execute automatically.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- CTA -->
+  <div class="container">
+    <section class="cta-section">
+      <div class="cta-card">
+        <div class="cta-title">Ready to automate your trading?</div>
+        <p class="cta-sub">
+          Download PlatAlgo Relay for free. No credit card, no subscription —<br>
+          just connect and trade.
+        </p>
+        <div class="dl-buttons" style="margin-bottom:0">
+          <a href="{{ windows_url }}" class="btn-dl btn-dl-win">
+            <div class="btn-dl-icon">⊞</div>
+            <div class="btn-dl-text">
+              <span class="btn-dl-label">Download for</span>
+              <span class="btn-dl-name">Windows</span>
+            </div>
+          </a>
+          <a href="{{ mac_url }}" class="btn-dl btn-dl-mac">
+            <div class="btn-dl-icon">&#63743;</div>
+            <div class="btn-dl-text">
+              <span class="btn-dl-label">Download for</span>
+              <span class="btn-dl-name">macOS</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-brand"><span>Plat</span>Algo Relay</div>
+      <div class="footer-copy">© 2025 PlatAlgo. All rights reserved.</div>
+    </div>
+  </footer>
+
+</body>
+</html>

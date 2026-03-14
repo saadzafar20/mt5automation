@@ -1460,7 +1460,8 @@ def google_callback():
         store.upsert_desktop_token(state, user_id, api_key, ttl=DESKTOP_OAUTH_STATE_TTL)
         with _pending_state_lock:
             PENDING_DESKTOP_STATES.pop(state, None)
-        return "You can return to the app.", 200
+        return render_template("oauth_success.html",
+                               provider_name="Google", user_id=user_id)
 
     session["dashboard_user"] = user_id
     session["dashboard_api_key"] = api_key
@@ -1520,7 +1521,8 @@ def facebook_callback():
         store.upsert_desktop_token(state, user_id, api_key, ttl=DESKTOP_OAUTH_STATE_TTL)
         with _pending_state_lock:
             PENDING_DESKTOP_STATES.pop(state, None)
-        return "You can return to the app.", 200
+        return render_template("oauth_success.html",
+                               provider_name="Facebook", user_id=user_id)
 
     session["dashboard_user"] = user_id
     session["dashboard_api_key"] = api_key
@@ -2216,6 +2218,26 @@ def get_stats():
         },
         "timestamp": datetime.utcnow().isoformat(),
     })
+
+
+@app.route("/download", methods=["GET"])
+def download_page():
+    """Public download landing page — fetches manifest for version + URLs."""
+    manifest = {}
+    if RELAY_MANIFEST_URL:
+        try:
+            r = requests.get(RELAY_MANIFEST_URL, timeout=5)
+            if r.status_code == 200:
+                manifest = r.json()
+        except Exception:
+            pass
+    windows_url = manifest.get("windows_url") or RELAY_DOWNLOAD_URL or "#"
+    mac_url     = manifest.get("mac_url")     or RELAY_DOWNLOAD_URL or "#"
+    version     = manifest.get("version")     or APP_VERSION
+    return render_template("download.html",
+                           windows_url=windows_url,
+                           mac_url=mac_url,
+                           version=version)
 
 
 @app.route("/version", methods=["GET"])
