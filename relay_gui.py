@@ -50,56 +50,70 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette (Apple Dark / Glass) ────────────────────────────────────────
-BG            = "#000000"   # True black
-BG_ELEVATED   = "#1c1c1e"   # Apple secondary background
-BG_CARD       = "#1c1c1e"   # Card surfaces
-BG_INPUT      = "#2c2c2e"   # Input fields
-BG_PANEL      = "#0a0a0a"   # Content area base
+# ── Color Palette (PlatAlgo Gold / Apple Dark) ─────────────────────────────
+BG            = "#080809"   # Near-black base
+BG_ELEVATED   = "#0D0D11"   # Elevated surface (header, sidebar)
+BG_CARD       = "#111116"   # Card surfaces
+BG_INPUT      = "#18181F"   # Input fields
+BG_PANEL      = "#09090D"   # Content area base
 
-GLASS         = "#242426"   # Glass tile
-GLASS_EMERALD = "#0a1a2e"   # Blue-tinted glass
-GLASS_GOLD    = "#1a1a2e"   # Indigo-tinted glass
-GLASS_DARK    = "#111113"   # Darker glass overlay
+GLASS         = "#16161D"   # Glass tile
+GLASS_GOLD    = "#110A00"   # Gold-tinted glass
+GLASS_EMERALD = "#06121E"   # Blue-tinted glass
+GLASS_DARK    = "#06060A"   # Darker glass overlay
 
-FG            = "#ffffff"   # Pure white
-FG_MUTED      = "#8e8e93"   # Apple system gray
-FG_SOFT       = "#636366"   # Tertiary label
-FG_FAINT      = "#48484a"   # Quaternary label / placeholder
+FG            = "#F5F5F7"   # Apple primary
+FG_MUTED      = "#8E8E93"   # Apple systemGray (secondary label)
+FG_SOFT       = "#636366"   # Apple systemGray2 (tertiary label)
+FG_FAINT      = "#3A3A3C"   # Apple systemGray3 (quaternary)
 
-PRIMARY       = "#0a84ff"   # Apple system blue (dark mode)
-PRIMARY_LT    = "#409cff"   # Lighter blue
-PRIMARY_DK    = "#0066cc"   # Darker blue
-PRIMARY_GLOW  = "#001530"   # Blue glow bg
+# Gold accent — primary brand colour (extracted from app icon)
+GOLD          = "#C8960C"   # Primary gold
+GOLD_LT       = "#F0C040"   # Bright gold highlight
+GOLD_DK       = "#8B6508"   # Dark gold
+GOLD_GLOW     = "#100800"   # Gold-tinted dark bg
+GOLD_BORDER   = "#3A2600"   # Subtle gold border
+GOLD_SHINE    = "#FFD060"   # Bright shine highlight
 
-ACCENT        = "#64d2ff"   # Apple system teal
-ACCENT_LT     = "#a0e8ff"   # Light teal
-ACCENT_DK     = "#30b0d8"   # Dark teal
-ACCENT_GLOW   = "#001a22"   # Teal glow bg
+# Blue — info / links / secondary actions only
+PRIMARY       = "#0A84FF"   # Apple systemBlue dark
+PRIMARY_LT    = "#409CFF"   # Lighter blue
+PRIMARY_DK    = "#0066CC"   # Darker blue
+PRIMARY_GLOW  = "#001030"   # Blue glow bg
 
-BORDER        = "#38383a"   # Apple separator
-BORDER_SOFT   = "#48484a"   # Softer border
-BORDER_GLOW   = "#0a84ff"   # Active border (blue)
-BORDER_GOLD   = "#38383a"   # Neutral border
+# Teal — kept for secondary accent where needed
+ACCENT        = "#64D2FF"   # Apple systemTeal dark
+ACCENT_LT     = "#A0E8FF"   # Light teal
+ACCENT_DK     = "#30B0D8"   # Dark teal
+ACCENT_GLOW   = "#001522"   # Teal glow bg
 
-DANGER        = "#ff453a"   # Apple system red
-DANGER_BG     = "#1a0800"   # Error background
-DANGER_BORDER = "#5c1818"   # Error border
+# Status colours
+SUCCESS       = "#32D74B"   # Apple systemGreen dark (connected / online)
+SUCCESS_BG    = "#061310"   # Green-tinted bg
+DANGER        = "#FF453A"   # Apple systemRed dark
+DANGER_BG     = "#160500"   # Error background
+DANGER_BORDER = "#4A0E08"   # Error border
 
-NAV_ACTIVE_BG = "#2c2c2e"   # Active nav item bg
-NAV_HOVER_BG  = "#1c1c1e"   # Hover nav item bg
+BORDER        = "#1E1E26"   # Primary separator
+BORDER_SOFT   = "#272730"   # Softer border
+BORDER_GLOW   = "#C8960C"   # Gold active/focus border
+BORDER_GOLD   = "#2E1E00"   # Subtle gold border
+
+NAV_ACTIVE_BG = "#0E0800"   # Gold-tinted active nav bg
+NAV_HOVER_BG  = "#0C0C12"   # Hover nav item bg
 
 # ── Typography ────────────────────────────────────────────────────────────────
 DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
 TEXT_FONT_CANDIDATES    = ["SF Pro Text",    "Segoe UI Variable Text",    "Aptos",         "Segoe UI"]
 MONO_FONT_CANDIDATES    = ["SF Mono", "Cascadia Mono", "JetBrains Mono", "Consolas", "Courier New"]
 
-FONT_TITLE   = ("Segoe UI", 26, "bold")
-FONT_HERO    = ("Segoe UI", 16, "bold")
-FONT_LABEL   = ("Segoe UI", 13, "bold")
-FONT_BODY    = ("Segoe UI", 12)
-FONT_SMALL   = ("Segoe UI", 10)
-FONT_CAPTION = ("Segoe UI", 9, "bold")
+FONT_DISPLAY = ("Segoe UI", 28, "bold")   # Page titles
+FONT_TITLE   = ("Segoe UI", 20, "bold")   # Section headers
+FONT_HERO    = ("Segoe UI", 15, "bold")   # Card titles
+FONT_LABEL   = ("Segoe UI", 13, "bold")   # Field labels
+FONT_BODY    = ("Segoe UI", 12)            # Body text
+FONT_SMALL   = ("Segoe UI", 11)            # Captions
+FONT_CAPTION = ("Segoe UI", 10, "bold")   # Chips/badges
 FONT_MONO    = ("Consolas", 11)
 FONT_MONO_SM = ("Consolas", 10)
 
@@ -228,11 +242,11 @@ def _entry(parent, textvariable=None, placeholder="", show=None, **kwargs):
         parent,
         textvariable=textvariable,
         placeholder_text=placeholder,
-        placeholder_text_color=FG_FAINT,
+        placeholder_text_color=FG_SOFT,
         fg_color=BG_INPUT,
         border_color=BORDER_SOFT,
         text_color=FG,
-        corner_radius=12,
+        corner_radius=10,
         font=FONT_BODY,
         **kwargs,
     )
@@ -247,7 +261,7 @@ def _btn_primary(parent, text, command, **kwargs):
         parent, text=text, command=command,
         fg_color=PRIMARY_DK, hover_color=PRIMARY,
         text_color=FG, font=FONT_LABEL,
-        corner_radius=12, **kwargs
+        corner_radius=10, **kwargs
     )
 
 
@@ -255,9 +269,9 @@ def _btn_gold(parent, text, command, **kwargs):
     kwargs.setdefault("height", 44)
     return ctk.CTkButton(
         parent, text=text, command=command,
-        fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
-        text_color=ACCENT_LT, border_width=1, border_color=ACCENT_DK,
-        font=FONT_LABEL, corner_radius=12, **kwargs
+        fg_color=GLASS_GOLD, hover_color=GOLD_DK,
+        text_color=GOLD_LT, border_width=1, border_color=GOLD_BORDER,
+        font=FONT_LABEL, corner_radius=10, **kwargs
     )
 
 
@@ -267,7 +281,7 @@ def _btn_outline(parent, text, command, **kwargs):
         parent, text=text, command=command,
         fg_color="transparent", hover_color=GLASS,
         text_color=FG_SOFT, border_color=BORDER_SOFT, border_width=1,
-        font=FONT_BODY, corner_radius=12, **kwargs
+        font=FONT_BODY, corner_radius=10, **kwargs
     )
 
 
@@ -275,9 +289,9 @@ def _btn_danger(parent, text, command, **kwargs):
     kwargs.setdefault("height", 44)
     return ctk.CTkButton(
         parent, text=text, command=command,
-        fg_color=DANGER_BG, hover_color="#2e1212",
-        text_color="#ffbbbb", border_color=DANGER_BORDER, border_width=1,
-        font=FONT_BODY, corner_radius=12, **kwargs
+        fg_color=DANGER_BG, hover_color="#220A06",
+        text_color="#FFBBBB", border_color=DANGER_BORDER, border_width=1,
+        font=FONT_BODY, corner_radius=10, **kwargs
     )
 
 
@@ -389,6 +403,7 @@ class RelayGuiApp:
         self._oauth_logged_in_frame = None
         self.adv_visible      = False
         self.log_box          = None
+        self._nav_items_data  = {}
 
         self._build_ui()
         self._load_cached_credentials()
@@ -407,17 +422,18 @@ class RelayGuiApp:
 
     # ── Font config ───────────────────────────────────────────────────────────
     def _configure_fonts(self):
-        global FONT_TITLE, FONT_HERO, FONT_LABEL, FONT_BODY, FONT_SMALL
+        global FONT_DISPLAY, FONT_TITLE, FONT_HERO, FONT_LABEL, FONT_BODY, FONT_SMALL
         global FONT_CAPTION, FONT_MONO, FONT_MONO_SM
         d = _pick_font_family(DISPLAY_FONT_CANDIDATES, "Segoe UI")
         t = _pick_font_family(TEXT_FONT_CANDIDATES, "Segoe UI")
         m = _pick_font_family(MONO_FONT_CANDIDATES, "Consolas")
-        FONT_TITLE   = (d, 26, "bold")
-        FONT_HERO    = (d, 16, "bold")
+        FONT_DISPLAY = (d, 28, "bold")
+        FONT_TITLE   = (d, 20, "bold")
+        FONT_HERO    = (d, 15, "bold")
         FONT_LABEL   = (t, 13, "bold")
         FONT_BODY    = (t, 12)
-        FONT_SMALL   = (t, 10)
-        FONT_CAPTION = (t, 9, "bold")
+        FONT_SMALL   = (t, 11)
+        FONT_CAPTION = (t, 10, "bold")
         FONT_MONO    = (m, 11)
         FONT_MONO_SM = (m, 10)
 
@@ -453,8 +469,8 @@ class RelayGuiApp:
         # Top accent stripe
         stripe = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0, height=3)
         stripe.pack(fill="x")
-        ctk.CTkFrame(stripe, fg_color=ACCENT_DK, height=2, corner_radius=0).pack(fill="x")
-        ctk.CTkFrame(stripe, fg_color=PRIMARY_DK, height=1, corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(stripe, fg_color=GOLD, height=2, corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(stripe, fg_color=GOLD_DK, height=1, corner_radius=0).pack(fill="x")
 
         self._build_header(outer)
 
@@ -473,42 +489,51 @@ class RelayGuiApp:
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _build_header(self, parent):
-        hdr = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, height=68)
+        hdr = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, height=62)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
         inner = ctk.CTkFrame(hdr, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=20, pady=0)
+        inner.pack(fill="both", expand=True, padx=24, pady=0)
 
         # ── Left: Logo ────────────────────────────────────────────────────────
-        logo_frame = ctk.CTkFrame(inner, fg_color="transparent")
-        logo_frame.pack(side="left", fill="y")
-
-        logo_row = ctk.CTkFrame(logo_frame, fg_color="transparent")
+        logo_row = ctk.CTkFrame(inner, fg_color="transparent")
         logo_row.pack(side="left", fill="y")
 
-        # Gold dot accent
-        ctk.CTkLabel(logo_row, text="◆", text_color=ACCENT, font=(FONT_TITLE[0], 14),
-                     fg_color="transparent").pack(side="left", padx=(0, 8), pady=22)
-        _label(logo_row, "Plat", color=ACCENT, font=(FONT_TITLE[0], 18, "bold")).pack(side="left", pady=22)
-        _label(logo_row, "Algo", color=FG, font=(FONT_TITLE[0], 18, "bold")).pack(side="left", pady=22)
-        _label(logo_row, "  Relay", color=FG_MUTED, font=(FONT_BODY[0], 12)).pack(side="left", pady=(26, 20))
+        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+        if Image and os.path.exists(_icon_path):
+            try:
+                _logo_img = ctk.CTkImage(
+                    light_image=Image.open(_icon_path),
+                    dark_image=Image.open(_icon_path),
+                    size=(36, 36)
+                )
+                ctk.CTkLabel(logo_row, image=_logo_img, text="",
+                             fg_color="transparent").pack(side="left", padx=(0, 10), pady=13)
+            except Exception:
+                pass
+        _label(logo_row, "Plat", color=GOLD_LT,
+               font=(FONT_HERO[0], 17, "bold")).pack(side="left", pady=20)
+        _label(logo_row, "Algo", color=FG,
+               font=(FONT_HERO[0], 17, "bold")).pack(side="left", pady=20)
+        _label(logo_row, "  Relay", color=FG_SOFT,
+               font=(FONT_BODY[0], 11)).pack(side="left", pady=(22, 18))
 
-        # ── Center: Connection status dots ────────────────────────────────────
+        # ── Center: Connection status pill badges ─────────────────────────────
         dots_frame = ctk.CTkFrame(inner, fg_color="transparent")
-        dots_frame.pack(side="left", fill="y", padx=(40, 0))
+        dots_frame.pack(side="left", fill="y", padx=(32, 0))
 
         for name in ["Bridge", "MT5", "Broker"]:
-            f = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
-                             border_width=1, border_color=BORDER)
-            f.pack(side="left", padx=(0, 10), pady=18)
+            pill = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
+                                border_width=1, border_color=BORDER)
+            pill.pack(side="left", padx=(0, 8), pady=16)
 
-            dot = ctk.CTkLabel(f, text="●", text_color=DANGER,
-                               font=(FONT_BODY[0], 13), fg_color="transparent")
-            dot.pack(side="left", padx=(12, 0), pady=6)
+            dot = ctk.CTkLabel(pill, text="●", text_color=DANGER,
+                               font=(FONT_BODY[0], 10), fg_color="transparent")
+            dot.pack(side="left", padx=(10, 0), pady=6)
 
-            lbl = _label(f, f"{name}: Offline", color=FG_MUTED, font=FONT_SMALL)
-            lbl.pack(side="left", padx=(6, 14), pady=6)
+            lbl = _label(pill, f"{name}: Offline", color=FG_MUTED, font=(FONT_SMALL[0], 10))
+            lbl.pack(side="left", padx=(4, 12), pady=6)
 
             self.status_dots[name]  = (dot, lbl)
             self._header_dots[name] = (dot, lbl)
@@ -519,24 +544,24 @@ class RelayGuiApp:
 
         self._live_dot = ctk.CTkLabel(right, text="●", text_color=DANGER,
                                       font=(FONT_BODY[0], 10), fg_color="transparent")
-        self._live_dot.pack(side="left", padx=(0, 4), pady=26)
+        self._live_dot.pack(side="left", padx=(0, 4), pady=24)
 
         self._status_pill = ctk.CTkLabel(
             right, textvariable=self.status_var,
-            text_color=FG_MUTED, font=FONT_SMALL,
+            text_color=FG_MUTED, font=(FONT_SMALL[0], 10),
             fg_color=GLASS, corner_radius=999, padx=14, pady=6
         )
-        self._status_pill.pack(side="left", padx=(0, 14), pady=22)
+        self._status_pill.pack(side="left", padx=(0, 14), pady=20)
 
         self._avatar = ctk.CTkLabel(
             right, text="--",
-            fg_color=GLASS_GOLD, text_color=ACCENT,
+            fg_color=GOLD_GLOW, text_color=GOLD_LT,
             font=(FONT_LABEL[0], 11, "bold"),
             width=36, height=36, corner_radius=18
         )
-        self._avatar.pack(side="left", pady=16)
+        self._avatar.pack(side="left", pady=13)
 
-        # Bottom border
+        # Bottom separator
         ctk.CTkFrame(parent, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
@@ -546,45 +571,85 @@ class RelayGuiApp:
         sidebar.pack_propagate(False)
 
         nav_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        nav_frame.pack(fill="x", padx=8, pady=(20, 0))
+        nav_frame.pack(fill="x", padx=8, pady=(24, 0))
 
         nav_items = [
-            ("connect",     "Connect",     "⟳"),
-            ("dashboard",   "Dashboard",   "◈"),
-            ("tradingview", "TradingView", "◉"),
-            ("settings",    "Settings",    "⚙"),
+            ("connect",     "Connect",     "⊕"),
+            ("dashboard",   "Dashboard",   "⊞"),
+            ("tradingview", "TradingView", "◎"),
+            ("settings",    "Settings",    "◈"),
         ]
 
         for key, label, icon in nav_items:
-            btn = ctk.CTkButton(
+            is_active = key == "connect"
+
+            container = ctk.CTkFrame(
                 nav_frame,
-                text=f"  {icon}   {label}",
-                command=lambda k=key: self._switch_panel(k),
-                fg_color=NAV_ACTIVE_BG if key == "connect" else "transparent",
-                hover_color=NAV_HOVER_BG,
-                text_color=PRIMARY_LT if key == "connect" else FG_SOFT,
-                anchor="w",
-                font=FONT_BODY,
-                height=40,
+                fg_color=NAV_ACTIVE_BG if is_active else "transparent",
                 corner_radius=10,
-                border_width=1 if key == "connect" else 0,
-                border_color=BORDER_GLOW if key == "connect" else BORDER,
+                height=46
             )
-            btn.pack(fill="x", pady=2)
-            self._nav_btns[key] = btn
+            container.pack(fill="x", pady=2)
+            container.pack_propagate(False)
+
+            bar = ctk.CTkFrame(
+                container,
+                width=3, corner_radius=2,
+                fg_color=GOLD if is_active else "transparent"
+            )
+            bar.pack(side="left", fill="y", pady=10)
+
+            icon_lbl = ctk.CTkLabel(
+                container, text=icon,
+                text_color=GOLD_LT if is_active else FG_SOFT,
+                font=(FONT_BODY[0], 14),
+                fg_color="transparent",
+                width=28
+            )
+            icon_lbl.pack(side="left", padx=(6, 0))
+
+            text_lbl = ctk.CTkLabel(
+                container, text=label,
+                text_color=GOLD_LT if is_active else FG_SOFT,
+                font=FONT_BODY,
+                fg_color="transparent",
+                anchor="w"
+            )
+            text_lbl.pack(side="left", fill="x", expand=True, padx=(8, 8))
+
+            # Store in new data dict
+            self._nav_items_data[key] = (container, bar, icon_lbl, text_lbl)
+            # Backward compat
+            self._nav_btns[key] = container
+
+            # Bindings
+            def _on_click(e, k=key): self._switch_panel(k)
+            def _on_enter(e, k=key):
+                f, b, il, tl = self._nav_items_data[k]
+                if k != self.current_panel:
+                    f.configure(fg_color=NAV_HOVER_BG)
+            def _on_leave(e, k=key):
+                f, b, il, tl = self._nav_items_data[k]
+                if k != self.current_panel:
+                    f.configure(fg_color="transparent")
+
+            for widget in (container, icon_lbl, text_lbl):
+                widget.bind("<Button-1>", _on_click)
+                widget.bind("<Enter>",    _on_enter)
+                widget.bind("<Leave>",    _on_leave)
 
         # Divider
         ctk.CTkFrame(sidebar, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", padx=16, pady=(20, 16))
+            fill="x", padx=16, pady=(24, 16))
 
         # VPS status chip in sidebar
         self.vps_status_chip = _chip(sidebar, "● VPS INACTIVE", GLASS, text_color=FG_FAINT)
         self.vps_status_chip.pack(padx=16, anchor="w")
 
-        # Bottom: version
+        # Bottom: version label
         ver_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
         ver_frame.pack(side="bottom", fill="x", padx=16, pady=16)
-        _label(ver_frame, f"v{APP_VERSION}", color=FG_FAINT, font=FONT_SMALL).pack(anchor="w")
+        _label(ver_frame, f"v{APP_VERSION}", color=FG_FAINT, font=(FONT_SMALL[0], 10)).pack(anchor="w")
         _label(ver_frame, "PlatAlgo Relay", color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(anchor="w")
 
     # ── Content area ──────────────────────────────────────────────────────────
@@ -607,14 +672,12 @@ class RelayGuiApp:
         self._panels[key].pack(fill="both", expand=True)
         self.current_panel = key
 
-        for k, btn in self._nav_btns.items():
+        for k, (f, bar, il, tl) in self._nav_items_data.items():
             active = k == key
-            btn.configure(
-                fg_color=NAV_ACTIVE_BG if active else "transparent",
-                text_color=PRIMARY_LT if active else FG_SOFT,
-                border_width=1 if active else 0,
-                border_color=BORDER_GLOW if active else BORDER,
-            )
+            f.configure(fg_color=NAV_ACTIVE_BG if active else "transparent")
+            bar.configure(fg_color=GOLD if active else "transparent")
+            il.configure(text_color=GOLD_LT if active else FG_SOFT)
+            tl.configure(text_color=GOLD_LT if active else FG_SOFT)
 
         if key == "tradingview":
             self._update_tv_preview()
@@ -643,11 +706,10 @@ class RelayGuiApp:
         login_card = _card(left_col, glow=False)
         login_card.pack(fill="x", pady=(0, 12))
 
-        _chip(login_card, "STEP 1", GLASS_EMERALD, text_color=PRIMARY_LT).pack(
-            anchor="w", padx=20, pady=(20, 8))
-        _label(login_card, "Sign In", font=FONT_HERO, color=FG).pack(anchor="w", padx=20)
+        _label(login_card, "Sign In", font=FONT_TITLE, color=FG).pack(
+            anchor="w", padx=20, pady=(24, 0))
         _label(login_card, "Your PlatAlgo dashboard credentials",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(2, 16))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 16))
 
         # ── Login form (shown when not logged in via OAuth) ───────────────────
         self._login_form_inner = ctk.CTkFrame(login_card, fg_color="transparent")
@@ -684,19 +746,22 @@ class RelayGuiApp:
         olf_inner.pack(fill="x", padx=20, pady=(0, 12))
 
         olf_top = ctk.CTkFrame(olf_inner, fg_color="transparent")
-        olf_top.pack(fill="x", padx=16, pady=(14, 6))
+        olf_top.pack(fill="x", padx=16, pady=(16, 8))
 
+        # Checkmark circle
         self._oauth_provider_icon = ctk.CTkLabel(
-            olf_top, text="●", text_color=PRIMARY_LT,
-            font=(FONT_LABEL[0], 22), fg_color="transparent"
+            olf_top, text="✓", text_color=SUCCESS,
+            font=(FONT_LABEL[0], 20, "bold"),
+            fg_color=SUCCESS_BG, corner_radius=20,
+            width=36, height=36
         )
-        self._oauth_provider_icon.pack(side="left", padx=(0, 12))
+        self._oauth_provider_icon.pack(side="left", padx=(0, 14))
 
         olf_text = ctk.CTkFrame(olf_top, fg_color="transparent")
         olf_text.pack(side="left", fill="x", expand=True)
         self._oauth_provider_lbl = _label(
             olf_text, "Signed in via Google",
-            color=FG, font=(FONT_LABEL[0], 12, "bold")
+            color=FG, font=(FONT_LABEL[0], 13, "bold")
         )
         self._oauth_provider_lbl.pack(anchor="w")
         self._oauth_user_lbl = _label(
@@ -711,24 +776,37 @@ class RelayGuiApp:
 
         _divider(login_card)
 
+        _label(login_card, "Continue with", color=FG_SOFT, font=(FONT_SMALL[0], 10)).pack(
+            anchor="w", padx=20, pady=(0, 8))
+
         oauth_row = ctk.CTkFrame(login_card, fg_color="transparent")
         oauth_row.pack(fill="x", padx=20, pady=(0, 20))
         oauth_row.columnconfigure(0, weight=1)
         oauth_row.columnconfigure(1, weight=1)
-        _btn_outline(oauth_row, "G  Google", lambda: self._open_oauth("google"),
-                     height=38).grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        _btn_outline(oauth_row, "f  Facebook", lambda: self._open_oauth("facebook"),
-                     height=38).grid(row=0, column=1, sticky="ew", padx=(5, 0))
+
+        ctk.CTkButton(
+            oauth_row, text="G  Google",
+            command=lambda: self._open_oauth("google"),
+            fg_color=GLASS, hover_color=GLASS_GOLD,
+            text_color=FG, border_width=1, border_color=BORDER_SOFT,
+            font=FONT_BODY, height=40, corner_radius=10
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ctk.CTkButton(
+            oauth_row, text="f  Facebook",
+            command=lambda: self._open_oauth("facebook"),
+            fg_color=GLASS, hover_color=GLASS_GOLD,
+            text_color=FG, border_width=1, border_color=BORDER_SOFT,
+            font=FONT_BODY, height=40, corner_radius=10
+        ).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
         # ── LEFT: MT5 Broker Credentials ─────────────────────────────────────
         mt5_card = _card(left_col)
         mt5_card.pack(fill="x", pady=(0, 12))
 
-        _chip(mt5_card, "STEP 2", GLASS_GOLD, text_color=ACCENT_LT).pack(
-            anchor="w", padx=20, pady=(20, 8))
-        _label(mt5_card, "MT5 Broker Credentials", font=FONT_HERO, color=FG).pack(anchor="w", padx=20)
+        _label(mt5_card, "MT5 Broker Credentials", font=FONT_TITLE, color=FG).pack(
+            anchor="w", padx=20, pady=(24, 0))
         _label(mt5_card, "Used by the VPS to execute trades 24/7 on your account",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(2, 16))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 16))
 
         self.mt5_acct_entry = _entry(mt5_card, self.mt5_acct_var, "Account Number  (e.g. 123456789)")
         self.mt5_acct_entry.pack(fill="x", padx=20, pady=(0, 8))
@@ -741,7 +819,7 @@ class RelayGuiApp:
         self.mt5_server_entry.pack(fill="x", padx=20, pady=(0, 20))
 
         # ── RIGHT: Mode Selection ─────────────────────────────────────────────
-        _label(right_col, "Choose Execution Mode", font=FONT_HERO, color=FG).pack(
+        _label(right_col, "Execution Mode", font=FONT_TITLE, color=FG).pack(
             anchor="w", pady=(0, 4))
         _label(right_col, "Select how the relay connects MT5 to your trading signals.",
                color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", pady=(0, 16))
@@ -752,20 +830,19 @@ class RelayGuiApp:
 
         vps_hdr = ctk.CTkFrame(self.vps_card, fg_color="transparent")
         vps_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(vps_hdr, "☁  VPS Mode", font=FONT_HERO, color=ACCENT).pack(side="left")
-        _chip(vps_hdr, "RECOMMENDED", GLASS_GOLD, text_color=ACCENT_LT).pack(side="right")
+        _label(vps_hdr, "VPS Execution", font=FONT_HERO, color=GOLD_LT).pack(side="left")
+        _chip(vps_hdr, "RECOMMENDED", GLASS_GOLD, text_color=GOLD_LT).pack(side="right")
 
-        _label(self.vps_card, "Your MT5 runs on our server — trade 24/7 even when your computer is off.",
-               color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 0))
+        _label(self.vps_card, "24/7 automated trading — your MT5 runs on our server.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 0))
 
-        # Benefit bullets
         benefits = ["Trades execute 24 hours, 7 days a week",
                     "No MT5 needed on your machine",
                     "Works on Mac, Windows, or any device"]
         for b in benefits:
             row = ctk.CTkFrame(self.vps_card, fg_color="transparent")
-            row.pack(anchor="w", padx=20, pady=(4, 0))
-            _label(row, "✓", color=PRIMARY, font=FONT_SMALL).pack(side="left", padx=(0, 8))
+            row.pack(anchor="w", padx=20, pady=(6, 0))
+            _label(row, "→", color=GOLD, font=(FONT_SMALL[0], 11, "bold")).pack(side="left", padx=(0, 10))
             _label(row, b, color=FG_MUTED, font=FONT_SMALL).pack(side="left")
 
         _divider(self.vps_card)
@@ -784,22 +861,23 @@ class RelayGuiApp:
 
         local_hdr = ctk.CTkFrame(local_card, fg_color="transparent")
         local_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(local_hdr, "⬡  Local Mode", font=FONT_HERO, color=FG_SOFT).pack(side="left")
+        _label(local_hdr, "Local Mode", font=FONT_HERO, color=FG_SOFT).pack(side="left")
         if not IS_WINDOWS:
-            _chip(local_hdr, "WINDOWS ONLY", DANGER_BG, text_color=DANGER).pack(side="right")
+            _chip(local_hdr, "WINDOWS ONLY", GLASS_DARK, text_color=FG_FAINT).pack(side="right")
 
         _label(local_card, "Connect to an MT5 terminal running on this computer.",
                color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 0))
 
         caveats = [
-            ("✓", "Low latency — direct connection", FG_MUTED),
-            ("✗", "Requires MT5 open on this machine", DANGER),
-            ("✗", "No 24/7 — stops when computer sleeps", DANGER),
+            ("→", "Low latency — direct connection", FG_MUTED),
+            ("→", "Requires MT5 open on this machine", DANGER),
+            ("→", "No 24/7 — stops when computer sleeps", DANGER),
         ]
         for icon, text, color in caveats:
             row = ctk.CTkFrame(local_card, fg_color="transparent")
-            row.pack(anchor="w", padx=20, pady=(4, 0))
-            _label(row, icon, color=PRIMARY if icon == "✓" else DANGER, font=FONT_SMALL).pack(side="left", padx=(0, 8))
+            row.pack(anchor="w", padx=20, pady=(6, 0))
+            _label(row, icon, color=FG_SOFT if color == FG_MUTED else DANGER,
+                   font=(FONT_SMALL[0], 11, "bold")).pack(side="left", padx=(0, 10))
             _label(row, text, color=color, font=FONT_SMALL).pack(side="left")
 
         _divider(local_card)
@@ -813,13 +891,13 @@ class RelayGuiApp:
             local_btns,
             "Connect Local MT5" if IS_WINDOWS else "Windows Only",
             self.start_relay if IS_WINDOWS else lambda: None,
-            height=42,
+            height=44,
             state="normal" if IS_WINDOWS else "disabled"
         )
         self.connect_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5))
 
         _btn_danger(local_btns, "Stop / Disconnect", self.stop_relay,
-                    height=42).grid(row=0, column=1, sticky="ew", padx=(5, 0))
+                    height=44).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
         return frame
 
@@ -833,8 +911,8 @@ class RelayGuiApp:
 
         # ── Header row ────────────────────────────────────────────────────────
         hdr_row = ctk.CTkFrame(frame, fg_color="transparent")
-        hdr_row.pack(fill="x", padx=20, pady=(20, 0))
-        _label(hdr_row, "Dashboard", font=FONT_TITLE, color=FG).pack(side="left")
+        hdr_row.pack(fill="x", padx=24, pady=(24, 0))
+        _label(hdr_row, "Dashboard", font=FONT_DISPLAY, color=FG).pack(side="left")
 
         refresh_row = ctk.CTkFrame(hdr_row, fg_color="transparent")
         refresh_row.pack(side="right")
@@ -842,57 +920,66 @@ class RelayGuiApp:
                                        font=(FONT_BODY[0], 10), fg_color="transparent")
         self._live_dot2.pack(side="left", padx=(0, 6), pady=10)
         _btn_outline(refresh_row, "↺  Refresh", self._do_refresh,
-                     height=34, width=110).pack(side="left", pady=8)
+                     height=36, width=110).pack(side="left", pady=8)
         _btn_outline(refresh_row, "Open Web Dashboard",
                      lambda: webbrowser.open(self.bridge_url_var.get().rstrip("/") + "/dashboard"),
-                     height=34).pack(side="left", padx=(8, 0), pady=8)
+                     height=36).pack(side="left", padx=(8, 0), pady=8)
 
-        _label(frame, "Your live connection state, webhook URL, and API key.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 20))
+        _label(frame, "Live connection state, webhook URL, and API key.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(6, 24))
 
         # ── Connection status cards ───────────────────────────────────────────
         status_row = ctk.CTkFrame(frame, fg_color="transparent")
-        status_row.pack(fill="x", padx=20, pady=(0, 20))
+        status_row.pack(fill="x", padx=24, pady=(0, 24))
         status_row.columnconfigure(0, weight=1)
         status_row.columnconfigure(1, weight=1)
         status_row.columnconfigure(2, weight=1)
 
         conn_labels = {
-            "Bridge": ("◈", "Connected to PlatAlgo servers"),
-            "MT5":    ("◉", "MT5 terminal active & ready"),
-            "Broker": ("◆", "Broker server reachable"),
+            "Bridge": ("◈", ACCENT,   "PlatAlgo servers"),
+            "MT5":    ("◉", PRIMARY,  "MT5 terminal"),
+            "Broker": ("◆", SUCCESS,  "Broker server"),
         }
-        for col_i, (name, (icon, desc)) in enumerate(conn_labels.items()):
-            c = _card(status_row)
+        for col_i, (name, (icon, accent_color, desc)) in enumerate(conn_labels.items()):
+            c = ctk.CTkFrame(
+                status_row,
+                fg_color=BG_CARD, corner_radius=14,
+                border_width=1, border_color=BORDER,
+                height=120
+            )
             c.grid(row=0, column=col_i, sticky="ew",
                    padx=(0 if col_i == 0 else 6, 6 if col_i < 2 else 0))
+            c.pack_propagate(False)
 
-            dot, lbl = self.status_dots[name]
-            # Re-parent dots to this new card
             dot_new = ctk.CTkLabel(c, text="●", text_color=DANGER,
-                                   font=(FONT_BODY[0], 22), fg_color="transparent")
-            dot_new.pack(pady=(20, 4))
+                                   font=(FONT_BODY[0], 24), fg_color="transparent")
+            dot_new.pack(pady=(18, 4))
 
             _label(c, name, font=FONT_LABEL, color=FG).pack()
-            lbl_new = _label(c, f"{name}: Offline", color=FG_MUTED, font=FONT_SMALL)
-            lbl_new.pack(pady=(2, 6))
-            _label(c, desc, color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(pady=(0, 18))
+            lbl_new = _label(c, f"Offline", color=FG_MUTED, font=FONT_SMALL)
+            lbl_new.pack(pady=(2, 0))
 
-            # Override the status_dots entry with dashboard versions
+            # Thin colored bottom border
+            ctk.CTkFrame(c, height=3, fg_color=accent_color, corner_radius=0).pack(
+                fill="x", side="bottom")
+
             self.status_dots[name] = (dot_new, lbl_new)
 
         # ── Webhook URL ───────────────────────────────────────────────────────
-        webhook_card = _card(frame, glow=True)
-        webhook_card.pack(fill="x", padx=20, pady=(0, 14))
+        webhook_card = ctk.CTkFrame(
+            frame, fg_color=BG_CARD, corner_radius=14,
+            border_width=1, border_color=GOLD_BORDER
+        )
+        webhook_card.pack(fill="x", padx=24, pady=(0, 16))
 
         wh_hdr = ctk.CTkFrame(webhook_card, fg_color="transparent")
         wh_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(wh_hdr, "Your Webhook URL", font=FONT_LABEL, color=FG).pack(side="left")
+        _label(wh_hdr, "Webhook URL", font=FONT_LABEL, color=FG).pack(side="left")
         _chip(wh_hdr, "PASTE INTO TRADINGVIEW", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
 
         _label(webhook_card,
                "Paste this URL into TradingView alert → Notifications → Webhook URL",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 10))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 10))
 
         url_row = ctk.CTkFrame(webhook_card, fg_color="transparent")
         url_row.pack(fill="x", padx=20, pady=(0, 20))
@@ -900,9 +987,9 @@ class RelayGuiApp:
         url_entry = ctk.CTkEntry(
             url_row,
             textvariable=self.webhook_url_var,
-            fg_color=BG_INPUT, border_color=BORDER_GLOW,
-            text_color=PRIMARY_LT, font=FONT_MONO,
-            height=46, corner_radius=12, state="readonly"
+            fg_color=BG_INPUT, border_color=GOLD_BORDER,
+            text_color=GOLD_LT, font=FONT_MONO,
+            height=46, corner_radius=10, state="readonly"
         )
         url_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
@@ -914,7 +1001,7 @@ class RelayGuiApp:
 
         # ── API Key ───────────────────────────────────────────────────────────
         api_card = _card(frame)
-        api_card.pack(fill="x", padx=20, pady=(0, 14))
+        api_card.pack(fill="x", padx=24, pady=(0, 16))
 
         ak_hdr = ctk.CTkFrame(api_card, fg_color="transparent")
         ak_hdr.pack(fill="x", padx=20, pady=(20, 0))
@@ -923,37 +1010,37 @@ class RelayGuiApp:
 
         _label(api_card,
                "Include this in every TradingView alert message to authenticate your trades.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 10))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 10))
 
         ak_row = ctk.CTkFrame(api_card, fg_color="transparent")
-        ak_row.pack(fill="x", padx=20, pady=(0, 20))
+        ak_row.pack(fill="x", padx=20, pady=(0, 8))
 
         self._apikey_entry = ctk.CTkEntry(
             ak_row,
             textvariable=self.api_key_var,
             fg_color=BG_INPUT, border_color=BORDER_SOFT,
             text_color=ACCENT_LT, font=FONT_MONO,
-            height=46, corner_radius=12, state="readonly",
+            height=46, corner_radius=10, state="readonly",
             show="•"
         )
         self._apikey_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        self._ak_reveal_btn = _btn_outline(ak_row, "Show", height=46, width=70,
+        self._ak_reveal_btn = _btn_outline(ak_row, "Show", height=46, width=72,
                                            command=self._toggle_api_key_reveal)
         self._ak_reveal_btn.pack(side="left", padx=(0, 8))
 
-        self._ak_copy_btn = _btn_outline(ak_row, "Copy", height=46, width=70,
+        self._ak_copy_btn = _btn_outline(ak_row, "Copy", height=46, width=72,
                                          command=lambda: self._copy_to_clipboard(
                                              self.api_key_var.get(), self._ak_copy_btn))
         self._ak_copy_btn.pack(side="left")
 
         _label(api_card,
-               "Don't have an API key? Sign in with Google / Facebook OAuth or visit your web dashboard.",
-               color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(anchor="w", padx=20, pady=(0, 20))
+               "Don't have an API key? Sign in via OAuth or visit your web dashboard.",
+               color=FG_FAINT, font=(FONT_SMALL[0], 10)).pack(anchor="w", padx=20, pady=(4, 20))
 
         # ── Live Summary Mirror ───────────────────────────────────────────────
         mirror_card = _card(frame)
-        mirror_card.pack(fill="x", padx=20, pady=(0, 20))
+        mirror_card.pack(fill="x", padx=24, pady=(0, 24))
 
         mir_hdr = ctk.CTkFrame(mirror_card, fg_color="transparent")
         mir_hdr.pack(fill="x", padx=20, pady=(20, 0))
@@ -964,10 +1051,10 @@ class RelayGuiApp:
             fill="x", padx=0, pady=(12, 0))
 
         self.summary_text = ctk.CTkTextbox(
-            mirror_card, height=180,
-            fg_color=BG_INPUT, text_color=FG_SOFT,
+            mirror_card, height=220,
+            fg_color=BG_INPUT, text_color=FG,
             border_color=BORDER_SOFT, border_width=1,
-            font=FONT_MONO, corner_radius=12,
+            font=FONT_MONO, corner_radius=10,
         )
         self.summary_text.pack(fill="x", padx=20, pady=(12, 20))
         self.summary_text.insert("end", "Sign in to load your dashboard summary.")
@@ -983,14 +1070,14 @@ class RelayGuiApp:
                                        scrollbar_button_color=BORDER_SOFT,
                                        scrollbar_button_hover_color=BORDER_GLOW)
 
-        _label(frame, "TradingView Setup", font=FONT_TITLE, color=FG).pack(
-            anchor="w", padx=20, pady=(20, 4))
+        _label(frame, "TradingView Setup", font=FONT_DISPLAY, color=FG).pack(
+            anchor="w", padx=24, pady=(24, 4))
         _label(frame, "Build your alert message and copy it straight into TradingView.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 20))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 24))
 
         # ── Two-column layout ─────────────────────────────────────────────────
         cols = ctk.CTkFrame(frame, fg_color="transparent")
-        cols.pack(fill="both", expand=True, padx=20)
+        cols.pack(fill="both", expand=True, padx=24)
         cols.columnconfigure(0, weight=5)
         cols.columnconfigure(1, weight=7)
 
@@ -1088,18 +1175,25 @@ class RelayGuiApp:
             anchor="w", padx=20, pady=(0, 4))
         action_frame = ctk.CTkFrame(builder_card, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=(0, 12))
+        _action_colors = {
+            "BUY":  (SUCCESS_BG, SUCCESS,  "#0A2010"),
+            "SELL": (DANGER_BG,  DANGER,   "#200A06"),
+        }
         for action_val in ["BUY", "SELL"]:
             is_sel = self.tv_action_var.get() == action_val
+            bg_sel, fg_sel, bg_hov = _action_colors[action_val]
             btn = ctk.CTkButton(
                 action_frame, text=action_val,
-                height=36, width=80, corner_radius=8,
-                fg_color=PRIMARY_DK if is_sel else GLASS,
-                hover_color=PRIMARY_DK,
-                text_color=PRIMARY_LT if is_sel else FG_MUTED,
-                font=(FONT_BODY[0], 11, "bold"),
+                height=40, width=88, corner_radius=10,
+                fg_color=bg_sel if is_sel else GLASS,
+                hover_color=bg_hov,
+                text_color=fg_sel if is_sel else FG_MUTED,
+                border_width=1,
+                border_color=fg_sel if is_sel else BORDER,
+                font=(FONT_BODY[0], 12, "bold"),
                 command=lambda v=action_val: self._set_tv_action(v)
             )
-            btn.pack(side="left", padx=(0, 6))
+            btn.pack(side="left", padx=(0, 8))
             if not hasattr(self, "_tv_action_btns"):
                 self._tv_action_btns = {}
             self._tv_action_btns[action_val] = btn
@@ -1157,10 +1251,10 @@ class RelayGuiApp:
                color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 8))
 
         self._tv_preview = ctk.CTkTextbox(
-            builder_card, height=200,
+            builder_card, height=220,
             fg_color=BG_INPUT, text_color=PRIMARY_LT,
             border_color=BORDER_GLOW, border_width=1,
-            font=FONT_MONO, corner_radius=12, wrap="none"
+            font=FONT_MONO, corner_radius=10, wrap="none"
         )
         self._tv_preview.pack(fill="x", padx=20, pady=(0, 12))
 
@@ -1185,14 +1279,14 @@ class RelayGuiApp:
                                        scrollbar_button_color=BORDER_SOFT,
                                        scrollbar_button_hover_color=BORDER_GLOW)
 
-        _label(frame, "Settings", font=FONT_TITLE, color=FG).pack(
-            anchor="w", padx=20, pady=(20, 4))
+        _label(frame, "Settings", font=FONT_DISPLAY, color=FG).pack(
+            anchor="w", padx=24, pady=(24, 4))
         _label(frame, "Advanced configuration and execution logs.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 20))
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 24))
 
         # ── Connection Settings ───────────────────────────────────────────────
         conn_card = _card(frame)
-        conn_card.pack(fill="x", padx=20, pady=(0, 14))
+        conn_card.pack(fill="x", padx=24, pady=(0, 16))
 
         _section_header(conn_card, "Bridge Connection",
                         "Override only if using a self-hosted bridge server.")
@@ -1205,7 +1299,7 @@ class RelayGuiApp:
         # ── MT5 Settings (Windows only) ───────────────────────────────────────
         if IS_WINDOWS:
             mt5_card = _card(frame)
-            mt5_card.pack(fill="x", padx=20, pady=(0, 14))
+            mt5_card.pack(fill="x", padx=24, pady=(0, 16))
 
             _section_header(mt5_card, "MT5 Terminal Path",
                             "Path to terminal64.exe. Auto-detected if left blank.")
@@ -1221,13 +1315,13 @@ class RelayGuiApp:
 
         # ── Startup ───────────────────────────────────────────────────────────
         startup_card = _card(frame)
-        startup_card.pack(fill="x", padx=20, pady=(0, 14))
+        startup_card.pack(fill="x", padx=24, pady=(0, 16))
 
         _section_header(startup_card, "Startup Behavior",
                         "Control whether the relay launches automatically with your system.")
 
         startup_row = ctk.CTkFrame(startup_card, fg_color="transparent")
-        startup_row.pack(fill="x", padx=20, pady=(0, 20))
+        startup_row.pack(fill="x", padx=20, pady=(0, 24))
         ctk.CTkSwitch(
             startup_row,
             text="Launch relay on system startup",
@@ -1240,10 +1334,10 @@ class RelayGuiApp:
 
         # ── Danger Zone ───────────────────────────────────────────────────────
         danger_card = _card(frame, fg_color=DANGER_BG, border_color=DANGER_BORDER)
-        danger_card.pack(fill="x", padx=20, pady=(0, 14))
+        danger_card.pack(fill="x", padx=24, pady=(0, 16))
 
         _label(danger_card, "Danger Zone", font=FONT_LABEL, color=DANGER).pack(
-            anchor="w", padx=20, pady=(18, 4))
+            anchor="w", padx=20, pady=(20, 4))
         _label(danger_card, "Stop all active connections. This will interrupt any running relay loops.",
                color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 12))
 
@@ -1255,12 +1349,12 @@ class RelayGuiApp:
 
         # ── Execution Logs ────────────────────────────────────────────────────
         log_card = _card(frame)
-        log_card.pack(fill="x", padx=20, pady=(0, 20))
+        log_card.pack(fill="x", padx=24, pady=(0, 24))
 
         log_hdr = ctk.CTkFrame(log_card, fg_color="transparent")
-        log_hdr.pack(fill="x", padx=20, pady=(18, 0))
+        log_hdr.pack(fill="x", padx=20, pady=(20, 0))
         _label(log_hdr, "Execution Logs", font=FONT_LABEL, color=FG).pack(side="left")
-        _btn_outline(log_hdr, "Clear", height=30, width=70,
+        _btn_outline(log_hdr, "Clear", height=32, width=72,
                      command=self._clear_logs).pack(side="right")
 
         ctk.CTkFrame(log_card, height=1, fg_color=BORDER, corner_radius=0).pack(
@@ -1281,11 +1375,17 @@ class RelayGuiApp:
     # =========================================================================
     def _set_tv_action(self, value: str):
         self.tv_action_var.set(value)
+        _action_colors = {
+            "BUY":  (SUCCESS_BG, SUCCESS,  BORDER),
+            "SELL": (DANGER_BG,  DANGER,   BORDER),
+        }
         for v, btn in self._tv_action_btns.items():
             active = v == value
+            bg_sel, fg_sel, _ = _action_colors[v]
             btn.configure(
-                fg_color=PRIMARY_DK if active else GLASS,
-                text_color=PRIMARY_LT if active else FG_MUTED,
+                fg_color=bg_sel if active else GLASS,
+                text_color=fg_sel if active else FG_MUTED,
+                border_color=fg_sel if active else BORDER,
             )
 
     def _update_tv_preview(self):
