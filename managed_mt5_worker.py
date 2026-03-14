@@ -154,12 +154,14 @@ class MT5UserSession:
             except Exception:
                 pass
 
-            ok = mt5.initialize(
-                path=self._path,
-                login=self._login,
-                password=self._password,
-                server=self._server,
-            )
+            init_kwargs: dict = {
+                "login":    self._login,
+                "password": self._password,
+                "server":   self._server,
+            }
+            if self._path:          # omit path entirely when empty/None
+                init_kwargs["path"] = self._path
+            ok = mt5.initialize(**init_kwargs)
             if ok:
                 info = mt5.account_info()
                 name = f"account {info.login} on {info.server}" if info else "unknown account"
