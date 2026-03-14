@@ -50,26 +50,25 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette — Dark Carbon (Premium Trading) ─────────────────────────────
-# Neutral carbon blacks + Amber gold brand + Green active states
-# Exact shades: Tailwind Neutral/Gray family + Amber + Green
-BG            = "#0A0A0A"   # Neutral-950 — true near-black
-BG_ELEVATED   = "#111111"   # Neutral-900 — sidebar, header
-BG_CARD       = "#171717"   # Neutral-900+ — card surfaces
-BG_INPUT      = "#1F1F1F"   # Neutral-850 — input fields
-BG_PANEL      = "#0D0D0D"   # Neutral-960 — main content
+# ── Color Palette — Dark Emerald (Premium Trading) ────────────────────────────
+# Dark emerald green backgrounds + Amber gold CTAs + Bright green accents
+BG            = "#0A0F0C"   # Darkest emerald — main background
+BG_ELEVATED   = "#0D1610"   # Dark emerald — sidebar, header
+BG_CARD       = "#112018"   # Emerald card surface — clearly lifted
+BG_INPUT      = "#162B1E"   # Emerald input fields
+BG_PANEL      = "#0B120E"   # Content area background
 
-GLASS         = "#1A1A1A"   # Glass overlay
-GLASS_GOLD    = "#1A0E00"   # Amber-tinted dark overlay
-GLASS_EMERALD = "#0A1F12"   # Green-tinted dark overlay
-GLASS_DARK    = "#050505"   # Deepest overlay
+GLASS         = "#162B1E"   # Glass overlay — emerald tint
+GLASS_GOLD    = "#1A0E00"   # Amber-tinted overlay
+GLASS_EMERALD = "#0D2318"   # Deep emerald overlay
+GLASS_DARK    = "#060C08"   # Deepest overlay
 
-FG            = "#FFFFFF"   # Pure white — maximum clarity
-FG_MUTED      = "#9CA3AF"   # Gray-400 — comfortable secondary text
-FG_SOFT       = "#6B7280"   # Gray-500 — tertiary labels
-FG_FAINT      = "#374151"   # Gray-700 — near-invisible
+FG            = "#ECFDF5"   # Emerald-50 — soft white with green tint
+FG_MUTED      = "#86EFAC"   # Green-300 — muted readable text
+FG_SOFT       = "#4ADE80"   # Green-400 — tertiary labels
+FG_FAINT      = "#166534"   # Green-800 — near-invisible dividers
 
-GOLD          = "#D97706"   # Amber-600 — rich warm gold, CTA buttons
+GOLD          = "#D97706"   # Amber-600 — CTA buttons, brand accent
 GOLD_LT       = "#F59E0B"   # Amber-500 — lighter gold
 GOLD_DK       = "#92400E"   # Amber-800 — pressed gold
 GOLD_GLOW     = "#0D0700"   # Amber deep shadow
@@ -78,8 +77,8 @@ GOLD_SHINE    = "#FCD34D"   # Amber-300 — highlight shimmer
 
 PRIMARY       = "#22C55E"   # Green-500 — active nav, interactive
 PRIMARY_LT    = "#4ADE80"   # Green-400 — lighter active states
-PRIMARY_DK    = "#15803D"   # Green-700 — pressed / deep green
-PRIMARY_GLOW  = "#052E16"   # Green-950 — deep green shadow
+PRIMARY_DK    = "#15803D"   # Green-700 — pressed / deep
+PRIMARY_GLOW  = "#052E16"   # Green-950 shadow
 
 ACCENT        = "#22C55E"   # Green-500 — connected / live
 ACCENT_LT     = "#4ADE80"   # Green-400
@@ -92,13 +91,13 @@ DANGER        = "#EF4444"   # Red-500 — error / disconnect
 DANGER_BG     = "#1C0000"   # Red deep background
 DANGER_BORDER = "#7F1D1D"   # Red-900
 
-BORDER        = "#262626"   # Neutral-800 — crisp separator
-BORDER_SOFT   = "#404040"   # Neutral-700 — softer dividers
+BORDER        = "#166534"   # Green-800 — emerald separator
+BORDER_SOFT   = "#15803D"   # Green-700 — softer dividers
 BORDER_GLOW   = "#D97706"   # Amber gold accent border
 BORDER_GOLD   = "#451A03"   # Deep gold border
 
-NAV_ACTIVE_BG = "#0F2318"   # Deep green-tinted — active nav background
-NAV_HOVER_BG  = "#141414"   # Subtle hover state
+NAV_ACTIVE_BG = "#14402A"   # Bright emerald-tinted active nav bg
+NAV_HOVER_BG  = "#0F2318"   # Subtle hover
 
 # ── Typography ────────────────────────────────────────────────────────────────
 DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
