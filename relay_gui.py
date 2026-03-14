@@ -464,12 +464,6 @@ class RelayGuiApp:
         outer = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
         outer.pack(fill="both", expand=True)
 
-        # Top accent stripe
-        stripe = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0, height=3)
-        stripe.pack(fill="x")
-        ctk.CTkFrame(stripe, fg_color=GOLD, height=2, corner_radius=0).pack(fill="x")
-        ctk.CTkFrame(stripe, fg_color=GOLD_DK, height=1, corner_radius=0).pack(fill="x")
-
         self._build_header(outer)
 
         # Body: sidebar + content
@@ -492,7 +486,7 @@ class RelayGuiApp:
         hdr.pack_propagate(False)
 
         inner = ctk.CTkFrame(hdr, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=24, pady=0)
+        inner.pack(fill="both", expand=True, padx=20, pady=0)
 
         # ── Left: Logo ────────────────────────────────────────────────────────
         logo_row = ctk.CTkFrame(inner, fg_color="transparent")
@@ -504,37 +498,18 @@ class RelayGuiApp:
                 _logo_img = ctk.CTkImage(
                     light_image=Image.open(_icon_path),
                     dark_image=Image.open(_icon_path),
-                    size=(32, 32)
+                    size=(28, 28)
                 )
                 ctk.CTkLabel(logo_row, image=_logo_img, text="",
-                             fg_color="transparent").pack(side="left", padx=(0, 10), pady=15)
+                             fg_color="transparent").pack(side="left", padx=(0, 8), pady=17)
             except Exception:
                 pass
-        _label(logo_row, "PlatAlgo", color=GOLD_LT,
-               font=(FONT_HERO[0], 16, "bold")).pack(side="left", pady=20)
+        _label(logo_row, "PlatAlgo", color=FG,
+               font=(FONT_HERO[0], 15, "bold")).pack(side="left", pady=20)
         _label(logo_row, "  Relay", color=FG_SOFT,
-               font=(FONT_BODY[0], 12)).pack(side="left", pady=(22, 18))
+               font=(FONT_BODY[0], 13)).pack(side="left", pady=(22, 18))
 
-        # ── Center: Status pills ──────────────────────────────────────────────
-        dots_frame = ctk.CTkFrame(inner, fg_color="transparent")
-        dots_frame.pack(side="left", fill="y", padx=(40, 0))
-
-        for name in ["Bridge", "MT5", "Broker"]:
-            pill = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
-                                border_width=1, border_color=BORDER)
-            pill.pack(side="left", padx=(0, 8), pady=16)
-
-            dot = ctk.CTkLabel(pill, text="●", text_color=DANGER,
-                               font=(FONT_BODY[0], 10), fg_color="transparent")
-            dot.pack(side="left", padx=(10, 0), pady=6)
-
-            lbl = _label(pill, f"{name}: Offline", color=FG_MUTED, font=(FONT_SMALL[0], 10))
-            lbl.pack(side="left", padx=(4, 12), pady=6)
-
-            self.status_dots[name]  = (dot, lbl)
-            self._header_dots[name] = (dot, lbl)
-
-        # ── Right ─────────────────────────────────────────────────────────────
+        # ── Right: status pills ───────────────────────────────────────────────
         right = ctk.CTkFrame(inner, fg_color="transparent")
         right.pack(side="right", fill="y")
 
@@ -543,69 +518,52 @@ class RelayGuiApp:
         self._live_dot.pack(side="left", padx=(0, 4), pady=24)
 
         self._latency_badge = ctk.CTkLabel(
-            right, text="○ OFFLINE",
-            text_color=FG_FAINT, font=(FONT_CAPTION[0], 10, "bold"),
-            fg_color=GLASS, corner_radius=999, padx=10, pady=5
+            right, text="OFFLINE / Idle",
+            text_color=FG_SOFT, font=(FONT_CAPTION[0], 10, "bold"),
+            fg_color=GLASS, corner_radius=999, padx=12, pady=5
         )
-        self._latency_badge.pack(side="left", padx=(0, 10), pady=24)
-
-        self._status_pill = ctk.CTkLabel(
-            right, textvariable=self.status_var,
-            text_color=FG_MUTED, font=FONT_SMALL,
-            fg_color=GLASS, corner_radius=999, padx=14, pady=6
-        )
-        self._status_pill.pack(side="left", padx=(0, 14), pady=22)
+        self._latency_badge.pack(side="left", padx=(0, 14), pady=24)
 
         self._avatar = ctk.CTkLabel(
             right, text="--",
-            fg_color=GOLD_GLOW, text_color=GOLD_LT,
+            fg_color=GLASS_GOLD, text_color=GOLD_LT,
             font=(FONT_LABEL[0], 11, "bold"),
-            width=36, height=36, corner_radius=18
+            width=34, height=34, corner_radius=17
         )
-        self._avatar.pack(side="left", pady=13)
+        self._avatar.pack(side="left", pady=14, padx=(0, 4))
+
+        # ── Center-left: Connection status pills ──────────────────────────────
+        dots_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        dots_frame.pack(side="right", fill="y", padx=(0, 20))
+
+        for name in ["Bridge", "MT5", "Broker"]:
+            pill = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
+                                border_width=1, border_color=BORDER)
+            pill.pack(side="left", padx=(0, 8), pady=16)
+
+            dot = ctk.CTkLabel(pill, text="●", text_color=DANGER,
+                               font=(FONT_BODY[0], 9), fg_color="transparent")
+            dot.pack(side="left", padx=(10, 0), pady=6)
+
+            lbl = _label(pill, f" {name}: Offline", color=FG_SOFT, font=(FONT_SMALL[0], 10))
+            lbl.pack(side="left", padx=(2, 12), pady=6)
+
+            self.status_dots[name]  = (dot, lbl)
+            self._header_dots[name] = (dot, lbl)
+
+        self._status_pill = None  # not shown separately
 
         ctk.CTkFrame(parent, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
     def _build_sidebar(self, parent):
-        sidebar = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, width=230, corner_radius=0)
+        sidebar = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, width=220, corner_radius=0)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
-        # ── App logo section ──────────────────────────────────────────────────
-        logo_sec = ctk.CTkFrame(sidebar, fg_color="transparent", height=76)
-        logo_sec.pack(fill="x")
-        logo_sec.pack_propagate(False)
-
-        logo_row = ctk.CTkFrame(logo_sec, fg_color="transparent")
-        logo_row.pack(fill="both", expand=True, padx=18, pady=0)
-
-        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
-        if Image and os.path.exists(_icon_path):
-            try:
-                _sbar_img = ctk.CTkImage(
-                    light_image=Image.open(_icon_path),
-                    dark_image=Image.open(_icon_path),
-                    size=(34, 34)
-                )
-                ctk.CTkLabel(logo_row, image=_sbar_img, text="",
-                             fg_color="transparent").pack(side="left", padx=(0, 10), pady=21)
-            except Exception:
-                pass
-
-        name_col = ctk.CTkFrame(logo_row, fg_color="transparent")
-        name_col.pack(side="left", fill="y")
-        _label(name_col, "PlatAlgo", color=GOLD_LT,
-               font=(FONT_LABEL[0], 14, "bold")).pack(anchor="w", pady=(20, 0))
-        _label(name_col, "Relay", color=FG_SOFT,
-               font=(FONT_SMALL[0], 10)).pack(anchor="w")
-
-        # Gold accent line under logo
-        ctk.CTkFrame(sidebar, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
-
         # ── Nav items ─────────────────────────────────────────────────────────
         nav_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        nav_frame.pack(fill="x", padx=10, pady=(16, 0))
+        nav_frame.pack(fill="x", padx=10, pady=(12, 0))
 
         nav_items = [
             ("connect",      "Connect",      "⊕"),
@@ -621,8 +579,8 @@ class RelayGuiApp:
             container = ctk.CTkFrame(
                 nav_frame,
                 fg_color=NAV_ACTIVE_BG if is_active else "transparent",
-                corner_radius=10,
-                height=50
+                corner_radius=8,
+                height=48
             )
             container.pack(fill="x", pady=2)
             container.pack_propagate(False)
