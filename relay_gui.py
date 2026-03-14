@@ -116,7 +116,7 @@ FONT_MONO    = ("Consolas", 11)
 FONT_MONO_SM = ("Consolas", 10)
 
 # ── App constants ─────────────────────────────────────────────────────────────
-PRODUCTION_BRIDGE_URL = "https://app.platalgo.com"
+PRODUCTION_BRIDGE_URL = "http://app.platalgo.com"
 KEYRING_SERVICE       = "platalgo-relay"
 LAST_USER_FILE        = "relay_last_user.json"
 WIN_TASK_NAME         = "PlatAlgoRelay"
@@ -1542,7 +1542,7 @@ class RelayGuiApp:
                     ("Copy it", "Click the Copy button — the URL is now in your clipboard."),
                     ("Keep it private", "This URL is unique to your account. Don't share it publicly."),
                 ],
-                "tip": "Your webhook URL looks like: https://app.platalgo.com/webhook/your_user_id",
+                "tip": "Your webhook URL looks like: http://app.platalgo.com/webhook/your_user_id",
             },
             {
                 "num":   "04",
@@ -1660,7 +1660,7 @@ class RelayGuiApp:
             ("Is my MT5 password secure?",
              "Yes. Passwords are encrypted before storage using AES-256 and are never transmitted in plain text. OAuth tokens (Google/Facebook) replace passwords entirely for dashboard access."),
             ("The app says 'Bridge Offline' — what does that mean?",
-             "The app can't reach the PlatAlgo server. Check your internet connection, or go to Settings and verify the Bridge URL is set to https://app.platalgo.com"),
+             "The app can't reach the PlatAlgo server. Check your internet connection, or go to Settings and verify the Bridge URL is set to http://app.platalgo.com"),
         ]
 
         for q, a in faqs:
@@ -1720,7 +1720,7 @@ class RelayGuiApp:
 
         _label(conn_card, "Bridge URL", color=FG_MUTED, font=FONT_SMALL).pack(
             anchor="w", padx=20, pady=(0, 4))
-        _entry(conn_card, self.bridge_url_var, "https://app.platalgo.com").pack(
+        _entry(conn_card, self.bridge_url_var, "http://app.platalgo.com").pack(
             fill="x", padx=20, pady=(0, 20))
 
         # ── MT5 Settings (Windows only) ───────────────────────────────────────
