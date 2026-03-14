@@ -50,44 +50,44 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette ─────────────────────────────────────────────────────────────
-BG            = "#07110a"   # Deepest background
-BG_ELEVATED   = "#0b1610"   # Sidebar / elevated surfaces
-BG_CARD       = "#0f1c14"   # Card surfaces
-BG_INPUT      = "#0c1710"   # Input fields
-BG_PANEL      = "#09130c"   # Content area base
+# ── Color Palette (Apple Dark / Glass) ────────────────────────────────────────
+BG            = "#000000"   # True black
+BG_ELEVATED   = "#1c1c1e"   # Apple secondary background
+BG_CARD       = "#1c1c1e"   # Card surfaces
+BG_INPUT      = "#2c2c2e"   # Input fields
+BG_PANEL      = "#0a0a0a"   # Content area base
 
-GLASS         = "#131f17"   # Glass base
-GLASS_EMERALD = "#162e1e"   # Green-tinted glass
-GLASS_GOLD    = "#2b2108"   # Gold-tinted glass
-GLASS_DARK    = "#0d170f"   # Darker glass overlay
+GLASS         = "#242426"   # Glass tile
+GLASS_EMERALD = "#0a1a2e"   # Blue-tinted glass
+GLASS_GOLD    = "#1a1a2e"   # Indigo-tinted glass
+GLASS_DARK    = "#111113"   # Darker glass overlay
 
-FG            = "#e8f0ea"   # Primary text
-FG_MUTED      = "#5e8a6e"   # Muted / secondary text
-FG_SOFT       = "#9dbfaa"   # Tertiary text
-FG_FAINT      = "#4a7a5e"   # Faint / placeholder text
+FG            = "#ffffff"   # Pure white
+FG_MUTED      = "#8e8e93"   # Apple system gray
+FG_SOFT       = "#636366"   # Tertiary label
+FG_FAINT      = "#48484a"   # Quaternary label / placeholder
 
-PRIMARY       = "#18c462"   # Vivid emerald
-PRIMARY_LT    = "#22e874"   # Bright emerald (hover)
-PRIMARY_DK    = "#0d7a3c"   # Deep emerald
-PRIMARY_GLOW  = "#163a22"   # Emerald glow for borders
+PRIMARY       = "#0a84ff"   # Apple system blue (dark mode)
+PRIMARY_LT    = "#409cff"   # Lighter blue
+PRIMARY_DK    = "#0066cc"   # Darker blue
+PRIMARY_GLOW  = "#001530"   # Blue glow bg
 
-ACCENT        = "#e8c060"   # Warm gold
-ACCENT_LT     = "#f5d87a"   # Bright gold
-ACCENT_DK     = "#9c7e18"   # Deep gold
-ACCENT_GLOW   = "#2d240e"   # Gold glow
+ACCENT        = "#64d2ff"   # Apple system teal
+ACCENT_LT     = "#a0e8ff"   # Light teal
+ACCENT_DK     = "#30b0d8"   # Dark teal
+ACCENT_GLOW   = "#001a22"   # Teal glow bg
 
-BORDER        = "#132018"   # Subtle border
-BORDER_SOFT   = "#1c3526"   # Softer border
-BORDER_GLOW   = "#1d6e3a"   # Active border glow (emerald)
-BORDER_GOLD   = "#5a4612"   # Active border glow (gold)
+BORDER        = "#38383a"   # Apple separator
+BORDER_SOFT   = "#48484a"   # Softer border
+BORDER_GLOW   = "#0a84ff"   # Active border (blue)
+BORDER_GOLD   = "#38383a"   # Neutral border
 
-DANGER        = "#d94f4f"   # Error red
-DANGER_BG     = "#200d0d"   # Error background
+DANGER        = "#ff453a"   # Apple system red
+DANGER_BG     = "#1a0800"   # Error background
 DANGER_BORDER = "#5c1818"   # Error border
 
-NAV_ACTIVE_BG = "#111f16"   # Active nav item bg
-NAV_HOVER_BG  = "#0e1a12"   # Hover nav item bg
+NAV_ACTIVE_BG = "#2c2c2e"   # Active nav item bg
+NAV_HOVER_BG  = "#1c1c1e"   # Hover nav item bg
 
 # ── Typography ────────────────────────────────────────────────────────────────
 DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
@@ -319,6 +319,19 @@ class RelayGuiApp:
         if hasattr(self.root, "configure"):
             self.root.configure(fg_color=BG)
 
+        # ── App icon ──────────────────────────────────────────────────────────
+        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+        if os.path.exists(_icon_path):
+            try:
+                if IS_WINDOWS:
+                    self.root.iconbitmap(_icon_path)
+                else:
+                    from PIL import Image as _PILImage, ImageTk as _PILImageTk
+                    _img = _PILImageTk.PhotoImage(file=_icon_path)
+                    self.root.iconphoto(True, _img)
+            except Exception:
+                pass
+
         # ── StringVars ────────────────────────────────────────────────────────
         self.user_id_var     = ctk.StringVar()
         self.password_var    = ctk.StringVar()
@@ -368,6 +381,9 @@ class RelayGuiApp:
         self._apikey_entry    = None
         self._tv_preview      = None
         self._adv_frame       = None  # kept for compat
+        self._oauth_provider      = None
+        self._login_form_inner    = None
+        self._oauth_logged_in_frame = None
         self.adv_visible      = False
         self.log_box          = None
 
@@ -410,11 +426,11 @@ class RelayGuiApp:
                 hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
                 dark = ctypes.c_int(1)
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
-                mica = ctypes.c_int(2)
+                acrylic = ctypes.c_int(3)
                 try:
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(mica), ctypes.sizeof(mica))
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(acrylic), ctypes.sizeof(acrylic))
                 except Exception:
-                    self.root.wm_attributes("-alpha", 0.97)
+                    self.root.wm_attributes("-alpha", 0.93)
             elif IS_MAC:
                 try:
                     self.root.wm_attributes("-transparent", True)
@@ -630,13 +646,17 @@ class RelayGuiApp:
         _label(login_card, "Your PlatAlgo dashboard credentials",
                color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(2, 16))
 
-        self.user_entry = _entry(login_card, self.user_id_var, "Username")
+        # ── Login form (shown when not logged in via OAuth) ───────────────────
+        self._login_form_inner = ctk.CTkFrame(login_card, fg_color="transparent")
+        self._login_form_inner.pack(fill="x")
+
+        self.user_entry = _entry(self._login_form_inner, self.user_id_var, "Username")
         self.user_entry.pack(fill="x", padx=20, pady=(0, 8))
 
-        self.pass_entry = _entry(login_card, self.password_var, "Password", show="*")
+        self.pass_entry = _entry(self._login_form_inner, self.password_var, "Password", show="*")
         self.pass_entry.pack(fill="x", padx=20, pady=(0, 8))
 
-        opts = ctk.CTkFrame(login_card, fg_color="transparent")
+        opts = ctk.CTkFrame(self._login_form_inner, fg_color="transparent")
         opts.pack(fill="x", padx=20, pady=(0, 12))
         ctk.CTkCheckBox(opts, text="Remember me", variable=self.remember_var,
                         text_color=FG_MUTED, font=FONT_SMALL,
@@ -648,8 +668,43 @@ class RelayGuiApp:
                         fg_color=PRIMARY, hover_color=PRIMARY_LT,
                         checkmark_color=BG).pack(side="left", padx=(16, 0))
 
-        _btn_gold(login_card, "Sign In  →", self._sign_in, height=46).pack(
+        _btn_gold(self._login_form_inner, "Sign In  →", self._sign_in, height=46).pack(
             fill="x", padx=20, pady=(0, 12))
+
+        # ── OAuth logged-in banner (hidden until OAuth completes) ─────────────
+        self._oauth_logged_in_frame = ctk.CTkFrame(login_card, fg_color="transparent")
+        # Not packed yet — shown by _on_oauth_success()
+
+        _olf = self._oauth_logged_in_frame
+        olf_inner = ctk.CTkFrame(_olf, fg_color=GLASS, corner_radius=14,
+                                 border_width=1, border_color=BORDER_GLOW)
+        olf_inner.pack(fill="x", padx=20, pady=(0, 12))
+
+        olf_top = ctk.CTkFrame(olf_inner, fg_color="transparent")
+        olf_top.pack(fill="x", padx=16, pady=(14, 6))
+
+        self._oauth_provider_icon = ctk.CTkLabel(
+            olf_top, text="●", text_color=PRIMARY_LT,
+            font=(FONT_LABEL[0], 22), fg_color="transparent"
+        )
+        self._oauth_provider_icon.pack(side="left", padx=(0, 12))
+
+        olf_text = ctk.CTkFrame(olf_top, fg_color="transparent")
+        olf_text.pack(side="left", fill="x", expand=True)
+        self._oauth_provider_lbl = _label(
+            olf_text, "Signed in via Google",
+            color=FG, font=(FONT_LABEL[0], 12, "bold")
+        )
+        self._oauth_provider_lbl.pack(anchor="w")
+        self._oauth_user_lbl = _label(
+            olf_text, "—",
+            color=FG_MUTED, font=FONT_SMALL
+        )
+        self._oauth_user_lbl.pack(anchor="w")
+
+        _btn_outline(_olf, "Sign out / Switch account",
+                     self._sign_out_oauth, height=36).pack(
+            fill="x", padx=20, pady=(0, 14))
 
         _divider(login_card)
 
@@ -1030,7 +1085,7 @@ class RelayGuiApp:
             anchor="w", padx=20, pady=(0, 4))
         action_frame = ctk.CTkFrame(builder_card, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=(0, 12))
-        for action_val in ["BUY", "SELL", "CLOSE", "CLOSE_ALL"]:
+        for action_val in ["BUY", "SELL"]:
             is_sel = self.tv_action_var.get() == action_val
             btn = ctk.CTkButton(
                 action_frame, text=action_val,
@@ -1052,8 +1107,23 @@ class RelayGuiApp:
         fields_grid.columnconfigure(0, weight=1)
         fields_grid.columnconfigure(1, weight=1)
 
+        # Symbol field with quick-pick buttons
+        sym_fc = ctk.CTkFrame(fields_grid, fg_color="transparent")
+        sym_fc.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 8))
+        _label(sym_fc, "Symbol", color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", pady=(0, 4))
+        _entry(sym_fc, self.tv_symbol_var, "{{ticker}} or EURUSD", height=38).pack(fill="x")
+        sym_quick = ctk.CTkFrame(sym_fc, fg_color="transparent")
+        sym_quick.pack(fill="x", pady=(4, 0))
+        for sym in ["EURUSD", "XAUUSD", "BTCUSD", "{{ticker}}"]:
+            ctk.CTkButton(
+                sym_quick, text=sym, height=24,
+                font=(FONT_SMALL[0], 9), corner_radius=6,
+                fg_color=GLASS, hover_color=BORDER_SOFT,
+                text_color=FG_MUTED, border_width=1, border_color=BORDER,
+                command=lambda s=sym: self.tv_symbol_var.set(s)
+            ).pack(side="left", padx=(0, 4))
+
         field_data = [
-            ("Symbol",      self.tv_symbol_var, "{{ticker}} or EURUSD", 0, 0),
             ("Lot Size",    self.tv_size_var,   "0.1",                  0, 1),
             ("SL (pips)",   self.tv_sl_var,     "20  (optional)",       1, 0),
             ("TP (pips)",   self.tv_tp_var,     "40  (optional)",       1, 1),
@@ -1360,6 +1430,8 @@ class RelayGuiApp:
         if keyring:
             keyring.set_password(KEYRING_SERVICE, user_id, password)
         data = {"user_id": user_id}
+        if self._oauth_provider:
+            data["oauth_provider"] = self._oauth_provider
         if self.mt5_acct_var.get():
             data["mt5_acct"]   = self.mt5_acct_var.get()
             data["mt5_server"] = self.mt5_server_var.get()
@@ -1369,6 +1441,18 @@ class RelayGuiApp:
         except OSError as exc:
             import logging
             logging.getLogger(__name__).warning(f"Could not save credentials cache: {exc}")
+
+    def _save_oauth_credentials(self, user_id: str, provider: str):
+        """Always saves OAuth state (no remember_var check)."""
+        data = {"user_id": user_id, "oauth_provider": provider}
+        if self.mt5_acct_var.get():
+            data["mt5_acct"]   = self.mt5_acct_var.get()
+            data["mt5_server"] = self.mt5_server_var.get()
+        try:
+            with open(LAST_USER_FILE, "w") as f:
+                json.dump(data, f)
+        except OSError:
+            pass
 
     def _load_cached_credentials(self):
         if not os.path.exists(LAST_USER_FILE):
@@ -1388,15 +1472,24 @@ class RelayGuiApp:
                 self.mt5_acct_var.set(data["mt5_acct"])
             if data.get("mt5_server"):
                 self.mt5_server_var.set(data["mt5_server"])
+            provider = data.get("oauth_provider", "")
+            if provider and uid:
+                self._oauth_provider = provider
+                self.root.after(50, lambda: self._on_oauth_success(provider, uid, from_cache=True))
         except Exception:
             pass
 
     def _auto_connect_if_cached(self):
-        if self.user_id_var.get().strip() and self.password_var.get():
+        uid = self.user_id_var.get().strip()
+        pw  = self.password_var.get()
+        if uid and pw:
             if IS_WINDOWS:
                 self.root.after(600, self.start_relay)
             else:
                 self.root.after(600, self._do_refresh)
+        elif uid and self._oauth_provider:
+            # OAuth user — refresh dashboard (no password needed, api_key will be None until re-auth)
+            self.root.after(600, self._do_refresh)
 
     # ── Startup ───────────────────────────────────────────────────────────────
     def _toggle_startup(self):
@@ -1461,7 +1554,7 @@ class RelayGuiApp:
             return
 
         self.update_status(f"Login with {provider.title()}…")
-        threading.Thread(target=self._poll_desktop_token, args=(state,), daemon=True).start()
+        threading.Thread(target=self._poll_desktop_token, args=(state, provider), daemon=True).start()
 
         if webview:
             def launch_webview():
@@ -1477,7 +1570,7 @@ class RelayGuiApp:
                                 "Install 'pywebview' to keep login inside the app.")
             webbrowser.open(auth_url)
 
-    def _poll_desktop_token(self, state: str):
+    def _poll_desktop_token(self, state: str, provider: str = ""):
         base = self.bridge_url_var.get().rstrip("/")
         for i in range(180):
             try:
@@ -1492,6 +1585,7 @@ class RelayGuiApp:
                         self.password_var.set("")
                         self.user_id_var.set(uid)
                         self._avatar.configure(text=uid[:2].upper())
+                        self.root.after(0, lambda p=provider, u=uid: self._on_oauth_success(p, u))
                         self.update_status("OAuth linked — ready to connect")
                         self._do_refresh()
                         if IS_WINDOWS:
@@ -1511,6 +1605,51 @@ class RelayGuiApp:
                     self.update_status(f"Waiting for OAuth… ({exc})")
             time.sleep(1)
         self.update_status("OAuth login timed out — try again")
+
+    def _on_oauth_success(self, provider: str, uid: str, from_cache: bool = False):
+        """Show logged-in banner and hide the username/password form."""
+        self._oauth_provider = provider
+        if not from_cache:
+            self._save_oauth_credentials(uid, provider)
+        icon = "G" if provider == "google" else "f" if provider == "facebook" else "●"
+        provider_name = provider.title()
+        if self._oauth_provider_lbl:
+            self._oauth_provider_lbl.configure(
+                text=f"Signed in via {provider_name}"
+            )
+        if self._oauth_provider_icon:
+            self._oauth_provider_icon.configure(
+                text=icon,
+                text_color=PRIMARY_LT if provider == "google" else ACCENT_LT
+            )
+        if self._oauth_user_lbl:
+            self._oauth_user_lbl.configure(text=uid)
+        if self._login_form_inner:
+            self._login_form_inner.pack_forget()
+        if self._oauth_logged_in_frame:
+            self._oauth_logged_in_frame.pack(fill="x")
+
+    def _sign_out_oauth(self):
+        """Clear OAuth state and show the login form again."""
+        self._oauth_provider = None
+        self.api_key = None
+        self.api_key_var.set("")
+        self.password_var.set("")
+        # Remove cached OAuth state
+        try:
+            if os.path.exists(LAST_USER_FILE):
+                with open(LAST_USER_FILE) as f:
+                    data = json.load(f) or {}
+                data.pop("oauth_provider", None)
+                with open(LAST_USER_FILE, "w") as f:
+                    json.dump(data, f)
+        except Exception:
+            pass
+        if self._oauth_logged_in_frame:
+            self._oauth_logged_in_frame.pack_forget()
+        if self._login_form_inner:
+            self._login_form_inner.pack(fill="x")
+        self.update_status("Signed out")
 
     def start_relay(self):
         user_id  = self.user_id_var.get().strip()
@@ -1748,9 +1887,13 @@ class RelayGuiApp:
     def _create_tray_icon(self):
         if not pystray or not Image or not ImageDraw:
             return None
-        img  = Image.new("RGB", (64, 64), color=(7, 17, 10))
-        draw = ImageDraw.Draw(img)
-        draw.ellipse((8, 8, 56, 56), fill=(24, 196, 98))
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+        try:
+            img = Image.open(icon_path).convert("RGBA").resize((64, 64), Image.LANCZOS)
+        except Exception:
+            img  = Image.new("RGB", (64, 64), color=(0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            draw.ellipse((8, 8, 56, 56), fill=(10, 132, 255))
         menu = pystray.Menu(
             pystray.MenuItem("Open", lambda: self._restore_window()),
             pystray.MenuItem("Exit", lambda: self._quit_from_tray()),
