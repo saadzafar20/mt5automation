@@ -50,57 +50,58 @@ from relay import Relay, RelayClient
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette (PlatAlgo Gold / Apple Dark) ─────────────────────────────
-BG            = "#080809"   # Near-black base
-BG_ELEVATED   = "#0D0D11"   # Elevated surface (header, sidebar)
-BG_CARD       = "#111116"   # Card surfaces
-BG_INPUT      = "#18181F"   # Input fields
-BG_PANEL      = "#09090D"   # Content area base
+# ── Color Palette — Midnight Trust (2026 Fintech) ─────────────────────────────
+BG            = "#07080C"   # Void black (blue-tinted)
+BG_ELEVATED   = "#0B0D14"   # Sidebar / header surface
+BG_CARD       = "#0F1119"   # Card surfaces
+BG_INPUT      = "#141721"   # Input fields
+BG_PANEL      = "#09090E"   # Content area
 
-GLASS         = "#16161D"   # Glass tile
-GLASS_GOLD    = "#110A00"   # Gold-tinted glass
-GLASS_EMERALD = "#06121E"   # Blue-tinted glass
-GLASS_DARK    = "#06060A"   # Darker glass overlay
+GLASS         = "#131620"   # Glass tile
+GLASS_GOLD    = "#110900"   # Gold-tinted glass
+GLASS_EMERALD = "#060D1C"   # Blue-tinted glass
+GLASS_DARK    = "#05060A"   # Darkest overlay
 
-FG            = "#F5F5F7"   # Apple primary
-FG_MUTED      = "#8E8E93"   # Apple systemGray (secondary label)
-FG_SOFT       = "#636366"   # Apple systemGray2 (tertiary label)
-FG_FAINT      = "#3A3A3C"   # Apple systemGray3 (quaternary)
+FG            = "#E8EAF0"   # Cool-white primary (not pure white)
+FG_MUTED      = "#8B90A0"   # Cool mid-grey
+FG_SOFT       = "#535869"   # Cool dark-grey
+FG_FAINT      = "#2C303D"   # Near-invisible
 
-# Gold accent — primary brand colour (extracted from app icon)
-GOLD          = "#C8960C"   # Primary gold
-GOLD_LT       = "#F0C040"   # Bright gold highlight
-GOLD_DK       = "#8B6508"   # Dark gold
-GOLD_GLOW     = "#100800"   # Gold-tinted dark bg
-GOLD_BORDER   = "#3A2600"   # Subtle gold border
-GOLD_SHINE    = "#FFD060"   # Bright shine highlight
+# Gold accent — brand primary
+GOLD          = "#C8960C"
+GOLD_LT       = "#F5C842"
+GOLD_DK       = "#8B6508"
+GOLD_GLOW     = "#100900"
+GOLD_BORDER   = "#3A2600"
+GOLD_SHINE    = "#FFD660"
 
-# Blue — info / links / secondary actions only
-PRIMARY       = "#0A84FF"   # Apple systemBlue dark
-PRIMARY_LT    = "#409CFF"   # Lighter blue
-PRIMARY_DK    = "#0066CC"   # Darker blue
-PRIMARY_GLOW  = "#001030"   # Blue glow bg
+# Electric blue — technology / trust accent
+PRIMARY       = "#2D7FF9"
+PRIMARY_LT    = "#5B9CF6"
+PRIMARY_DK    = "#1A4B9A"
+PRIMARY_GLOW  = "#040E24"
 
-# Teal — kept for secondary accent where needed
-ACCENT        = "#64D2FF"   # Apple systemTeal dark
-ACCENT_LT     = "#A0E8FF"   # Light teal
-ACCENT_DK     = "#30B0D8"   # Dark teal
-ACCENT_GLOW   = "#001522"   # Teal glow bg
+# Teal for secondary use
+ACCENT        = "#3FD68A"   # Jade green (2026 trend)
+ACCENT_LT     = "#6EE8A8"
+ACCENT_DK     = "#1D8A58"
+ACCENT_GLOW   = "#031409"
 
-# Status colours
-SUCCESS       = "#32D74B"   # Apple systemGreen dark (connected / online)
-SUCCESS_BG    = "#061310"   # Green-tinted bg
-DANGER        = "#FF453A"   # Apple systemRed dark
-DANGER_BG     = "#160500"   # Error background
-DANGER_BORDER = "#4A0E08"   # Error border
+# Status
+SUCCESS       = "#3FD68A"
+SUCCESS_BG    = "#041209"
+DANGER        = "#FF5A4D"
+DANGER_BG     = "#180400"
+DANGER_BORDER = "#520C08"
 
-BORDER        = "#1E1E26"   # Primary separator
-BORDER_SOFT   = "#272730"   # Softer border
-BORDER_GLOW   = "#C8960C"   # Gold active/focus border
-BORDER_GOLD   = "#2E1E00"   # Subtle gold border
+# Borders
+BORDER        = "#1A1D28"
+BORDER_SOFT   = "#222535"
+BORDER_GLOW   = "#C8960C"
+BORDER_GOLD   = "#2A1C00"
 
-NAV_ACTIVE_BG = "#0E0800"   # Gold-tinted active nav bg
-NAV_HOVER_BG  = "#0C0C12"   # Hover nav item bg
+NAV_ACTIVE_BG = "#0D0900"
+NAV_HOVER_BG  = "#0C0D16"
 
 # ── Typography ────────────────────────────────────────────────────────────────
 DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
@@ -546,12 +547,19 @@ class RelayGuiApp:
                                       font=(FONT_BODY[0], 10), fg_color="transparent")
         self._live_dot.pack(side="left", padx=(0, 4), pady=24)
 
+        self._latency_badge = ctk.CTkLabel(
+            right, text="● LIVE",
+            text_color=FG_FAINT, font=(FONT_CAPTION[0], 10, "bold"),
+            fg_color=GLASS, corner_radius=999, padx=10, pady=5
+        )
+        self._latency_badge.pack(side="left", padx=(0, 8), pady=24)
+
         self._status_pill = ctk.CTkLabel(
             right, textvariable=self.status_var,
-            text_color=FG_MUTED, font=(FONT_SMALL[0], 10),
+            text_color=FG_MUTED, font=FONT_SMALL,
             fg_color=GLASS, corner_radius=999, padx=14, pady=6
         )
-        self._status_pill.pack(side="left", padx=(0, 14), pady=20)
+        self._status_pill.pack(side="left", padx=(0, 14), pady=22)
 
         self._avatar = ctk.CTkLabel(
             right, text="--",
@@ -574,10 +582,11 @@ class RelayGuiApp:
         nav_frame.pack(fill="x", padx=8, pady=(24, 0))
 
         nav_items = [
-            ("connect",     "Connect",     "⊕"),
-            ("dashboard",   "Dashboard",   "⊞"),
-            ("tradingview", "TradingView", "◎"),
-            ("settings",    "Settings",    "◈"),
+            ("connect",      "Connect",      "⊕"),
+            ("dashboard",    "Dashboard",    "⊞"),
+            ("tradingview",  "TradingView",  "◎"),
+            ("instructions", "Guide",        "◑"),
+            ("settings",     "Settings",     "◈"),
         ]
 
         for key, label, icon in nav_items:
@@ -657,10 +666,11 @@ class RelayGuiApp:
         self._content_host = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=0)
         self._content_host.pack(side="left", fill="both", expand=True)
 
-        self._panels["connect"]     = self._build_connect_panel(self._content_host)
-        self._panels["dashboard"]   = self._build_dashboard_panel(self._content_host)
-        self._panels["tradingview"] = self._build_tradingview_panel(self._content_host)
-        self._panels["settings"]    = self._build_settings_panel(self._content_host)
+        self._panels["connect"]      = self._build_connect_panel(self._content_host)
+        self._panels["dashboard"]    = self._build_dashboard_panel(self._content_host)
+        self._panels["tradingview"]  = self._build_tradingview_panel(self._content_host)
+        self._panels["instructions"] = self._build_instructions_panel(self._content_host)
+        self._panels["settings"]     = self._build_settings_panel(self._content_host)
 
         # Show default panel
         self._panels["connect"].pack(fill="both", expand=True)
@@ -935,35 +945,41 @@ class RelayGuiApp:
         status_row.columnconfigure(1, weight=1)
         status_row.columnconfigure(2, weight=1)
 
-        conn_labels = {
-            "Bridge": ("◈", ACCENT,   "PlatAlgo servers"),
-            "MT5":    ("◉", PRIMARY,  "MT5 terminal"),
-            "Broker": ("◆", SUCCESS,  "Broker server"),
+        conn_meta = {
+            "Bridge": ("◈", "Cloud server",    "Routes signals to MT5"),
+            "MT5":    ("◉", "MT5 terminal",     "Executes trade orders"),
+            "Broker": ("◆", "Broker connection","Confirms fills & balance"),
         }
-        for col_i, (name, (icon, accent_color, desc)) in enumerate(conn_labels.items()):
-            c = ctk.CTkFrame(
-                status_row,
-                fg_color=BG_CARD, corner_radius=14,
-                border_width=1, border_color=BORDER,
-                height=120
-            )
-            c.grid(row=0, column=col_i, sticky="ew",
+        for col_i, (name, (icon, subtitle, desc)) in enumerate(conn_meta.items()):
+            c = ctk.CTkFrame(status_row,
+                             fg_color=BG_CARD, corner_radius=16,
+                             border_width=1, border_color=BORDER)
+            c.grid(row=0, column=col_i, sticky="nsew",
                    padx=(0 if col_i == 0 else 6, 6 if col_i < 2 else 0))
-            c.pack_propagate(False)
 
+            dot, lbl = self.status_dots[name]
+
+            # Indicator ring (large dot)
             dot_new = ctk.CTkLabel(c, text="●", text_color=DANGER,
-                                   font=(FONT_BODY[0], 24), fg_color="transparent")
-            dot_new.pack(pady=(18, 4))
+                                   font=(FONT_BODY[0], 28), fg_color="transparent")
+            dot_new.pack(pady=(22, 2))
 
             _label(c, name, font=FONT_LABEL, color=FG).pack()
-            lbl_new = _label(c, f"Offline", color=FG_MUTED, font=FONT_SMALL)
-            lbl_new.pack(pady=(2, 0))
+            _label(c, subtitle, font=(FONT_SMALL[0], 10), color=FG_SOFT).pack(pady=(1, 0))
+            lbl_new = _label(c, "Offline", color=FG_MUTED, font=FONT_SMALL)
+            lbl_new.pack(pady=(4, 4))
+            _label(c, desc, color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(pady=(0, 4))
 
-            # Thin colored bottom border
-            ctk.CTkFrame(c, height=3, fg_color=accent_color, corner_radius=0).pack(
-                fill="x", side="bottom")
+            # Colored bottom bar (updates color with status)
+            bar_new = ctk.CTkFrame(c, height=3, corner_radius=0, fg_color=DANGER)
+            bar_new.pack(fill="x", side="bottom")
 
+            # Store (dot, label, bar) — but keep dict as (dot, lbl) tuple for _set_dot compat
             self.status_dots[name] = (dot_new, lbl_new)
+            # Store bar separately for color update
+            if not hasattr(self, "_status_bars"):
+                self._status_bars = {}
+            self._status_bars[name] = bar_new
 
         # ── Webhook URL ───────────────────────────────────────────────────────
         webhook_card = ctk.CTkFrame(
@@ -1272,6 +1288,257 @@ class RelayGuiApp:
         return frame
 
     # =========================================================================
+    # INSTRUCTIONS PANEL
+    # =========================================================================
+    def _build_instructions_panel(self, parent) -> ctk.CTkFrame:
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
+                                       scrollbar_button_color=BORDER_SOFT,
+                                       scrollbar_button_hover_color=BORDER_GLOW)
+
+        # ── Header ────────────────────────────────────────────────────────────
+        hdr = ctk.CTkFrame(frame, fg_color="transparent")
+        hdr.pack(fill="x", padx=24, pady=(28, 0))
+        _label(hdr, "Quick Start Guide", font=FONT_DISPLAY, color=FG).pack(anchor="w")
+        _label(frame,
+               "Everything you need to go from download to live execution in minutes.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(6, 28))
+
+        # ── Journey progress bar ──────────────────────────────────────────────
+        journey_card = _card(frame, gold=True)
+        journey_card.pack(fill="x", padx=24, pady=(0, 20))
+
+        jc_inner = ctk.CTkFrame(journey_card, fg_color="transparent")
+        jc_inner.pack(fill="x", padx=24, pady=20)
+
+        steps_short = ["Sign In", "Connect MT5", "Get Webhook", "Set Alert", "Go Live"]
+        jc_inner.columnconfigure(tuple(range(len(steps_short))), weight=1)
+
+        for i, step_name in enumerate(steps_short):
+            col = ctk.CTkFrame(jc_inner, fg_color="transparent")
+            col.grid(row=0, column=i, sticky="nsew")
+
+            # Connector line
+            line_row = ctk.CTkFrame(col, fg_color="transparent", height=20)
+            line_row.pack(fill="x")
+            line_row.pack_propagate(False)
+            if i > 0:
+                ctk.CTkFrame(line_row, height=2, fg_color=GOLD_BORDER, corner_radius=0).pack(
+                    side="left", fill="x", expand=True, pady=9)
+            # Step circle
+            circle = ctk.CTkLabel(line_row,
+                                  text=str(i + 1),
+                                  fg_color=GOLD_GLOW, text_color=GOLD_LT,
+                                  font=(FONT_LABEL[0], 11, "bold"),
+                                  width=24, height=24, corner_radius=12)
+            circle.pack(side="left")
+            if i < len(steps_short) - 1:
+                ctk.CTkFrame(line_row, height=2, fg_color=GOLD_BORDER, corner_radius=0).pack(
+                    side="left", fill="x", expand=True, pady=9)
+
+            _label(col, step_name, color=FG_MUTED, font=(FONT_SMALL[0], 10)).pack(pady=(4, 0))
+
+        # ── Expandable step sections ───────────────────────────────────────────
+        sections = [
+            {
+                "num":   "01",
+                "title": "Sign In to PlatAlgo",
+                "color": PRIMARY_LT,
+                "bg":    PRIMARY_GLOW,
+                "icon":  "⊕",
+                "quick": "Go to the Connect tab → Sign in with Google or Facebook OAuth.",
+                "steps": [
+                    ("Open the Connect tab", "Click Connect in the left sidebar."),
+                    ("Choose OAuth", "Click Google or Facebook — no password needed."),
+                    ("Browser opens", "Complete login in the browser window that appears."),
+                    ("Auto-detected", "The app detects your login automatically within seconds."),
+                ],
+                "tip": "OAuth is the fastest and most secure way to sign in. Your credentials are never stored locally.",
+            },
+            {
+                "num":   "02",
+                "title": "Connect Your MT5 Broker",
+                "color": GOLD_LT,
+                "bg":    GOLD_GLOW,
+                "icon":  "◉",
+                "quick": "Enter your MT5 account number, password, and broker server name.",
+                "steps": [
+                    ("Find your broker server", "Open MT5 → File → Login → note the server name (e.g. ICMarkets-Live01)."),
+                    ("Enter credentials", "Fill in Account Number, Password, and Server in the Connect tab."),
+                    ("Choose execution mode", "VPS Mode = 24/7 cloud execution. Local Mode = this machine only."),
+                    ("Activate", "Click Login to MT5 on VPS (recommended) or Connect Local MT5."),
+                ],
+                "tip": "VPS Mode runs your trades even when your computer is off. Highly recommended for strategies that trade around the clock.",
+            },
+            {
+                "num":   "03",
+                "title": "Get Your Webhook URL",
+                "color": ACCENT_LT,
+                "bg":    ACCENT_GLOW,
+                "icon":  "◎",
+                "quick": "Sign in first, then copy your Webhook URL from the Dashboard tab.",
+                "steps": [
+                    ("Open Dashboard tab", "Click Dashboard in the sidebar after signing in."),
+                    ("Locate Webhook URL", "It appears in the Your Webhook URL card."),
+                    ("Copy it", "Click the Copy button — the URL is now in your clipboard."),
+                    ("Keep it private", "This URL is unique to your account. Don't share it publicly."),
+                ],
+                "tip": "Your webhook URL looks like: https://app.platalgo.com/webhook/your_user_id",
+            },
+            {
+                "num":   "04",
+                "title": "Configure TradingView Alert",
+                "color": PRIMARY_LT,
+                "bg":    PRIMARY_GLOW,
+                "icon":  "◈",
+                "quick": "Use the TradingView tab to build your alert message JSON, then paste into TradingView.",
+                "steps": [
+                    ("Open TradingView Setup tab", "Click TradingView in the sidebar."),
+                    ("Build your message", "Fill in Symbol, Lot Size, SL, TP in the Message Builder."),
+                    ("Copy JSON", "Click Copy Alert Message to copy the generated JSON."),
+                    ("Go to TradingView", "On any chart, click the Alert (bell) icon → Create Alert."),
+                    ("Set Webhook URL", "In Notifications → enable Webhook URL → paste your URL."),
+                    ("Set Message", "In the Message box, paste your JSON payload."),
+                    ("Save", "Click Save. Your alert is now wired to PlatAlgo."),
+                ],
+                "tip": "Use {{strategy.order.action}} for action if your alert comes from a Pine Script strategy — it auto-fills BUY or SELL.",
+            },
+            {
+                "num":   "05",
+                "title": "Go Live & Monitor",
+                "color": ACCENT_LT,
+                "bg":    ACCENT_GLOW,
+                "icon":  "⊞",
+                "quick": "Trigger a test alert and watch the execution log in Settings → Execution Logs.",
+                "steps": [
+                    ("Trigger a test", "In TradingView, use 'Add Alert' and trigger it once manually."),
+                    ("Check Dashboard", "The Bridge, MT5, and Broker indicators should all be green."),
+                    ("Check Execution Logs", "Go to Settings → Execution Logs to see the trade confirmation."),
+                    ("Monitor live", "The Dashboard updates in real-time as signals arrive."),
+                    ("Troubleshoot", "If a dot stays red, check Settings → Bridge URL and MT5 path."),
+                ],
+                "tip": "Always do a test with a micro lot (0.01) before running live. Check your broker's minimum lot size.",
+            },
+        ]
+
+        for sec in sections:
+            sec_card = _card(frame)
+            sec_card.pack(fill="x", padx=24, pady=(0, 12))
+
+            # Section header row
+            hdr_row = ctk.CTkFrame(sec_card, fg_color="transparent")
+            hdr_row.pack(fill="x", padx=20, pady=(18, 0))
+
+            # Step badge
+            badge = ctk.CTkLabel(hdr_row,
+                                 text=sec["num"],
+                                 fg_color=sec["bg"], text_color=sec["color"],
+                                 font=(FONT_LABEL[0], 11, "bold"),
+                                 width=34, height=34, corner_radius=10)
+            badge.pack(side="left", padx=(0, 14))
+
+            # Title + quick summary
+            title_col = ctk.CTkFrame(hdr_row, fg_color="transparent")
+            title_col.pack(side="left", fill="x", expand=True)
+            _label(title_col, sec["title"], font=FONT_HERO, color=FG).pack(anchor="w")
+            _label(title_col, sec["quick"], font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
+
+            # Divider
+            ctk.CTkFrame(sec_card, height=1, fg_color=BORDER, corner_radius=0).pack(
+                fill="x", padx=0, pady=(14, 0))
+
+            # Steps list
+            steps_frame = ctk.CTkFrame(sec_card, fg_color="transparent")
+            steps_frame.pack(fill="x", padx=20, pady=(12, 0))
+
+            for step_i, (step_title, step_desc) in enumerate(sec["steps"]):
+                step_row = ctk.CTkFrame(steps_frame, fg_color="transparent")
+                step_row.pack(fill="x", pady=(0, 10))
+
+                # Number dot
+                num_dot = ctk.CTkLabel(step_row,
+                                       text=str(step_i + 1),
+                                       fg_color=GLASS, text_color=FG_SOFT,
+                                       font=(FONT_CAPTION[0], 10, "bold"),
+                                       width=22, height=22, corner_radius=11)
+                num_dot.pack(side="left", padx=(0, 12))
+
+                # Step text
+                text_col = ctk.CTkFrame(step_row, fg_color="transparent")
+                text_col.pack(side="left", fill="x", expand=True)
+                _label(text_col, step_title,
+                       font=(FONT_BODY[0], 11, "bold"), color=FG).pack(anchor="w")
+                _label(text_col, step_desc,
+                       font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
+
+            # Pro tip
+            tip_row = ctk.CTkFrame(sec_card,
+                                   fg_color=sec["bg"],
+                                   corner_radius=10,
+                                   border_width=1, border_color=BORDER_GOLD)
+            tip_row.pack(fill="x", padx=20, pady=(10, 18))
+
+            tip_inner = ctk.CTkFrame(tip_row, fg_color="transparent")
+            tip_inner.pack(fill="x", padx=14, pady=12)
+            _label(tip_inner, "⚡ Pro tip", font=(FONT_CAPTION[0], 10, "bold"),
+                   color=sec["color"]).pack(anchor="w", pady=(0, 4))
+            _label(tip_inner, sec["tip"],
+                   font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
+
+        # ── FAQ section ───────────────────────────────────────────────────────
+        _label(frame, "Common Questions",
+               font=FONT_TITLE, color=FG).pack(anchor="w", padx=24, pady=(16, 4))
+        _label(frame, "Quick answers to the most frequent setup issues.",
+               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 16))
+
+        faqs = [
+            ("My MT5 won't connect — what do I check?",
+             "Verify your Account Number (login), Password, and Server name match exactly what you see in MetaTrader 5 → File → Login. The server name is case-sensitive (e.g. 'ICMarkets-Live01', not 'icmarkets-live01')."),
+            ("I don't see my signals executing — why?",
+             "Check the Dashboard tab — all three dots (Bridge, MT5, Broker) must be green. Also verify your TradingView alert message matches the JSON format in the TradingView Setup tab exactly, including the correct api_key."),
+            ("What's the difference between VPS Mode and Local Mode?",
+             "VPS Mode runs MT5 on our cloud server — trades execute 24/7 even when your computer is off. Local Mode connects to an MT5 terminal running on this machine — stops when you close MT5 or shut down."),
+            ("Is my MT5 password secure?",
+             "Yes. Passwords are encrypted before storage using AES-256 and are never transmitted in plain text. OAuth tokens (Google/Facebook) replace passwords entirely for dashboard access."),
+            ("The app says 'Bridge Offline' — what does that mean?",
+             "The app can't reach the PlatAlgo server. Check your internet connection, or go to Settings and verify the Bridge URL is set to https://app.platalgo.com"),
+        ]
+
+        for q, a in faqs:
+            faq_card = _card(frame)
+            faq_card.pack(fill="x", padx=24, pady=(0, 8))
+
+            fq = ctk.CTkFrame(faq_card, fg_color="transparent")
+            fq.pack(fill="x", padx=20, pady=(16, 0))
+            _label(fq, "?", fg_color=PRIMARY_GLOW, text_color=PRIMARY_LT,
+                   font=(FONT_LABEL[0], 11, "bold"),
+                   width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 12))
+            _label(fq, q, font=(FONT_BODY[0], 12, "bold"), color=FG).pack(side="left", anchor="w")
+
+            ctk.CTkFrame(faq_card, height=1, fg_color=BORDER, corner_radius=0).pack(
+                fill="x", padx=0, pady=(10, 0))
+            _label(faq_card, a, font=FONT_SMALL, color=FG_MUTED, wraplength=700).pack(
+                anchor="w", padx=20, pady=(10, 18))
+
+        # ── Quick actions ─────────────────────────────────────────────────────
+        qa_row = ctk.CTkFrame(frame, fg_color="transparent")
+        qa_row.pack(fill="x", padx=24, pady=(8, 32))
+        qa_row.columnconfigure(0, weight=1)
+        qa_row.columnconfigure(1, weight=1)
+        qa_row.columnconfigure(2, weight=1)
+
+        _btn_primary(qa_row, "→ Go to Connect",
+                     lambda: self._switch_panel("connect"),
+                     height=42).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        _btn_gold(qa_row, "→ Open Dashboard",
+                  lambda: self._switch_panel("dashboard"),
+                  height=42).grid(row=0, column=1, sticky="ew", padx=3)
+        _btn_outline(qa_row, "→ TradingView Setup",
+                     lambda: self._switch_panel("tradingview"),
+                     height=42).grid(row=0, column=2, sticky="ew", padx=(6, 0))
+
+        return frame
+
+    # =========================================================================
     # SETTINGS PANEL
     # =========================================================================
     def _build_settings_panel(self, parent) -> ctk.CTkFrame:
@@ -1483,30 +1750,40 @@ class RelayGuiApp:
         self._switch_panel("settings")
 
     def _set_dot(self, name: str, online: bool):
-        color = PRIMARY if online else DANGER
-        label = f"{name}: {'Online' if online else 'Offline'}"
-        # Update dashboard (large) dot
+        color = SUCCESS if online else DANGER
+        label = "Online" if online else "Offline"
+        full_label = f"{name}: {label}"
+        # Update dashboard (large) dot + status bar
         if name in self.status_dots:
             dot, lbl = self.status_dots[name]
             dot.configure(text_color=color)
             lbl.configure(text_color=FG if online else FG_MUTED, text=label)
+        if hasattr(self, "_status_bars") and name in self._status_bars:
+            self._status_bars[name].configure(fg_color=color)
         # Always update header (small) dot too
         if name in self._header_dots:
             hdot, hlbl = self._header_dots[name]
             hdot.configure(text_color=color)
-            hlbl.configure(text_color=FG_SOFT if online else FG_MUTED, text=label)
+            hlbl.configure(text_color=FG_SOFT if online else FG_MUTED, text=full_label)
 
     def _set_status(self, bridge=None, mt5=None, broker=None):
         if bridge is not None: self._set_dot("Bridge", bridge)
         if mt5    is not None: self._set_dot("MT5",    mt5)
         if broker is not None: self._set_dot("Broker", broker)
         any_on = any(x is True for x in (bridge, mt5, broker))
-        color = PRIMARY if any_on else DANGER
+        all_on = all(x is True for x in (bridge, mt5, broker) if x is not None)
+        color = SUCCESS if any_on else DANGER
         if self._live_dot:
             self._live_dot.configure(text_color=color)
-        # Also update the second live dot on Dashboard
         if hasattr(self, "_live_dot2"):
             self._live_dot2.configure(text_color=color)
+        if hasattr(self, "_latency_badge"):
+            if all_on:
+                self._latency_badge.configure(text="● LIVE", text_color=SUCCESS)
+            elif any_on:
+                self._latency_badge.configure(text="◐ PARTIAL", text_color=GOLD_LT)
+            else:
+                self._latency_badge.configure(text="○ OFFLINE", text_color=FG_FAINT)
 
     def _set_state_callback(self, state: dict):
         self.root.after(0, lambda: self._set_status(
