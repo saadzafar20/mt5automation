@@ -4,7 +4,7 @@
 set -e
 
 APP_NAME="PlatAlgoRelay"
-APP_VERSION="1.0.0"
+APP_VERSION="${VERSION:-1.0.0}"
 BUNDLE_ID="com.platalgo.relay"
 
 echo "================================================"
@@ -46,10 +46,14 @@ pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
 # Ensure config.json exists
 [ -f config.json ] || echo '{}' > config.json
 
+[ -f _version.py ] || echo "APP_VERSION = \"$APP_VERSION\"" > _version.py
+
 echo "Building $APP_NAME.app..."
 pyinstaller --noconfirm --windowed \
   --name "$APP_NAME" \
+  --icon icon.png \
   --add-data "config.json:." \
+  --add-data "_version.py:." \
   --hidden-import customtkinter \
   --hidden-import PIL._tkinter_finder \
   --hidden-import keyring.backends.macOS \

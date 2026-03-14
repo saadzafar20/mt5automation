@@ -71,6 +71,8 @@ BRIDGE_CREDS_KEY = os.getenv("BRIDGE_CREDS_KEY", "")
 MANAGED_EXECUTOR_TIMEOUT_SECS = int(os.getenv("MANAGED_EXECUTOR_TIMEOUT_SECS", "20"))
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 RELAY_DOWNLOAD_URL = os.getenv("RELAY_DOWNLOAD_URL", "")
+RELAY_MANIFEST_URL = os.getenv("RELAY_MANIFEST_URL", "")
+_manifest_cache: dict = {"data": None, "ts": 0.0}
 PUBLIC_BASE_URL = os.getenv("BRIDGE_PUBLIC_URL", "").rstrip("/")
 DESKTOP_OAUTH_STATE_TTL = max(180, min(int(os.getenv("DESKTOP_OAUTH_STATE_TTL", "600")), 900))
 
@@ -2218,8 +2220,24 @@ def get_stats():
 
 @app.route("/version", methods=["GET"])
 def get_version():
+    if RELAY_MANIFEST_URL:
+        now = time.time()
+        if now - _manifest_cache["ts"] > 300 or not _manifest_cache["data"]:
+            try:
+                r = requests.get(RELAY_MANIFEST_URL, timeout=5)
+                if r.status_code == 200:
+                    _manifest_cache["data"] = r.json()
+                    _manifest_cache["ts"] = now
+            except Exception:
+                pass
+        if _manifest_cache["data"]:
+            return jsonify(_manifest_cache["data"])
+    # Fallback to env vars
     return jsonify({
+        "version": APP_VERSION,
         "app_version": APP_VERSION,
+        "windows_url": RELAY_DOWNLOAD_URL,
+        "mac_url": RELAY_DOWNLOAD_URL,
         "relay_download_url": RELAY_DOWNLOAD_URL,
         "timestamp": datetime.utcnow().isoformat(),
     })

@@ -19,6 +19,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Compute version and stamp
+        shell: bash
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          VERSION="1.0.$COUNT"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "APP_VERSION = \"$VERSION\"" > _version.py
+          echo "Stamped version: $VERSION"
+
       - name: Build .dmg
         run: |
           chmod +x build_relay_mac.sh
@@ -30,5 +39,16 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           aws s3 cp dist/PlatAlgoRelay.dmg s3://platalgo/PlatAlgoRelay.dmg \
+            --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+            --no-progress
+
+      - name: Upload version manifest
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          echo "{\"version\":\"$VERSION\",\"windows_url\":\"https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev/PlatAlgoRelay.exe\",\"mac_url\":\"https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev/PlatAlgoRelay.dmg\"}" > manifest.json
+          aws s3 cp manifest.json s3://platalgo/manifest.json \
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
             --no-progress

@@ -111,7 +111,10 @@ WIN_TASK_NAME         = "PlatAlgoRelay"
 MAC_PLIST_LABEL       = "com.platalgo.relay"
 MAC_PLIST_PATH        = Path.home() / "Library" / "LaunchAgents" / f"{MAC_PLIST_LABEL}.plist"
 
-APP_VERSION = os.getenv("RELAY_APP_VERSION", "1.0.0")
+try:
+    from _version import APP_VERSION  # baked in at build time by CI
+except ImportError:
+    APP_VERSION = os.getenv("RELAY_APP_VERSION", "1.0.0")
 
 
 def _pick_font_family(candidates, fallback: str) -> str:
@@ -1872,16 +1875,121 @@ class RelayGuiApp:
             if resp.status_code != 200:
                 return
             info   = resp.json()
-            latest = info.get("app_version", "")
-            url    = info.get("relay_download_url", "")
+            latest = info.get("version") or info.get("app_version", "")
+            url    = info.get("windows_url" if IS_WINDOWS else "mac_url") or \
+                     info.get("relay_download_url", "")
             if latest and latest != APP_VERSION and url:
-                def prompt():
-                    if messagebox.askyesno("Update available",
-                                           f"Version {latest} is available. Open download page?"):
-                        webbrowser.open(url)
-                self.root.after(0, prompt)
+                self.root.after(0, lambda v=latest, u=url: self._prompt_update(v, u))
         except Exception:
             pass
+
+    def _prompt_update(self, version: str, url: str):
+        """Show a polished update-available dialog."""
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title("Update Available")
+        dlg.resizable(False, False)
+        dlg.geometry("420x220")
+        if hasattr(dlg, "configure"):
+            dlg.configure(fg_color=BG_ELEVATED)
+        dlg.grab_set()
+        dlg.lift()
+
+        _label(dlg, "Update Available", font=FONT_HERO, color=FG).pack(pady=(28, 4))
+        _label(dlg, f"v{version} is ready  —  you're on v{APP_VERSION}",
+               color=FG_MUTED, font=FONT_SMALL).pack()
+
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(pady=28)
+
+        def _start_update():
+            dlg.destroy()
+            self._download_and_install(url, version)
+
+        _btn_primary(btn_row, "Update Now  →", _start_update, width=160).pack(side="left", padx=(0, 10))
+        _btn_outline(btn_row, "Later", dlg.destroy, width=90).pack(side="left")
+
+    def _download_and_install(self, url: str, version: str):
+        """Download the new binary with a progress bar, then self-replace."""
+        import tempfile
+
+        prog_win = ctk.CTkToplevel(self.root)
+        prog_win.title("Downloading Update")
+        prog_win.resizable(False, False)
+        prog_win.geometry("420x160")
+        if hasattr(prog_win, "configure"):
+            prog_win.configure(fg_color=BG_ELEVATED)
+        prog_win.grab_set()
+        prog_win.lift()
+
+        status_lbl = _label(prog_win, f"Downloading v{version}…", color=FG_MUTED, font=FONT_SMALL)
+        status_lbl.pack(pady=(28, 10))
+
+        bar = ctk.CTkProgressBar(prog_win, width=360, height=12,
+                                 fg_color=GLASS, progress_color=PRIMARY,
+                                 corner_radius=6)
+        bar.set(0)
+        bar.pack(padx=30)
+
+        pct_lbl = _label(prog_win, "0%", color=FG_FAINT, font=FONT_SMALL)
+        pct_lbl.pack(pady=(6, 0))
+
+        def _run():
+            try:
+                ext  = ".exe" if IS_WINDOWS else ".dmg"
+                dest = os.path.join(tempfile.gettempdir(), f"PlatAlgoRelay_update{ext}")
+                r    = requests.get(url, stream=True, timeout=60)
+                total = int(r.headers.get("Content-Length", 0))
+                done  = 0
+                with open(dest, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+                            done += len(chunk)
+                            if total:
+                                pct = done / total
+                                self.root.after(0, lambda p=pct: bar.set(p))
+                                self.root.after(0, lambda p=pct: pct_lbl.configure(
+                                    text=f"{int(p * 100)}%"))
+                self.root.after(0, lambda: status_lbl.configure(text="Installing…"))
+                self.root.after(0, lambda: bar.set(1.0))
+                self.root.after(0, lambda: pct_lbl.configure(text="100%"))
+                self.root.after(500, lambda: self._apply_update(dest))
+            except Exception as exc:
+                self.root.after(0, lambda: prog_win.destroy())
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Update failed", f"Could not download update:\n{exc}"))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_update(self, dest: str):
+        """Replace the running binary and relaunch (Windows), or open DMG (Mac)."""
+        if IS_WINDOWS:
+            import tempfile
+            current_exe = sys.executable if getattr(sys, "frozen", False) else ""
+            if not current_exe:
+                # Running from source — just open download folder
+                webbrowser.open(os.path.dirname(dest))
+                return
+            bat = os.path.join(tempfile.gettempdir(), "platalgo_update.bat")
+            with open(bat, "w") as f:
+                f.write(
+                    f'@echo off\r\n'
+                    f'timeout /t 2 /nobreak >nul\r\n'
+                    f'move /y "{dest}" "{current_exe}"\r\n'
+                    f'start "" "{current_exe}"\r\n'
+                    f'del "%~f0"\r\n'
+                )
+            subprocess.Popen(
+                ["cmd", "/c", bat],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+            sys.exit(0)
+        else:
+            # Mac — open the downloaded DMG
+            subprocess.run(["open", dest], check=False)
+            messagebox.showinfo("Update downloaded",
+                                "The installer has been opened. Drag PlatAlgoRelay to Applications to complete the update.")
 
     # ── Tray ──────────────────────────────────────────────────────────────────
     def _create_tray_icon(self):
