@@ -1797,7 +1797,13 @@ class RelayGuiApp(QMainWindow):
 
     def _on_oauth_success(self, provider: str, uid: str, from_cache: bool):
         self._oauth_provider = provider
+        # Always keep user_entry populated so user_id is readable everywhere
+        if self.user_entry and not self.user_entry.text().strip():
+            self.user_entry.setText(uid)
         if not from_cache:
+            self._save_oauth_credentials(uid, provider)
+        else:
+            # On cache restore, api_key is already set — re-save to keep it fresh
             self._save_oauth_credentials(uid, provider)
         if self._oauth_prov_lbl:
             self._oauth_prov_lbl.setText(f"Signed in via {provider.title()}")
@@ -2012,6 +2018,8 @@ class RelayGuiApp(QMainWindow):
                     data = json.load(f) or {}
             data["user_id"]        = user_id
             data["oauth_provider"] = provider
+            if self.api_key:
+                data["api_key"] = self.api_key
             with open(LAST_USER_FILE, "w") as f:
                 json.dump(data, f)
         except Exception:
@@ -2074,22 +2082,46 @@ class RelayGuiApp(QMainWindow):
 
     def _open_oauth(self, provider: str):
         base = self._get_bridge_url()
-        try:
-            resp = requests.post(f"{base}/auth/desktop/start",
-                                 json={"provider": provider}, timeout=8)
-            if resp.status_code != 200:
-                QMessageBox.critical(self, "OAuth error", resp.text or "Could not start OAuth")
-                return
-            data     = resp.json()
-            auth_url = data.get("auth_url")
-            state    = data.get("state")
-            if not (auth_url and state):
-                QMessageBox.critical(self, "OAuth error", "Missing auth URL or state")
-                return
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot connect",
-                f"Could not reach the PlatAlgo server.\n\nBridge URL: {base}\n\nDetails: {exc}")
-            return
+        self.update_status(f"Connecting to server…")
+
+        # Run the request in a background thread so the UI stays responsive
+        def _start():
+            last_exc = None
+            for attempt in range(3):
+                try:
+                    resp = requests.post(f"{base}/auth/desktop/start",
+                                         json={"provider": provider}, timeout=12)
+                    if resp.status_code != 200:
+                        QTimer.singleShot(0, lambda t=resp.text: QMessageBox.critical(
+                            self, "OAuth error", t or "Could not start OAuth"))
+                        return
+                    data     = resp.json()
+                    auth_url = data.get("auth_url")
+                    state    = data.get("state")
+                    if not (auth_url and state):
+                        QTimer.singleShot(0, lambda: QMessageBox.critical(
+                            self, "OAuth error", "Missing auth URL or state from server"))
+                        return
+                    # Success — hand off to main thread
+                    QTimer.singleShot(0, lambda a=auth_url, s=state: self._launch_oauth(a, s, provider))
+                    return
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt < 2:
+                        self.update_status(f"Retrying… ({attempt + 2}/3)")
+                        time.sleep(2)
+            QTimer.singleShot(0, lambda e=last_exc: QMessageBox.critical(
+                self, "Cannot connect",
+                f"Could not reach the PlatAlgo server after 3 attempts.\n\n"
+                f"Bridge URL: {base}\n\n"
+                f"Check the URL in Settings — it should be http:// not https://\n\n"
+                f"Details: {e}"))
+            self.update_status("Connection failed")
+
+        threading.Thread(target=_start, daemon=True).start()
+
+    def _launch_oauth(self, auth_url: str, state: str, provider: str):
+        """Called on main thread once auth URL is obtained."""
 
         self.update_status(f"Login with {provider.title()}…")
         threading.Thread(
@@ -2159,7 +2191,7 @@ class RelayGuiApp(QMainWindow):
     def start_relay(self):
         user_id  = self.user_entry.text().strip() if self.user_entry else ""
         password = self.pass_entry.text()         if self.pass_entry else ""
-        if not user_id or not (password or self.api_key):
+        if not user_id or not (password or self.api_key or self._oauth_provider):
             QMessageBox.warning(self, "Missing fields",
                                 "Provide password or complete OAuth login.")
             return
@@ -2196,7 +2228,9 @@ class RelayGuiApp(QMainWindow):
         user_id  = self.user_entry.text().strip() if self.user_entry else ""
         password = self.pass_entry.text()         if self.pass_entry else ""
         api_key  = self.api_key
-        if not user_id or not (password or api_key):
+        # oauth_provider being set means user is logged in even if api_key wasn't persisted
+        logged_in = bool(password or api_key or self._oauth_provider)
+        if not user_id or not logged_in:
             QMessageBox.warning(self, "Missing fields",
                                 "Sign in first (username/password or Google/Facebook).")
             return
