@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""PlatAlgo Relay — premium execution console."""
+"""PlatAlgo Relay — PyQt6 premium execution console."""
 
-import ctypes
 import json
 import os
 import subprocess
@@ -12,27 +11,21 @@ import webbrowser
 from pathlib import Path
 
 import requests
-from tkinter import messagebox
-import tkinter as tk
-import tkinter.font as tkfont
 
-try:
-    import customtkinter as ctk
-except ImportError:
-    import tkinter as ctk
+from PyQt6.QtCore import (Qt, QObject, pyqtSignal, QTimer, QSize)
+from PyQt6.QtGui import (QFont, QIcon, QPixmap, QPainter, QColor, QCursor)
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
+    QLineEdit, QCheckBox, QTextEdit, QScrollArea, QProgressBar,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QStackedWidget,
+    QSystemTrayIcon, QMenu, QDialog, QMessageBox, QFileDialog,
+    QSizePolicy, QSpacerItem,
+)
 
 try:
     import keyring
 except ImportError:
     keyring = None
-
-try:
-    import pystray
-    from PIL import Image, ImageDraw
-except ImportError:
-    pystray = None
-    Image = None
-    ImageDraw = None
 
 try:
     import winreg
@@ -44,77 +37,22 @@ try:
 except ImportError:
     webview = None
 
+try:
+    from PIL import Image as _PILImage
+except ImportError:
+    _PILImage = None
+
 from relay import Relay, RelayClient
 
 # ── Platform ──────────────────────────────────────────────────────────────────
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC     = sys.platform == "darwin"
 
-# ── Color Palette — Dark Emerald (Premium Trading) ────────────────────────────
-# Dark emerald green backgrounds + Amber gold CTAs + Bright green accents
-BG            = "#0A0F0C"   # Darkest emerald — main background
-BG_ELEVATED   = "#0D1610"   # Dark emerald — sidebar, header
-BG_CARD       = "#112018"   # Emerald card surface — clearly lifted
-BG_INPUT      = "#162B1E"   # Emerald input fields
-BG_PANEL      = "#0B120E"   # Content area background
+try:
+    from _version import APP_VERSION
+except ImportError:
+    APP_VERSION = os.getenv("RELAY_APP_VERSION", "1.0.0")
 
-GLASS         = "#162B1E"   # Glass overlay — emerald tint
-GLASS_GOLD    = "#1A0E00"   # Amber-tinted overlay
-GLASS_EMERALD = "#0D2318"   # Deep emerald overlay
-GLASS_DARK    = "#060C08"   # Deepest overlay
-
-FG            = "#ECFDF5"   # Emerald-50 — soft white with green tint
-FG_MUTED      = "#86EFAC"   # Green-300 — muted readable text
-FG_SOFT       = "#4ADE80"   # Green-400 — tertiary labels
-FG_FAINT      = "#166534"   # Green-800 — near-invisible dividers
-
-GOLD          = "#D97706"   # Amber-600 — CTA buttons, brand accent
-GOLD_LT       = "#F59E0B"   # Amber-500 — lighter gold
-GOLD_DK       = "#92400E"   # Amber-800 — pressed gold
-GOLD_GLOW     = "#0D0700"   # Amber deep shadow
-GOLD_BORDER   = "#451A03"   # Amber-950 — gold border tint
-GOLD_SHINE    = "#FCD34D"   # Amber-300 — highlight shimmer
-
-PRIMARY       = "#22C55E"   # Green-500 — active nav, interactive
-PRIMARY_LT    = "#4ADE80"   # Green-400 — lighter active states
-PRIMARY_DK    = "#15803D"   # Green-700 — pressed / deep
-PRIMARY_GLOW  = "#052E16"   # Green-950 shadow
-
-ACCENT        = "#22C55E"   # Green-500 — connected / live
-ACCENT_LT     = "#4ADE80"   # Green-400
-ACCENT_DK     = "#15803D"   # Green-700
-ACCENT_GLOW   = "#052E16"   # Green-950
-
-SUCCESS       = "#22C55E"   # Green-500
-SUCCESS_BG    = "#052E16"   # Green-950 background
-DANGER        = "#EF4444"   # Red-500 — error / disconnect
-DANGER_BG     = "#1C0000"   # Red deep background
-DANGER_BORDER = "#7F1D1D"   # Red-900
-
-BORDER        = "#166534"   # Green-800 — emerald separator
-BORDER_SOFT   = "#15803D"   # Green-700 — softer dividers
-BORDER_GLOW   = "#D97706"   # Amber gold accent border
-BORDER_GOLD   = "#451A03"   # Deep gold border
-
-NAV_ACTIVE_BG = "#14402A"   # Bright emerald-tinted active nav bg
-NAV_HOVER_BG  = "#0F2318"   # Subtle hover
-
-# ── Typography ────────────────────────────────────────────────────────────────
-DISPLAY_FONT_CANDIDATES = ["SF Pro Display", "Segoe UI Variable Display", "Aptos Display", "Segoe UI"]
-TEXT_FONT_CANDIDATES    = ["SF Pro Text",    "Segoe UI Variable Text",    "Aptos",         "Segoe UI"]
-MONO_FONT_CANDIDATES    = ["SF Mono", "Cascadia Mono", "JetBrains Mono", "Consolas", "Courier New"]
-
-FONT_DISPLAY = ("Segoe UI", 28, "bold")   # Page titles
-FONT_TITLE   = ("Segoe UI", 20, "bold")   # Section headers
-FONT_HERO    = ("Segoe UI", 15, "bold")   # Card titles
-FONT_LABEL   = ("Segoe UI", 13, "bold")   # Field labels
-FONT_BODY    = ("Segoe UI", 12)            # Body text
-FONT_SMALL   = ("Segoe UI", 11)            # Captions
-FONT_CAPTION = ("Segoe UI", 10, "bold")   # Chips/badges
-FONT_MONO    = ("Consolas", 11)
-FONT_MONO_SM = ("Consolas", 10)
-
-# ── App constants ─────────────────────────────────────────────────────────────
 PRODUCTION_BRIDGE_URL = "http://app.platalgo.com"
 KEYRING_SERVICE       = "platalgo-relay"
 LAST_USER_FILE        = "relay_last_user.json"
@@ -122,22 +60,297 @@ WIN_TASK_NAME         = "PlatAlgoRelay"
 MAC_PLIST_LABEL       = "com.platalgo.relay"
 MAC_PLIST_PATH        = Path.home() / "Library" / "LaunchAgents" / f"{MAC_PLIST_LABEL}.plist"
 
-try:
-    from _version import APP_VERSION  # baked in at build time by CI
-except ImportError:
-    APP_VERSION = os.getenv("RELAY_APP_VERSION", "1.0.0")
+# ── Colors ────────────────────────────────────────────────────────────────────
+BG          = "#0A0F0C"
+BG_SIDE     = "#0D1610"
+BG_CARD     = "#112018"
+BG_INPUT    = "#162B1E"
+FG          = "#ECFDF5"
+FG_MUTED    = "#86EFAC"
+FG_SOFT     = "#4ADE80"
+FG_FAINT    = "#166534"
+GOLD        = "#D97706"
+GOLD_LT     = "#F59E0B"
+GOLD_DK     = "#78350F"
+GOLD_BORDER = "#451A03"
+GREEN       = "#22C55E"
+GREEN_LT    = "#4ADE80"
+GREEN_BG    = "#14402A"
+GREEN_HOVER = "#0F2318"
+BORDER      = "#166534"
+BORDER_SOFT = "#15803D"
+DANGER      = "#EF4444"
+DANGER_BG   = "#1C0000"
+DANGER_BDR  = "#7F1D1D"
+GLASS       = "#162B1E"
+GLASS_GOLD  = "#1A0E00"
+GLASS_EM    = "#0D2318"
+SUCCESS_BG  = "#052E16"
 
-
-def _pick_font_family(candidates, fallback: str) -> str:
-    try:
-        families = set(tkfont.families())
-    except Exception:
-        families = set()
-    for f in candidates:
-        if f in families:
-            return f
-    return fallback
-
+# ── QSS ──────────────────────────────────────────────────────────────────────
+QSS = f"""
+* {{
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    color: {FG};
+}}
+QMainWindow, QWidget#root {{
+    background-color: {BG};
+}}
+QWidget {{
+    background-color: transparent;
+}}
+QWidget#bgRoot {{
+    background-color: {BG};
+}}
+QFrame#sidebar {{
+    background-color: {BG_SIDE};
+    border-right: 1px solid {BORDER};
+}}
+QFrame#header {{
+    background-color: {BG_SIDE};
+    border-bottom: 1px solid {BORDER};
+}}
+QFrame#card {{
+    background-color: {BG_CARD};
+    border: 1px solid {BORDER};
+    border-radius: 14px;
+}}
+QFrame#goldCard {{
+    background-color: {BG_CARD};
+    border: 1px solid {GOLD_BORDER};
+    border-radius: 14px;
+}}
+QFrame#contentArea {{
+    background-color: {BG};
+}}
+QPushButton {{
+    background-color: {GLASS};
+    color: {FG};
+    border: 1px solid {BORDER};
+    border-radius: 9px;
+    padding: 8px 16px;
+    font-size: 13px;
+}}
+QPushButton:hover {{
+    background-color: {GREEN_HOVER};
+    border-color: {GREEN};
+}}
+QPushButton:disabled {{
+    color: {FG_FAINT};
+    background-color: {GLASS};
+    border-color: {BORDER};
+}}
+QPushButton#goldBtn {{
+    background-color: {GOLD};
+    color: #0A0600;
+    border: none;
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 14px 24px;
+}}
+QPushButton#goldBtn:hover {{
+    background-color: {GOLD_LT};
+}}
+QPushButton#goldBtn:disabled {{
+    background-color: {GOLD_DK};
+    color: #92400E;
+}}
+QPushButton#outlineBtn {{
+    background-color: transparent;
+    color: {FG_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 11px;
+    padding: 14px 16px;
+    font-size: 13px;
+}}
+QPushButton#outlineBtn:hover {{
+    background-color: {GREEN_HOVER};
+    border-color: {GREEN};
+}}
+QPushButton#oauthBtn {{
+    background-color: {GLASS};
+    color: {FG};
+    border: 1px solid {BORDER_SOFT};
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: bold;
+}}
+QPushButton#oauthBtn:hover {{
+    background-color: #1F3828;
+    border-color: {GREEN};
+}}
+QPushButton#navBtn {{
+    background-color: transparent;
+    color: {FG_MUTED};
+    border: none;
+    border-radius: 8px;
+    text-align: left;
+    padding: 10px 10px 10px 14px;
+    font-size: 13px;
+}}
+QPushButton#navBtn:hover {{
+    background-color: {GREEN_HOVER};
+}}
+QPushButton#navBtnActive {{
+    background-color: {GREEN_BG};
+    color: {GREEN_LT};
+    border: none;
+    border-left: 3px solid {GREEN};
+    border-radius: 8px;
+    text-align: left;
+    padding: 10px 10px 10px 11px;
+    font-size: 13px;
+    font-weight: bold;
+}}
+QPushButton#buyBtn {{
+    background-color: {SUCCESS_BG};
+    color: {GREEN};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    font-weight: bold;
+    padding: 8px 24px;
+}}
+QPushButton#buyBtnActive {{
+    background-color: #166534;
+    color: {FG};
+    border: 1px solid {GREEN};
+    border-radius: 8px;
+    font-weight: bold;
+    padding: 8px 24px;
+}}
+QPushButton#sellBtn {{
+    background-color: {DANGER_BG};
+    color: {DANGER};
+    border: 1px solid {DANGER_BDR};
+    border-radius: 8px;
+    font-weight: bold;
+    padding: 8px 24px;
+}}
+QPushButton#sellBtnActive {{
+    background-color: #7F1D1D;
+    color: {FG};
+    border: 1px solid {DANGER};
+    border-radius: 8px;
+    font-weight: bold;
+    padding: 8px 24px;
+}}
+QPushButton#dangerBtn {{
+    background-color: {DANGER_BG};
+    color: #FCA5A5;
+    border: 1px solid {DANGER_BDR};
+    border-radius: 8px;
+    padding: 8px 16px;
+}}
+QPushButton#dangerBtn:hover {{
+    background-color: #2A0000;
+}}
+QPushButton#smallBtn {{
+    background-color: {GLASS};
+    color: {FG_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 7px;
+    padding: 6px 12px;
+    font-size: 12px;
+}}
+QPushButton#smallBtn:hover {{
+    background-color: {GREEN_HOVER};
+    border-color: {GREEN};
+}}
+QLineEdit {{
+    background-color: {BG_INPUT};
+    color: {FG};
+    border: 1px solid {BORDER_SOFT};
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    selection-background-color: {GREEN};
+}}
+QLineEdit:focus {{
+    border-color: {GREEN_LT};
+}}
+QLineEdit:read-only {{
+    color: {GOLD_LT};
+    border-color: {GOLD_BORDER};
+}}
+QTextEdit {{
+    background-color: {BG};
+    color: {FG_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 8px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    selection-background-color: {GREEN};
+}}
+QCheckBox {{
+    color: {FG_MUTED};
+    spacing: 8px;
+    font-size: 12px;
+}}
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid {BORDER_SOFT};
+    background-color: {BG_INPUT};
+}}
+QCheckBox::indicator:checked {{
+    background-color: {GREEN};
+    border-color: {GREEN};
+}}
+QScrollBar:vertical {{
+    background: {BG};
+    width: 7px;
+    border-radius: 3px;
+    margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: {BORDER};
+    border-radius: 3px;
+    min-height: 20px;
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+QScrollArea {{
+    border: none;
+    background-color: transparent;
+}}
+QProgressBar {{
+    background-color: {GLASS};
+    border: 1px solid {BORDER};
+    border-radius: 5px;
+    text-align: center;
+    color: {FG};
+    font-size: 12px;
+}}
+QProgressBar::chunk {{
+    background-color: {GREEN};
+    border-radius: 5px;
+}}
+QMenu {{
+    background-color: {BG_CARD};
+    color: {FG};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 8px 20px;
+    border-radius: 4px;
+}}
+QMenu::item:selected {{
+    background-color: {GREEN_BG};
+    color: {GREEN_LT};
+}}
+QDialog {{
+    background-color: {BG_SIDE};
+    color: {FG};
+}}
+"""
 
 # ── MT5 path detection ────────────────────────────────────────────────────────
 def detect_mt5_path() -> str:
@@ -183,7 +396,7 @@ def _startup_enabled() -> bool:
 
 
 def _enable_startup():
-    exe = sys.executable
+    exe    = sys.executable
     script = os.path.abspath(sys.argv[0])
     if IS_WINDOWS:
         subprocess.run(["schtasks", "/create", "/tn", WIN_TASK_NAME,
@@ -199,8 +412,6 @@ def _enable_startup():
   <array><string>{exe}</string><string>{script}</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>{Path.home()}/Library/Logs/platalgo-relay.log</string>
-  <key>StandardErrorPath</key><string>{Path.home()}/Library/Logs/platalgo-relay-error.log</string>
 </dict></plist>"""
         MAC_PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
         MAC_PLIST_PATH.write_text(plist)
@@ -216,686 +427,638 @@ def _disable_startup():
             MAC_PLIST_PATH.unlink(missing_ok=True)
 
 
-# ── UI Primitives ─────────────────────────────────────────────────────────────
-def _card(parent, glow=False, gold=False, **kwargs):
-    defaults = dict(
-        fg_color=BG_CARD,
-        corner_radius=16,
-        border_width=1,
-        border_color=BORDER_GOLD if gold else (BORDER_GLOW if glow else BORDER),
-    )
-    defaults.update(kwargs)
-    return ctk.CTkFrame(parent, **defaults)
+# ── Signals (for cross-thread UI updates) ────────────────────────────────────
+class AppSignals(QObject):
+    status_changed   = pyqtSignal(str)
+    log_appended     = pyqtSignal(str)
+    dot_changed      = pyqtSignal(str, bool)
+    summary_updated  = pyqtSignal(str)
+    oauth_success    = pyqtSignal(str, str, bool)
+    update_prompt    = pyqtSignal(str, str)
+    webhook_updated  = pyqtSignal(str)
+    apikey_updated   = pyqtSignal(str)
+    vps_activated    = pyqtSignal()
+    vps_failed       = pyqtSignal(str)
+    vps_btn_reset    = pyqtSignal()
+    connect_enabled  = pyqtSignal(bool)
+    avatar_updated   = pyqtSignal(str)
+    progress_changed = pyqtSignal(float, str)
 
 
-def _label(parent, text, color=FG, font=FONT_BODY, **kwargs):
-    return ctk.CTkLabel(parent, text=text, text_color=color,
-                        font=font, fg_color="transparent", **kwargs)
+# ── Helper widget builders ────────────────────────────────────────────────────
+def _lbl(parent: QWidget, text: str, color: str = FG,
+         size: int = 13, bold: bool = False, wrap: bool = False) -> QLabel:
+    l = QLabel(text, parent)
+    style = f"color: {color}; font-size: {size}px;"
+    if bold:
+        style += " font-weight: bold;"
+    style += " background: transparent; border: none;"
+    l.setStyleSheet(style)
+    if wrap:
+        l.setWordWrap(True)
+    return l
 
 
-def _entry(parent, textvariable=None, placeholder="", show=None, **kwargs):
-    kwargs.setdefault("height", 44)
-    e = ctk.CTkEntry(
-        parent,
-        textvariable=textvariable,
-        placeholder_text=placeholder,
-        placeholder_text_color=FG_SOFT,
-        fg_color=BG_INPUT,
-        border_color=BORDER_SOFT,
-        text_color=FG,
-        corner_radius=10,
-        font=FONT_BODY,
-        **kwargs,
-    )
-    if show:
-        e.configure(show=show)
+def _entry(placeholder: str = "", password: bool = False) -> QLineEdit:
+    e = QLineEdit()
+    e.setPlaceholderText(placeholder)
+    e.setFixedHeight(44)
+    if password:
+        e.setEchoMode(QLineEdit.EchoMode.Password)
     return e
 
 
-def _btn_primary(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 44)
-    return ctk.CTkButton(
-        parent, text=text, command=command,
-        fg_color=PRIMARY_DK, hover_color=PRIMARY,
-        text_color=FG, font=FONT_LABEL,
-        corner_radius=10, **kwargs
+def _card(gold: bool = False) -> QFrame:
+    f = QFrame()
+    f.setObjectName("goldCard" if gold else "card")
+    return f
+
+
+def _hline(color: str = BORDER) -> QFrame:
+    line = QFrame()
+    line.setFrameShape(QFrame.Shape.HLine)
+    line.setStyleSheet(f"color: {color}; background-color: {color}; border: none; max-height: 1px;")
+    return line
+
+
+def _spacer(w: int = 0, h: int = 0, hpol=QSizePolicy.Policy.Minimum,
+            vpol=QSizePolicy.Policy.Minimum) -> QSpacerItem:
+    return QSpacerItem(w, h, hpol, vpol)
+
+
+def _chip_label(text: str, bg: str, color: str, parent: QWidget = None) -> QLabel:
+    l = QLabel(text, parent)
+    l.setStyleSheet(
+        f"background-color: {bg}; color: {color}; border-radius: 6px; "
+        f"padding: 3px 8px; font-size: 10px; font-weight: bold; border: none;"
     )
-
-
-def _btn_gold(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 44)
-    return ctk.CTkButton(
-        parent, text=text, command=command,
-        fg_color=GLASS_GOLD, hover_color=GOLD_DK,
-        text_color=GOLD_LT, border_width=1, border_color=GOLD_BORDER,
-        font=FONT_LABEL, corner_radius=10, **kwargs
-    )
-
-
-def _btn_outline(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 44)
-    return ctk.CTkButton(
-        parent, text=text, command=command,
-        fg_color="transparent", hover_color=GLASS,
-        text_color=FG_SOFT, border_color=BORDER_SOFT, border_width=1,
-        font=FONT_BODY, corner_radius=10, **kwargs
-    )
-
-
-def _btn_danger(parent, text, command, **kwargs):
-    kwargs.setdefault("height", 44)
-    return ctk.CTkButton(
-        parent, text=text, command=command,
-        fg_color=DANGER_BG, hover_color="#220A06",
-        text_color="#FFBBBB", border_color=DANGER_BORDER, border_width=1,
-        font=FONT_BODY, corner_radius=10, **kwargs
-    )
-
-
-def _chip(parent, text, fg_color, text_color=FG, font=FONT_CAPTION, **kwargs):
-    return ctk.CTkLabel(parent, text=text, fg_color=fg_color, text_color=text_color,
-                        font=font, corner_radius=999, padx=10, pady=4, **kwargs)
-
-
-def _divider(parent, color=BORDER):
-    ctk.CTkFrame(parent, height=1, fg_color=color, corner_radius=0).pack(fill="x", padx=0, pady=8)
-
-
-def _section_header(parent, title, subtitle=None, chip=None, chip_color=None):
-    """Consistent section header with optional chip badge."""
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=20, pady=(18, 4))
-    _label(row, title, color=FG, font=FONT_LABEL).pack(side="left")
-    if chip and chip_color:
-        _chip(row, chip, chip_color, text_color=ACCENT_LT).pack(side="right")
-    if subtitle:
-        _label(parent, subtitle, color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 10))
+    l.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    return l
 
 
 # ── Main App ──────────────────────────────────────────────────────────────────
-class RelayGuiApp:
-    def __init__(self, root):
-        self.root      = root
-        self.relay     = None
-        self.tray_icon = None
+class RelayGuiApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.sig = AppSignals()
+        self.relay        = None
+        self.tray_icon    = None
+        self.api_key      = None
+        self.vps_active   = False
+        self._oauth_provider = None
+        self._current_panel  = "connect"
+        self._tv_action      = "BUY"
 
-        self._configure_fonts()
+        # Widget refs
+        self._header_dots   : dict = {}  # name -> (dot_lbl, text_lbl)
+        self._status_rings  : dict = {}  # name -> QFrame
+        self._ring_letters  : dict = {}  # name -> QLabel
+        self._ring_status_lbl: dict = {} # name -> QLabel ("Online"/"Offline")
+        self._nav_btns      : dict = {}  # key -> QPushButton
+        self._panels        : dict = {}  # key -> QWidget
+        self._stacked       = None
+        self._panel_idx     : dict = {}
 
-        if hasattr(ctk, "set_appearance_mode"):
-            ctk.set_appearance_mode("dark")
-        if hasattr(ctk, "set_default_color_theme"):
-            ctk.set_default_color_theme("green")
-
-        self.root.title("PlatAlgo Relay")
-        self.root.geometry("1300x860")
-        if hasattr(self.root, "minsize"):
-            self.root.minsize(1100, 760)
-        if hasattr(self.root, "configure"):
-            self.root.configure(fg_color=BG)
-
-        # ── App icon ──────────────────────────────────────────────────────────
-        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
-        if os.path.exists(_icon_path):
-            try:
-                if IS_WINDOWS:
-                    self.root.iconbitmap(_icon_path)
-                else:
-                    from PIL import Image as _PILImage, ImageTk as _PILImageTk
-                    _img = _PILImageTk.PhotoImage(file=_icon_path)
-                    self.root.iconphoto(True, _img)
-            except Exception:
-                pass
-
-        # ── StringVars ────────────────────────────────────────────────────────
-        self.user_id_var     = ctk.StringVar()
-        self.password_var    = ctk.StringVar()
-        self.remember_var    = ctk.BooleanVar(value=True)
-        self.startup_var     = ctk.BooleanVar(value=False)
-        self.bridge_url_var  = ctk.StringVar(value=PRODUCTION_BRIDGE_URL)
-        self.mt5_path_var    = ctk.StringVar(value=detect_mt5_path() if IS_WINDOWS else "")
-        self.status_var      = ctk.StringVar(value="Idle")
-        self.mt5_acct_var    = ctk.StringVar()
-        self.mt5_pw_var      = ctk.StringVar()
-        self.mt5_server_var  = ctk.StringVar()
-
-        # Dashboard data vars
-        self.webhook_url_var = ctk.StringVar(value="Sign in to view your webhook URL")
-        self.api_key_var     = ctk.StringVar(value="")
-
-        # TradingView message generator vars
-        self.tv_action_var   = ctk.StringVar(value="BUY")
-        self.tv_symbol_var   = ctk.StringVar(value="{{ticker}}")
-        self.tv_size_var     = ctk.StringVar(value="0.1")
-        self.tv_sl_var       = ctk.StringVar(value="")
-        self.tv_tp_var       = ctk.StringVar(value="")
-        self.tv_script_var   = ctk.StringVar(value="")
-        self.tv_dynamic_var  = ctk.BooleanVar(value=True)
-
-        # State
-        self.api_key          = None
-        self.api_key_visible  = False
-        self.vps_active       = False
-        self.current_panel    = "connect"
-
-        # Required widget refs (set during build)
-        self.status_dots      = {}   # dashboard (large) dots — updated when on Dashboard
-        self._header_dots     = {}   # header (small) dots — always visible
-        self.vps_card         = None
-        self.vps_btn          = None
-        self.vps_disable_btn  = None
-        self.vps_status_chip  = None
-        self.connect_btn      = None
-        self.summary_text     = None
-        self._live_dot        = None
-        self._avatar          = None
-        self._status_pill     = None
-        self._nav_btns        = {}
-        self._panels          = {}
+        # Form widget refs
+        self.user_entry    = None
+        self.pass_entry    = None
+        self.remember_cb   = None
+        self.startup_cb    = None
+        self.bridge_entry  = None
+        self.mt5_path_edit = None
+        self.mt5_acct_edit = None
+        self.mt5_pw_edit   = None
+        self.mt5_server_edit = None
+        self.webhook_entry = None
+        self.api_key_edit  = None
+        self.summary_text  = None
+        self.log_box       = None
+        self.tv_preview    = None
+        self.vps_btn       = None
+        self.vps_disable_btn = None
+        self.connect_btn   = None
+        self._avatar       = None
+        self._status_pill  = None
+        self._login_form   = None
+        self._oauth_frame  = None
+        self._oauth_prov_lbl = None
+        self._oauth_user_lbl = None
+        self._buy_btn      = None
+        self._sell_btn     = None
+        self.tv_symbol_edit = None
+        self.tv_size_edit  = None
+        self.tv_sl_edit    = None
+        self.tv_tp_edit    = None
+        self.tv_script_edit = None
+        self.vps_status_lbl = None
+        self._api_key_visible = False
         self._webhook_copy_btn = None
-        self._apikey_entry    = None
-        self._tv_preview      = None
-        self._adv_frame       = None  # kept for compat
-        self._oauth_provider      = None
-        self._login_form_inner    = None
-        self._oauth_logged_in_frame = None
-        self.adv_visible      = False
-        self.log_box          = None
-        self._nav_items_data  = {}
 
+        self._connect_signals()
         self._build_ui()
         self._load_cached_credentials()
-        self.startup_var.set(_startup_enabled())
-
-        # Trace TV vars for live preview
-        for var in (self.tv_action_var, self.tv_symbol_var, self.tv_size_var,
-                    self.tv_sl_var, self.tv_tp_var, self.tv_script_var,
-                    self.tv_dynamic_var, self.user_id_var, self.api_key_var):
-            var.trace_add("write", lambda *_: self.root.after(10, self._update_tv_preview))
+        self.startup_cb.setChecked(_startup_enabled())
 
         threading.Thread(target=self._check_updates, daemon=True).start()
         self._auto_connect_if_cached()
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.after(300, self._apply_glass_effect)
 
-    # ── Font config ───────────────────────────────────────────────────────────
-    def _configure_fonts(self):
-        global FONT_DISPLAY, FONT_TITLE, FONT_HERO, FONT_LABEL, FONT_BODY, FONT_SMALL
-        global FONT_CAPTION, FONT_MONO, FONT_MONO_SM
-        d = _pick_font_family(DISPLAY_FONT_CANDIDATES, "Segoe UI")
-        t = _pick_font_family(TEXT_FONT_CANDIDATES, "Segoe UI")
-        m = _pick_font_family(MONO_FONT_CANDIDATES, "Consolas")
-        FONT_DISPLAY = (d, 28, "bold")
-        FONT_TITLE   = (d, 20, "bold")
-        FONT_HERO    = (d, 15, "bold")
-        FONT_LABEL   = (t, 13, "bold")
-        FONT_BODY    = (t, 12)
-        FONT_SMALL   = (t, 11)
-        FONT_CAPTION = (t, 10, "bold")
-        FONT_MONO    = (m, 11)
-        FONT_MONO_SM = (m, 10)
-
-    # ── Glass effect ──────────────────────────────────────────────────────────
-    def _apply_glass_effect(self):
-        try:
-            if IS_WINDOWS:
-                self.root.update()
-                hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
-                dark = ctypes.c_int(1)
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
-                acrylic = ctypes.c_int(3)
-                try:
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(acrylic), ctypes.sizeof(acrylic))
-                except Exception:
-                    self.root.wm_attributes("-alpha", 0.93)
-            elif IS_MAC:
-                try:
-                    self.root.wm_attributes("-transparent", True)
-                    self.root.configure(background="systemTransparent")
-                except Exception:
-                    self.root.wm_attributes("-alpha", 0.97)
-        except Exception:
-            pass
+    def _connect_signals(self):
+        s = self.sig
+        s.status_changed.connect(self._on_status_changed)
+        s.log_appended.connect(self._on_log_appended)
+        s.dot_changed.connect(self._on_dot_changed)
+        s.summary_updated.connect(self._on_summary_updated)
+        s.oauth_success.connect(self._on_oauth_success)
+        s.update_prompt.connect(self._prompt_update)
+        s.webhook_updated.connect(self._on_webhook_updated)
+        s.apikey_updated.connect(self._on_apikey_updated)
+        s.vps_activated.connect(self._on_vps_activated)
+        s.vps_failed.connect(self._on_vps_failed)
+        s.vps_btn_reset.connect(self._on_vps_btn_reset)
+        s.connect_enabled.connect(self._on_connect_enabled)
+        s.avatar_updated.connect(self._on_avatar_updated)
 
     # =========================================================================
-    # UI Build
+    # UI BUILD
     # =========================================================================
     def _build_ui(self):
-        outer = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
-        outer.pack(fill="both", expand=True)
+        self.setWindowTitle("PlatAlgo Relay")
+        self.resize(1300, 860)
+        self.setMinimumSize(1100, 720)
 
-        self._build_header(outer)
+        # Icon
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
-        # Body: sidebar + content
-        body = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0)
-        body.pack(fill="both", expand=True)
+        root = QWidget()
+        root.setObjectName("bgRoot")
+        root.setStyleSheet(f"QWidget#bgRoot {{ background-color: {BG}; }}")
+        self.setCentralWidget(root)
 
-        # Sidebar separator
-        ctk.CTkFrame(body, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y")
+        vlay = QVBoxLayout(root)
+        vlay.setContentsMargins(0, 0, 0, 0)
+        vlay.setSpacing(0)
 
-        self._build_sidebar(body)
+        self._build_header(vlay)
 
-        ctk.CTkFrame(body, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y")
+        body = QWidget()
+        body.setStyleSheet(f"background-color: {BG};")
+        body_lay = QHBoxLayout(body)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(0)
+        vlay.addWidget(body, 1)
 
-        self._build_content(body)
+        self._build_sidebar(body_lay)
+        self._build_content(body_lay)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    def _build_header(self, parent):
-        hdr = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, corner_radius=0, height=62)
-        hdr.pack(fill="x")
-        hdr.pack_propagate(False)
+    def _build_header(self, parent_layout: QVBoxLayout):
+        hdr = QFrame()
+        hdr.setObjectName("header")
+        hdr.setFixedHeight(62)
+        lay = QHBoxLayout(hdr)
+        lay.setContentsMargins(20, 0, 20, 0)
 
-        inner = ctk.CTkFrame(hdr, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=20, pady=0)
+        # Logo
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+        if os.path.exists(icon_path):
+            px = QPixmap(icon_path).scaled(28, 28, Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.SmoothTransformation)
+            ico = QLabel()
+            ico.setPixmap(px)
+            ico.setStyleSheet("border: none; background: transparent;")
+            lay.addWidget(ico)
+            lay.addSpacing(8)
 
-        # ── Left: Logo ────────────────────────────────────────────────────────
-        logo_row = ctk.CTkFrame(inner, fg_color="transparent")
-        logo_row.pack(side="left", fill="y")
+        name_lbl = _lbl(None, "PlatAlgo", FG, 15, True)
+        relay_lbl = _lbl(None, " Relay", FG_SOFT, 13)
+        lay.addWidget(name_lbl)
+        lay.addWidget(relay_lbl)
+        lay.addStretch(1)
 
-        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
-        if Image and os.path.exists(_icon_path):
-            try:
-                _logo_img = ctk.CTkImage(
-                    light_image=Image.open(_icon_path),
-                    dark_image=Image.open(_icon_path),
-                    size=(28, 28)
-                )
-                ctk.CTkLabel(logo_row, image=_logo_img, text="",
-                             fg_color="transparent").pack(side="left", padx=(0, 8), pady=17)
-            except Exception:
-                pass
-        _label(logo_row, "PlatAlgo", color=FG,
-               font=(FONT_HERO[0], 15, "bold")).pack(side="left", pady=20)
-        _label(logo_row, "  Relay", color=FG_SOFT,
-               font=(FONT_BODY[0], 13)).pack(side="left", pady=(22, 18))
-
-        # ── Right: status pills ───────────────────────────────────────────────
-        right = ctk.CTkFrame(inner, fg_color="transparent")
-        right.pack(side="right", fill="y")
-
-        self._live_dot = ctk.CTkLabel(right, text="●", text_color=DANGER,
-                                      font=(FONT_BODY[0], 10), fg_color="transparent")
-        self._live_dot.pack(side="left", padx=(0, 4), pady=24)
-
-        self._latency_badge = ctk.CTkLabel(
-            right, text="OFFLINE / Idle",
-            text_color=FG_SOFT, font=(FONT_CAPTION[0], 10, "bold"),
-            fg_color=GLASS, corner_radius=999, padx=12, pady=5
-        )
-        self._latency_badge.pack(side="left", padx=(0, 14), pady=24)
-
-        self._avatar = ctk.CTkLabel(
-            right, text="--",
-            fg_color=GLASS_GOLD, text_color=GOLD_LT,
-            font=(FONT_LABEL[0], 11, "bold"),
-            width=34, height=34, corner_radius=17
-        )
-        self._avatar.pack(side="left", pady=14, padx=(0, 4))
-
-        # ── Center-left: Connection status pills ──────────────────────────────
-        dots_frame = ctk.CTkFrame(inner, fg_color="transparent")
-        dots_frame.pack(side="right", fill="y", padx=(0, 20))
-
+        # Status pills
         for name in ["Bridge", "MT5", "Broker"]:
-            pill = ctk.CTkFrame(dots_frame, fg_color=GLASS, corner_radius=20,
-                                border_width=1, border_color=BORDER)
-            pill.pack(side="left", padx=(0, 8), pady=16)
+            pill = QFrame()
+            pill.setStyleSheet(
+                f"QFrame {{ background-color: {GLASS}; border-radius: 14px; "
+                f"border: 1px solid {BORDER}; }}"
+            )
+            p_lay = QHBoxLayout(pill)
+            p_lay.setContentsMargins(10, 4, 12, 4)
+            p_lay.setSpacing(4)
 
-            dot = ctk.CTkLabel(pill, text="●", text_color=DANGER,
-                               font=(FONT_BODY[0], 9), fg_color="transparent")
-            dot.pack(side="left", padx=(10, 0), pady=6)
+            dot = QLabel("●")
+            dot.setStyleSheet(f"color: {DANGER}; font-size: 9px; border: none; background: transparent;")
+            txt = QLabel(f" {name}: Offline")
+            txt.setStyleSheet(f"color: {FG_SOFT}; font-size: 10px; border: none; background: transparent;")
 
-            lbl = _label(pill, f" {name}: Offline", color=FG_SOFT, font=(FONT_SMALL[0], 10))
-            lbl.pack(side="left", padx=(2, 12), pady=6)
+            p_lay.addWidget(dot)
+            p_lay.addWidget(txt)
+            lay.addWidget(pill)
+            lay.addSpacing(6)
 
-            self.status_dots[name]  = (dot, lbl)
-            self._header_dots[name] = (dot, lbl)
+            self._header_dots[name] = (dot, txt)
 
-        self._status_pill = None  # not shown separately
+        lay.addSpacing(8)
 
-        ctk.CTkFrame(parent, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
+        # OFFLINE pill
+        self._status_pill = QLabel("● OFFLINE / Idle")
+        self._status_pill.setStyleSheet(
+            f"background-color: {GLASS}; color: {FG_SOFT}; border-radius: 12px; "
+            f"padding: 5px 12px; font-size: 10px; font-weight: bold; "
+            f"border: 1px solid {BORDER};"
+        )
+        lay.addWidget(self._status_pill)
+        lay.addSpacing(12)
+
+        # Avatar
+        self._avatar = QLabel("--")
+        self._avatar.setFixedSize(34, 34)
+        self._avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._avatar.setStyleSheet(
+            f"background-color: {GLASS_GOLD}; color: {GOLD_LT}; border-radius: 17px; "
+            f"font-size: 11px; font-weight: bold; border: none;"
+        )
+        lay.addWidget(self._avatar)
+
+        parent_layout.addWidget(hdr)
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
-    def _build_sidebar(self, parent):
-        sidebar = ctk.CTkFrame(parent, fg_color=BG_ELEVATED, width=220, corner_radius=0)
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
-
-        # ── Nav items ─────────────────────────────────────────────────────────
-        nav_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        nav_frame.pack(fill="x", padx=10, pady=(12, 0))
+    def _build_sidebar(self, parent_layout: QHBoxLayout):
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(220)
+        s_lay = QVBoxLayout(sidebar)
+        s_lay.setContentsMargins(10, 14, 10, 14)
+        s_lay.setSpacing(2)
 
         nav_items = [
-            ("connect",      "Connect",      "⊕"),
-            ("dashboard",    "Dashboard",    "⊞"),
-            ("tradingview",  "TradingView",  "◎"),
-            ("instructions", "Guide",        "◑"),
-            ("settings",     "Settings",     "◈"),
+            ("connect",      "⊕  Connect"),
+            ("dashboard",    "⊞  Dashboard"),
+            ("tradingview",  "◎  TradingView"),
+            ("instructions", "◑  Guide"),
+            ("settings",     "◈  Settings"),
         ]
 
-        for key, label, icon in nav_items:
-            is_active = key == "connect"
+        for key, label in nav_items:
+            btn = QPushButton(label)
+            btn.setObjectName("navBtnActive" if key == "connect" else "navBtn")
+            btn.setFixedHeight(44)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(lambda _, k=key: self._switch_panel(k))
+            s_lay.addWidget(btn)
+            self._nav_btns[key] = btn
 
-            container = ctk.CTkFrame(
-                nav_frame,
-                fg_color=NAV_ACTIVE_BG if is_active else "transparent",
-                corner_radius=8,
-                height=48
-            )
-            container.pack(fill="x", pady=2)
-            container.pack_propagate(False)
+        # Separator
+        s_lay.addSpacing(12)
+        s_lay.addWidget(_hline())
+        s_lay.addSpacing(10)
 
-            bar = ctk.CTkFrame(
-                container,
-                width=3, corner_radius=2,
-                fg_color=PRIMARY if is_active else "transparent"
-            )
-            bar.pack(side="left", fill="y", pady=10)
+        # VPS status
+        self.vps_status_lbl = _lbl(None, "● VPS INACTIVE", FG_FAINT, 10)
+        s_lay.addWidget(self.vps_status_lbl)
 
-            icon_lbl = ctk.CTkLabel(
-                container, text=icon,
-                text_color=PRIMARY_LT if is_active else FG_MUTED,
-                font=(FONT_BODY[0], 16),
-                fg_color="transparent",
-                width=32
-            )
-            icon_lbl.pack(side="left", padx=(6, 0))
+        s_lay.addStretch(1)
 
-            text_lbl = ctk.CTkLabel(
-                container, text=label,
-                text_color=PRIMARY_LT if is_active else FG_MUTED,
-                font=(FONT_BODY[0], 13),
-                fg_color="transparent",
-                anchor="w"
-            )
-            text_lbl.pack(side="left", fill="x", expand=True, padx=(8, 8))
+        # Version
+        s_lay.addWidget(_lbl(None, f"v{APP_VERSION}", FG_FAINT, 10))
+        s_lay.addWidget(_lbl(None, "PlatAlgo Relay", FG_FAINT, 9))
 
-            # Store in new data dict
-            self._nav_items_data[key] = (container, bar, icon_lbl, text_lbl)
-            # Backward compat
-            self._nav_btns[key] = container
+        parent_layout.addWidget(sidebar)
 
-            # Bindings
-            def _on_click(e, k=key): self._switch_panel(k)
-            def _on_enter(e, k=key):
-                f, b, il, tl = self._nav_items_data[k]
-                if k != self.current_panel:
-                    f.configure(fg_color=NAV_HOVER_BG)
-            def _on_leave(e, k=key):
-                f, b, il, tl = self._nav_items_data[k]
-                if k != self.current_panel:
-                    f.configure(fg_color="transparent")
+    # ── Content (stacked) ─────────────────────────────────────────────────────
+    def _build_content(self, parent_layout: QHBoxLayout):
+        self._stacked = QStackedWidget()
+        self._stacked.setStyleSheet(f"background-color: {BG};")
 
-            for widget in (container, icon_lbl, text_lbl):
-                widget.bind("<Button-1>", _on_click)
-                widget.bind("<Enter>",    _on_enter)
-                widget.bind("<Leave>",    _on_leave)
+        panels = [
+            ("connect",      self._build_connect_panel),
+            ("dashboard",    self._build_dashboard_panel),
+            ("tradingview",  self._build_tradingview_panel),
+            ("instructions", self._build_guide_panel),
+            ("settings",     self._build_settings_panel),
+        ]
+        for key, builder in panels:
+            w = builder()
+            idx = self._stacked.addWidget(w)
+            self._panels[key]    = w
+            self._panel_idx[key] = idx
 
-        # Divider
-        ctk.CTkFrame(sidebar, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", padx=16, pady=(24, 16))
-
-        # VPS status chip in sidebar
-        self.vps_status_chip = _chip(sidebar, "● VPS INACTIVE", GLASS, text_color=FG_FAINT)
-        self.vps_status_chip.pack(padx=16, anchor="w")
-
-        # Bottom: version label
-        ver_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        ver_frame.pack(side="bottom", fill="x", padx=16, pady=16)
-        _label(ver_frame, f"v{APP_VERSION}", color=FG_FAINT, font=(FONT_SMALL[0], 10)).pack(anchor="w")
-        _label(ver_frame, "PlatAlgo Relay", color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(anchor="w")
-
-    # ── Content area ──────────────────────────────────────────────────────────
-    def _build_content(self, parent):
-        self._content_host = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=0)
-        self._content_host.pack(side="left", fill="both", expand=True)
-
-        self._panels["connect"]      = self._build_connect_panel(self._content_host)
-        self._panels["dashboard"]    = self._build_dashboard_panel(self._content_host)
-        self._panels["tradingview"]  = self._build_tradingview_panel(self._content_host)
-        self._panels["instructions"] = self._build_instructions_panel(self._content_host)
-        self._panels["settings"]     = self._build_settings_panel(self._content_host)
-
-        # Show default panel
-        self._panels["connect"].pack(fill="both", expand=True)
+        parent_layout.addWidget(self._stacked, 1)
 
     def _switch_panel(self, key: str):
-        if key == self.current_panel:
+        if key == self._current_panel:
             return
-        self._panels[self.current_panel].pack_forget()
-        self._panels[key].pack(fill="both", expand=True)
-        self.current_panel = key
-
-        for k, (f, bar, il, tl) in self._nav_items_data.items():
-            active = k == key
-            f.configure(fg_color=NAV_ACTIVE_BG if active else "transparent")
-            bar.configure(fg_color=PRIMARY if active else "transparent")
-            il.configure(text_color=PRIMARY_LT if active else FG_MUTED)
-            tl.configure(text_color=PRIMARY_LT if active else FG_MUTED)
-
+        self._current_panel = key
+        self._stacked.setCurrentIndex(self._panel_idx[key])
+        for k, btn in self._nav_btns.items():
+            btn.setObjectName("navBtnActive" if k == key else "navBtn")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
         if key == "tradingview":
-            self._update_tv_preview()
+            QTimer.singleShot(10, self._update_tv_preview)
 
     # =========================================================================
     # CONNECT PANEL
     # =========================================================================
-    def _build_connect_panel(self, parent) -> ctk.CTkFrame:
-        outer = ctk.CTkScrollableFrame(parent, fg_color="transparent",
-                                       scrollbar_button_color=BORDER_SOFT,
-                                       scrollbar_button_hover_color=BORDER_GLOW)
+    def _build_connect_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background-color: {BG};")
 
-        # ── Page header ───────────────────────────────────────────────────────
-        page_hdr = ctk.CTkFrame(outer, fg_color="transparent")
-        page_hdr.pack(fill="x", padx=40, pady=(32, 0))
-        _label(page_hdr, "Connect", font=FONT_DISPLAY, color=FG).pack(anchor="w")
-        _label(page_hdr, "Sign in and configure your trading bridge execution method.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", pady=(4, 24))
+        inner = QWidget()
+        inner.setStyleSheet(f"background-color: {BG};")
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(40, 32, 40, 32)
+        lay.setSpacing(0)
+        scroll.setWidget(inner)
 
-        # ── Two-column layout ─────────────────────────────────────────────────
-        center = ctk.CTkFrame(outer, fg_color="transparent")
-        center.pack(fill="both", expand=True, padx=40, pady=(0, 32))
-        center.columnconfigure(0, weight=1)
-        center.columnconfigure(1, weight=1)
-        center.rowconfigure(0, weight=0)
+        # Page title
+        lay.addWidget(_lbl(None, "Connect", FG, 28, True))
+        lay.addSpacing(6)
+        lay.addWidget(_lbl(None, "Sign in and configure your trading bridge execution method.",
+                           FG_MUTED, 12))
+        lay.addSpacing(24)
 
-        # ── LEFT COLUMN ───────────────────────────────────────────────────────
-        left = ctk.CTkFrame(center, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        # Two-column
+        cols = QWidget()
+        cols.setStyleSheet(f"background-color: {BG};")
+        c_lay = QHBoxLayout(cols)
+        c_lay.setContentsMargins(0, 0, 0, 0)
+        c_lay.setSpacing(20)
+        lay.addWidget(cols)
 
-        # ── Sign In Card ──────────────────────────────────────────────────────
-        login_card = ctk.CTkFrame(left, fg_color=BG_CARD, corner_radius=16,
-                                  border_width=1, border_color=BORDER)
-        login_card.pack(fill="x", pady=(0, 16))
+        # LEFT col
+        left_w = QWidget()
+        left_w.setStyleSheet(f"background-color: {BG};")
+        left_lay = QVBoxLayout(left_w)
+        left_lay.setContentsMargins(0, 0, 0, 0)
+        left_lay.setSpacing(16)
+        c_lay.addWidget(left_w, 1)
 
-        lc_inner = ctk.CTkFrame(login_card, fg_color="transparent")
-        lc_inner.pack(fill="x", padx=28, pady=(28, 0))
+        # Sign In card
+        self._build_signin_card(left_lay)
 
-        _label(lc_inner, "Sign In", font=FONT_DISPLAY, color=FG).pack(anchor="w")
-        _label(lc_inner, "Access your PlatAlgo dashboard",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", pady=(4, 20))
+        # MT5 card
+        self._build_mt5_card(left_lay)
+        left_lay.addStretch(1)
 
-        # OAuth buttons — side by side
-        self._login_form_inner = ctk.CTkFrame(login_card, fg_color="transparent")
-        self._login_form_inner.pack(fill="x")
+        # RIGHT col
+        right_w = QWidget()
+        right_w.setStyleSheet(f"background-color: {BG};")
+        right_lay = QVBoxLayout(right_w)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(16)
+        c_lay.addWidget(right_w, 1)
 
-        oauth_inner = ctk.CTkFrame(self._login_form_inner, fg_color="transparent")
-        oauth_inner.pack(fill="x", padx=28, pady=(0, 4))
+        right_lay.addWidget(_lbl(None, "Execution Mode", FG, 28, True))
+        right_lay.addSpacing(4)
+        right_lay.addWidget(_lbl(None, "Choose how your signals reach the broker.", FG_MUTED, 12))
+        right_lay.addSpacing(16)
 
-        oauth_row = ctk.CTkFrame(oauth_inner, fg_color="transparent")
-        oauth_row.pack(fill="x", pady=(0, 16))
-        oauth_row.columnconfigure(0, weight=1)
-        oauth_row.columnconfigure(1, weight=1)
+        # VPS card
+        self._build_vps_card(right_lay)
 
-        ctk.CTkButton(
-            oauth_row, text="🌐  Google",
-            command=lambda: self._open_oauth("google"),
-            fg_color=GLASS, hover_color=BORDER,
-            text_color=FG, border_width=1, border_color=BORDER_SOFT,
-            font=(FONT_BODY[0], 13, "bold"), height=44, corner_radius=10,
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        # Local card
+        self._build_local_card(right_lay)
+        right_lay.addStretch(1)
 
-        ctk.CTkButton(
-            oauth_row, text="f  Facebook",
-            command=lambda: self._open_oauth("facebook"),
-            fg_color=GLASS, hover_color=BORDER,
-            text_color=FG, border_width=1, border_color=BORDER_SOFT,
-            font=(FONT_BODY[0], 13, "bold"), height=44, corner_radius=10,
-        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        return scroll
+
+    def _build_signin_card(self, parent_lay: QVBoxLayout):
+        card = _card()
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(28, 28, 28, 28)
+        c_lay.setSpacing(0)
+
+        c_lay.addWidget(_lbl(None, "Sign In", FG, 24, True))
+        c_lay.addSpacing(4)
+        c_lay.addWidget(_lbl(None, "Access your PlatAlgo dashboard", FG_MUTED, 11))
+        c_lay.addSpacing(20)
+
+        # Login form (hideable)
+        self._login_form = QWidget()
+        self._login_form.setStyleSheet("background: transparent;")
+        lf_lay = QVBoxLayout(self._login_form)
+        lf_lay.setContentsMargins(0, 0, 0, 0)
+        lf_lay.setSpacing(0)
+
+        # OAuth buttons row
+        oauth_row = QWidget()
+        oauth_row.setStyleSheet("background: transparent;")
+        or_lay = QHBoxLayout(oauth_row)
+        or_lay.setContentsMargins(0, 0, 0, 16)
+        or_lay.setSpacing(10)
+
+        g_btn = QPushButton("🌐  Google")
+        g_btn.setObjectName("oauthBtn")
+        g_btn.setFixedHeight(44)
+        g_btn.clicked.connect(lambda: self._open_oauth("google"))
+
+        f_btn = QPushButton("f  Facebook")
+        f_btn.setObjectName("oauthBtn")
+        f_btn.setFixedHeight(44)
+        f_btn.clicked.connect(lambda: self._open_oauth("facebook"))
+
+        or_lay.addWidget(g_btn)
+        or_lay.addWidget(f_btn)
+        lf_lay.addWidget(oauth_row)
 
         # OR divider
-        div_row = ctk.CTkFrame(oauth_inner, fg_color="transparent")
-        div_row.pack(fill="x", pady=(0, 16))
-        ctk.CTkFrame(div_row, height=1, fg_color=BORDER_SOFT, corner_radius=0).pack(
-            side="left", fill="x", expand=True, pady=8)
-        _label(div_row, "  OR  ", color=FG_SOFT, font=(FONT_SMALL[0], 11, "bold")).pack(side="left")
-        ctk.CTkFrame(div_row, height=1, fg_color=BORDER_SOFT, corner_radius=0).pack(
-            side="left", fill="x", expand=True, pady=8)
+        div_w = QWidget()
+        div_w.setStyleSheet("background: transparent;")
+        div_lay = QHBoxLayout(div_w)
+        div_lay.setContentsMargins(0, 0, 0, 16)
+        div_lay.setSpacing(8)
+        div_lay.addWidget(_hline())
+        div_lay.addWidget(_lbl(None, "OR", FG_SOFT, 11, True))
+        div_lay.addWidget(_hline())
+        lf_lay.addWidget(div_w)
 
-        # Email + Password with labels above
-        _label(self._login_form_inner, "EMAIL", color=FG_SOFT,
-               font=(FONT_CAPTION[0], 10, "bold")).pack(anchor="w", padx=28, pady=(0, 5))
-        self.user_entry = _entry(self._login_form_inner, self.user_id_var, "you@example.com")
-        self.user_entry.pack(fill="x", padx=28, pady=(0, 12))
+        # Email
+        lf_lay.addWidget(_lbl(None, "EMAIL", FG_SOFT, 10, True))
+        lf_lay.addSpacing(5)
+        self.user_entry = _entry("you@example.com")
+        lf_lay.addWidget(self.user_entry)
+        lf_lay.addSpacing(12)
 
-        _label(self._login_form_inner, "PASSWORD", color=FG_SOFT,
-               font=(FONT_CAPTION[0], 10, "bold")).pack(anchor="w", padx=28, pady=(0, 5))
-        self.pass_entry = _entry(self._login_form_inner, self.password_var, "••••••••", show="*")
-        self.pass_entry.pack(fill="x", padx=28, pady=(0, 14))
+        # Password
+        lf_lay.addWidget(_lbl(None, "PASSWORD", FG_SOFT, 10, True))
+        lf_lay.addSpacing(5)
+        self.pass_entry = _entry("••••••••", password=True)
+        lf_lay.addWidget(self.pass_entry)
+        lf_lay.addSpacing(14)
 
-        opts = ctk.CTkFrame(self._login_form_inner, fg_color="transparent")
-        opts.pack(fill="x", padx=28, pady=(0, 16))
-        ctk.CTkCheckBox(opts, text="Remember me", variable=self.remember_var,
-                        text_color=FG_MUTED, font=FONT_SMALL,
-                        fg_color=PRIMARY, hover_color=PRIMARY_LT,
-                        checkmark_color=BG).pack(side="left")
-        ctk.CTkCheckBox(opts, text="Launch on startup", variable=self.startup_var,
-                        command=self._toggle_startup,
-                        text_color=FG_MUTED, font=FONT_SMALL,
-                        fg_color=PRIMARY, hover_color=PRIMARY_LT,
-                        checkmark_color=BG).pack(side="left", padx=(16, 0))
+        # Checkboxes
+        cb_row = QWidget()
+        cb_row.setStyleSheet("background: transparent;")
+        cb_lay = QHBoxLayout(cb_row)
+        cb_lay.setContentsMargins(0, 0, 0, 16)
+        cb_lay.setSpacing(16)
+
+        self.remember_cb = QCheckBox("Remember me")
+        self.startup_cb  = QCheckBox("Launch on startup")
+        self.startup_cb.toggled.connect(self._toggle_startup)
+        cb_lay.addWidget(self.remember_cb)
+        cb_lay.addWidget(self.startup_cb)
+        cb_lay.addStretch()
+        lf_lay.addWidget(cb_row)
 
         # Sign In button
-        ctk.CTkButton(
-            self._login_form_inner,
-            text="Sign In  →",
-            command=self._sign_in,
-            fg_color=GOLD, hover_color=GOLD_LT,
-            text_color="#0A0600", font=(FONT_LABEL[0], 13, "bold"),
-            height=52, corner_radius=12,
-        ).pack(fill="x", padx=28, pady=(0, 28))
+        sign_in_btn = QPushButton("Sign In  →")
+        sign_in_btn.setObjectName("goldBtn")
+        sign_in_btn.setFixedHeight(52)
+        sign_in_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sign_in_btn.clicked.connect(self._sign_in)
+        lf_lay.addWidget(sign_in_btn)
 
-        # ── OAuth logged-in banner ────────────────────────────────────────────
-        self._oauth_logged_in_frame = ctk.CTkFrame(login_card, fg_color="transparent")
+        c_lay.addWidget(self._login_form)
 
-        _olf = self._oauth_logged_in_frame
-        olf_inner = ctk.CTkFrame(_olf, fg_color=GLASS, corner_radius=14,
-                                 border_width=1, border_color=BORDER_GLOW)
-        olf_inner.pack(fill="x", padx=28, pady=(0, 12))
+        # OAuth logged-in frame (hidden initially)
+        self._oauth_frame = QWidget()
+        self._oauth_frame.setStyleSheet("background: transparent;")
+        self._oauth_frame.hide()
+        of_lay = QVBoxLayout(self._oauth_frame)
+        of_lay.setContentsMargins(0, 0, 0, 0)
+        of_lay.setSpacing(0)
 
-        olf_top = ctk.CTkFrame(olf_inner, fg_color="transparent")
-        olf_top.pack(fill="x", padx=16, pady=(16, 8))
-
-        self._oauth_provider_icon = ctk.CTkLabel(
-            olf_top, text="✓", text_color=SUCCESS,
-            font=(FONT_LABEL[0], 20, "bold"),
-            fg_color=SUCCESS_BG, corner_radius=20,
-            width=40, height=40
+        olf_inner = QFrame()
+        olf_inner.setStyleSheet(
+            f"QFrame {{ background-color: {GLASS}; border-radius: 12px; "
+            f"border: 1px solid {BORDER_SOFT}; }}"
         )
-        self._oauth_provider_icon.pack(side="left", padx=(0, 14))
+        olf_lay = QHBoxLayout(olf_inner)
+        olf_lay.setContentsMargins(16, 16, 16, 16)
+        olf_lay.setSpacing(12)
 
-        olf_text = ctk.CTkFrame(olf_top, fg_color="transparent")
-        olf_text.pack(side="left", fill="x", expand=True)
-        self._oauth_provider_lbl = _label(
-            olf_text, "Signed in via Google",
-            color=FG, font=(FONT_LABEL[0], 13, "bold"))
-        self._oauth_provider_lbl.pack(anchor="w")
-        self._oauth_user_lbl = _label(olf_text, "—", color=FG_MUTED, font=FONT_SMALL)
-        self._oauth_user_lbl.pack(anchor="w")
+        check_lbl = QLabel("✓")
+        check_lbl.setFixedSize(40, 40)
+        check_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        check_lbl.setStyleSheet(
+            f"background-color: {SUCCESS_BG}; color: {GREEN}; "
+            f"border-radius: 20px; font-size: 18px; font-weight: bold; border: none;"
+        )
+        olf_lay.addWidget(check_lbl)
 
-        _btn_outline(_olf, "Sign out / Switch account",
-                     self._sign_out_oauth, height=36).pack(
-            fill="x", padx=28, pady=(0, 20))
+        olf_text = QWidget()
+        olf_text.setStyleSheet("background: transparent;")
+        olt_lay = QVBoxLayout(olf_text)
+        olt_lay.setContentsMargins(0, 0, 0, 0)
+        olt_lay.setSpacing(2)
 
-        # ── MT5 Broker Login Card ─────────────────────────────────────────────
-        mt5_card = ctk.CTkFrame(left, fg_color=BG_CARD, corner_radius=16,
-                                border_width=1, border_color=BORDER)
-        mt5_card.pack(fill="x", pady=(0, 16))
+        self._oauth_prov_lbl = _lbl(None, "Signed in via Google", FG, 13, True)
+        self._oauth_user_lbl = _lbl(None, "—", FG_MUTED, 11)
+        olt_lay.addWidget(self._oauth_prov_lbl)
+        olt_lay.addWidget(self._oauth_user_lbl)
+        olf_lay.addWidget(olf_text, 1)
+        of_lay.addWidget(olf_inner)
+        of_lay.addSpacing(12)
 
-        mt5_inner = ctk.CTkFrame(mt5_card, fg_color="transparent")
-        mt5_inner.pack(fill="x", padx=28, pady=28)
+        sign_out_btn = QPushButton("Sign out / Switch account")
+        sign_out_btn.setObjectName("outlineBtn")
+        sign_out_btn.setFixedHeight(40)
+        sign_out_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sign_out_btn.clicked.connect(self._sign_out_oauth)
+        of_lay.addWidget(sign_out_btn)
 
-        mt5_hdr = ctk.CTkFrame(mt5_inner, fg_color="transparent")
-        mt5_hdr.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(mt5_hdr, text="🔒", font=(FONT_BODY[0], 16),
-                     fg_color="transparent").pack(side="left", padx=(0, 10))
-        title_col = ctk.CTkFrame(mt5_hdr, fg_color="transparent")
-        title_col.pack(side="left", fill="x", expand=True)
-        _label(title_col, "MT5 Broker Login", font=FONT_TITLE, color=FG).pack(anchor="w")
-        _label(title_col, "Credentials encrypted at rest",
-               color=FG_MUTED, font=(FONT_SMALL[0], 10)).pack(anchor="w")
-        ctk.CTkLabel(mt5_hdr, text="OPTIONAL",
-                     fg_color=GLASS, text_color=FG_SOFT,
-                     font=(FONT_CAPTION[0], 9, "bold"),
-                     corner_radius=6, padx=8, pady=4).pack(side="right")
+        c_lay.addWidget(self._oauth_frame)
+        parent_lay.addWidget(card)
 
-        ctk.CTkFrame(mt5_inner, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", pady=(16, 16))
+    def _build_mt5_card(self, parent_lay: QVBoxLayout):
+        card = _card()
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(28, 24, 28, 24)
+        c_lay.setSpacing(0)
 
-        self.mt5_acct_entry = _entry(mt5_inner, self.mt5_acct_var, "Account Number")
-        self.mt5_acct_entry.pack(fill="x", pady=(0, 10))
+        # Header row
+        hdr = QWidget()
+        hdr.setStyleSheet("background: transparent;")
+        h_lay = QHBoxLayout(hdr)
+        h_lay.setContentsMargins(0, 0, 0, 0)
+        h_lay.setSpacing(10)
 
-        self.mt5_pw_entry = _entry(mt5_inner, self.mt5_pw_var, "MT5 Password", show="*")
-        self.mt5_pw_entry.pack(fill="x", pady=(0, 10))
+        lock = QLabel("🔒")
+        lock.setStyleSheet("font-size: 16px; border: none; background: transparent;")
+        h_lay.addWidget(lock)
 
-        self.mt5_server_entry = _entry(mt5_inner, self.mt5_server_var,
-                                       "Broker Server  (e.g. ICMarkets-Live01)")
-        self.mt5_server_entry.pack(fill="x")
+        title_col = QWidget()
+        title_col.setStyleSheet("background: transparent;")
+        tc_lay = QVBoxLayout(title_col)
+        tc_lay.setContentsMargins(0, 0, 0, 0)
+        tc_lay.setSpacing(1)
+        tc_lay.addWidget(_lbl(None, "MT5 Broker Login", FG, 16, True))
+        tc_lay.addWidget(_lbl(None, "Credentials encrypted at rest", FG_MUTED, 10))
+        h_lay.addWidget(title_col, 1)
 
-        # ── RIGHT COLUMN: Execution Mode ──────────────────────────────────────
-        right = ctk.CTkFrame(center, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        optional = _chip_label("OPTIONAL", GLASS, FG_SOFT)
+        h_lay.addWidget(optional)
+        c_lay.addWidget(hdr)
+        c_lay.addSpacing(16)
+        c_lay.addWidget(_hline())
+        c_lay.addSpacing(16)
 
-        _label(right, "Execution Mode", font=FONT_DISPLAY, color=FG).pack(
-            anchor="w", pady=(0, 4))
-        _label(right, "Choose how your signals reach the broker.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", pady=(0, 24))
+        self.mt5_acct_edit   = _entry("Account Number")
+        self.mt5_pw_edit     = _entry("MT5 Password", password=True)
+        self.mt5_server_edit = _entry("Broker Server  (e.g. ICMarkets-Live01)")
 
-        # ── VPS Card ──────────────────────────────────────────────────────────
-        self.vps_card = ctk.CTkFrame(right, fg_color=BG_CARD, corner_radius=16,
-                                     border_width=1, border_color=GOLD_BORDER)
-        self.vps_card.pack(fill="x", pady=(0, 16))
+        c_lay.addWidget(self.mt5_acct_edit)
+        c_lay.addSpacing(10)
+        c_lay.addWidget(self.mt5_pw_edit)
+        c_lay.addSpacing(10)
+        c_lay.addWidget(self.mt5_server_edit)
 
-        vpc_inner = ctk.CTkFrame(self.vps_card, fg_color="transparent")
-        vpc_inner.pack(fill="x", padx=28, pady=24)
+        parent_lay.addWidget(card)
 
-        # VPS title row
-        vps_title_row = ctk.CTkFrame(vpc_inner, fg_color="transparent")
-        vps_title_row.pack(fill="x", pady=(0, 4))
+    def _build_vps_card(self, parent_lay: QVBoxLayout):
+        card = _card(gold=True)
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(28, 24, 28, 24)
+        c_lay.setSpacing(0)
+        self.vps_card_frame = card
 
-        vps_icon_frame = ctk.CTkFrame(vps_title_row, fg_color=GLASS_GOLD, corner_radius=10,
-                                       width=40, height=40)
-        vps_icon_frame.pack(side="left", padx=(0, 12))
-        vps_icon_frame.pack_propagate(False)
-        ctk.CTkLabel(vps_icon_frame, text="⊟", text_color=GOLD_LT,
-                     font=(FONT_BODY[0], 18), fg_color="transparent").place(relx=0.5, rely=0.5, anchor="center")
+        # Title row
+        tr = QWidget()
+        tr.setStyleSheet("background: transparent;")
+        tr_lay = QHBoxLayout(tr)
+        tr_lay.setContentsMargins(0, 0, 0, 0)
+        tr_lay.setSpacing(12)
 
-        vps_title_col = ctk.CTkFrame(vps_title_row, fg_color="transparent")
-        vps_title_col.pack(side="left", fill="x", expand=True)
-        _label(vps_title_col, "VPS Execution", font=FONT_HERO, color=FG).pack(anchor="w")
-        _label(vps_title_col, "Cloud-hosted, always-on bridge",
-               color=FG_MUTED, font=(FONT_SMALL[0], 11)).pack(anchor="w")
+        icon_sq = QFrame()
+        icon_sq.setFixedSize(40, 40)
+        icon_sq.setStyleSheet(
+            f"QFrame {{ background-color: {GLASS_GOLD}; border-radius: 10px; border: none; }}"
+        )
+        isq_lay = QVBoxLayout(icon_sq)
+        isq_lay.setContentsMargins(0, 0, 0, 0)
+        i_lbl = QLabel("⊟")
+        i_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        i_lbl.setStyleSheet(f"color: {GOLD_LT}; font-size: 18px; border: none; background: transparent;")
+        isq_lay.addWidget(i_lbl)
+        tr_lay.addWidget(icon_sq)
 
-        ctk.CTkLabel(vps_title_row, text="★  RECOMMENDED",
-                     fg_color=GOLD, text_color="#0A0600",
-                     font=(FONT_CAPTION[0], 9, "bold"),
-                     corner_radius=8, padx=10, pady=5).pack(side="right")
+        tc = QWidget()
+        tc.setStyleSheet("background: transparent;")
+        tc_lay = QVBoxLayout(tc)
+        tc_lay.setContentsMargins(0, 0, 0, 0)
+        tc_lay.setSpacing(2)
+        tc_lay.addWidget(_lbl(None, "VPS Execution", FG, 15, True))
+        tc_lay.addWidget(_lbl(None, "Cloud-hosted, always-on bridge", FG_MUTED, 11))
+        tr_lay.addWidget(tc, 1)
 
-        # 2-column bullet grid
-        bullets_grid = ctk.CTkFrame(vpc_inner, fg_color="transparent")
-        bullets_grid.pack(fill="x", pady=(18, 18))
-        bullets_grid.columnconfigure(0, weight=1)
-        bullets_grid.columnconfigure(1, weight=1)
+        rec = _chip_label("★  RECOMMENDED", GOLD, "#0A0600")
+        tr_lay.addWidget(rec)
+        c_lay.addWidget(tr)
+        c_lay.addSpacing(18)
 
-        vps_bullets = [
+        # Bullets grid
+        bg = QWidget()
+        bg.setStyleSheet("background: transparent;")
+        bg_lay = QGridLayout(bg)
+        bg_lay.setContentsMargins(0, 0, 0, 0)
+        bg_lay.setSpacing(6)
+
+        bullets = [
             "Trades 24 hrs, 7 days a week",
             "No MT5 required on this machine",
             "Works on Mac, Windows, any device",
@@ -903,1174 +1066,989 @@ class RelayGuiApp:
             "Sub-millisecond execution",
             "Dedicated server resources",
         ]
-        for i, txt in enumerate(vps_bullets):
-            row_i, col_i = divmod(i, 2)
-            br = ctk.CTkFrame(bullets_grid, fg_color="transparent")
-            br.grid(row=row_i, column=col_i, sticky="w", pady=3, padx=(0, 8))
-            _label(br, "✓", color=SUCCESS,
-                   font=(FONT_LABEL[0], 11, "bold")).pack(side="left", padx=(0, 6))
-            _label(br, txt, color=FG_MUTED, font=(FONT_SMALL[0], 11)).pack(side="left")
+        for i, txt in enumerate(bullets):
+            r, col = divmod(i, 2)
+            bw = QWidget()
+            bw.setStyleSheet("background: transparent;")
+            bw_lay = QHBoxLayout(bw)
+            bw_lay.setContentsMargins(0, 0, 0, 0)
+            bw_lay.setSpacing(6)
+            bw_lay.addWidget(_lbl(None, "✓", GREEN, 11, True))
+            bw_lay.addWidget(_lbl(None, txt, FG_MUTED, 11))
+            bw_lay.addStretch()
+            bg_lay.addWidget(bw, r, col)
+        c_lay.addWidget(bg)
+        c_lay.addSpacing(18)
 
-        # VPS buttons — primary + disconnect side by side
-        btn_row = ctk.CTkFrame(vpc_inner, fg_color="transparent")
-        btn_row.pack(fill="x")
-        btn_row.columnconfigure(0, weight=1)
-        btn_row.columnconfigure(1, weight=0)
+        # Buttons
+        btn_row = QWidget()
+        btn_row.setStyleSheet("background: transparent;")
+        br_lay = QHBoxLayout(btn_row)
+        br_lay.setContentsMargins(0, 0, 0, 0)
+        br_lay.setSpacing(10)
 
-        self.vps_btn = ctk.CTkButton(
-            btn_row,
-            text="Login to MT5 on VPS  →",
-            command=self.enable_managed_mode,
-            fg_color=GOLD, hover_color=GOLD_LT,
-            text_color="#0A0600", font=(FONT_LABEL[0], 13, "bold"),
-            height=52, corner_radius=12,
+        self.vps_btn = QPushButton("Login to MT5 on VPS  →")
+        self.vps_btn.setObjectName("goldBtn")
+        self.vps_btn.setFixedHeight(52)
+        self.vps_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.vps_btn.clicked.connect(self.enable_managed_mode)
+
+        self.vps_disable_btn = QPushButton("Disconnect")
+        self.vps_disable_btn.setObjectName("outlineBtn")
+        self.vps_disable_btn.setFixedHeight(52)
+        self.vps_disable_btn.clicked.connect(self.disable_managed_mode)
+
+        br_lay.addWidget(self.vps_btn, 1)
+        br_lay.addWidget(self.vps_disable_btn)
+        c_lay.addWidget(btn_row)
+
+        parent_lay.addWidget(card)
+
+    def _build_local_card(self, parent_lay: QVBoxLayout):
+        card = _card()
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(28, 24, 28, 24)
+        c_lay.setSpacing(0)
+
+        tr = QWidget()
+        tr.setStyleSheet("background: transparent;")
+        tr_lay = QHBoxLayout(tr)
+        tr_lay.setContentsMargins(0, 0, 0, 0)
+        tr_lay.setSpacing(12)
+
+        icon_sq = QFrame()
+        icon_sq.setFixedSize(40, 40)
+        icon_sq.setStyleSheet(
+            f"QFrame {{ background-color: {GLASS}; border-radius: 10px; border: none; }}"
         )
-        self.vps_btn.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        isq_lay = QVBoxLayout(icon_sq)
+        isq_lay.setContentsMargins(0, 0, 0, 0)
+        il = QLabel("⬡")
+        il.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        il.setStyleSheet(f"color: {FG_MUTED}; font-size: 18px; border: none; background: transparent;")
+        isq_lay.addWidget(il)
+        tr_lay.addWidget(icon_sq)
 
-        self.vps_disable_btn = _btn_outline(
-            btn_row, "Disconnect", self.disable_managed_mode, height=52)
-        self.vps_disable_btn.grid(row=0, column=1, sticky="ew")
+        tc = QWidget()
+        tc.setStyleSheet("background: transparent;")
+        tc_lay = QVBoxLayout(tc)
+        tc_lay.setContentsMargins(0, 0, 0, 0)
+        tc_lay.setSpacing(2)
+        tc_lay.addWidget(_lbl(None, "Local Mode", FG, 15, True))
+        tc_lay.addWidget(_lbl(None, "Connect directly to your machine", FG_MUTED, 11))
+        tr_lay.addWidget(tc, 1)
 
-        # ── Local Mode Card ───────────────────────────────────────────────────
-        local_card = ctk.CTkFrame(right, fg_color=BG_CARD, corner_radius=16,
-                                  border_width=1, border_color=BORDER)
-        local_card.pack(fill="x", pady=(0, 16))
+        win_badge = _chip_label("WINDOWS ONLY", GLASS, FG_SOFT)
+        tr_lay.addWidget(win_badge)
+        c_lay.addWidget(tr)
+        c_lay.addSpacing(18)
 
-        loc_inner = ctk.CTkFrame(local_card, fg_color="transparent")
-        loc_inner.pack(fill="x", padx=28, pady=24)
-
-        loc_title_row = ctk.CTkFrame(loc_inner, fg_color="transparent")
-        loc_title_row.pack(fill="x", pady=(0, 4))
-
-        loc_icon_frame = ctk.CTkFrame(loc_title_row, fg_color=GLASS, corner_radius=10,
-                                       width=40, height=40)
-        loc_icon_frame.pack(side="left", padx=(0, 12))
-        loc_icon_frame.pack_propagate(False)
-        ctk.CTkLabel(loc_icon_frame, text="⬡", text_color=FG_MUTED,
-                     font=(FONT_BODY[0], 18), fg_color="transparent").place(relx=0.5, rely=0.5, anchor="center")
-
-        loc_title_col = ctk.CTkFrame(loc_title_row, fg_color="transparent")
-        loc_title_col.pack(side="left", fill="x", expand=True)
-        _label(loc_title_col, "Local Mode", font=FONT_HERO, color=FG).pack(anchor="w")
-        _label(loc_title_col, "Connect directly to your machine",
-               color=FG_MUTED, font=(FONT_SMALL[0], 11)).pack(anchor="w")
-
-        if not IS_WINDOWS:
-            ctk.CTkLabel(loc_title_row, text="WINDOWS ONLY",
-                         fg_color="transparent", text_color=FG_SOFT,
-                         font=(FONT_CAPTION[0], 9, "bold"),
-                         corner_radius=6, padx=8, pady=4,
-                         border_width=1).pack(side="right")
-        else:
-            ctk.CTkLabel(loc_title_row, text="WINDOWS ONLY",
-                         fg_color="transparent", text_color=FG_SOFT,
-                         font=(FONT_CAPTION[0], 9, "bold"),
-                         corner_radius=6, padx=8, pady=4).pack(side="right")
-
-        # 2-column bullet grid for local mode
-        loc_bullets_grid = ctk.CTkFrame(loc_inner, fg_color="transparent")
-        loc_bullets_grid.pack(fill="x", pady=(18, 18))
-        loc_bullets_grid.columnconfigure(0, weight=1)
-        loc_bullets_grid.columnconfigure(1, weight=1)
+        # Bullets
+        bg = QWidget()
+        bg.setStyleSheet("background: transparent;")
+        bg_lay = QGridLayout(bg)
+        bg_lay.setContentsMargins(0, 0, 0, 0)
+        bg_lay.setSpacing(6)
 
         loc_bullets = [
-            ("✓", "Low latency — direct connection", SUCCESS),
-            ("✓", "Full environment control", SUCCESS),
-            ("✗", "Requires MT5 open on this machine", DANGER),
-            ("✗", "Stops when computer sleeps or closes", DANGER),
+            (GREEN,  "Low latency — direct connection"),
+            (GREEN,  "Full environment control"),
+            (DANGER, "Requires MT5 open on this machine"),
+            (DANGER, "Stops when computer sleeps or closes"),
         ]
-        for i, (icon, txt, col) in enumerate(loc_bullets):
-            row_i, col_i = divmod(i, 2)
-            cr = ctk.CTkFrame(loc_bullets_grid, fg_color="transparent")
-            cr.grid(row=row_i, column=col_i, sticky="w", pady=3, padx=(0, 8))
-            _label(cr, icon, color=col,
-                   font=(FONT_LABEL[0], 11, "bold")).pack(side="left", padx=(0, 6))
-            _label(cr, txt, color=FG_MUTED, font=(FONT_SMALL[0], 11)).pack(side="left")
+        icons = ["✓", "✓", "✗", "✗"]
+        for i, (color, txt) in enumerate(loc_bullets):
+            r, col = divmod(i, 2)
+            bw = QWidget()
+            bw.setStyleSheet("background: transparent;")
+            bw_lay = QHBoxLayout(bw)
+            bw_lay.setContentsMargins(0, 0, 0, 0)
+            bw_lay.setSpacing(6)
+            bw_lay.addWidget(_lbl(None, icons[i], color, 11, True))
+            bw_lay.addWidget(_lbl(None, txt, FG_MUTED, 11))
+            bw_lay.addStretch()
+            bg_lay.addWidget(bw, r, col)
+        c_lay.addWidget(bg)
+        c_lay.addSpacing(16)
+        c_lay.addWidget(_hline())
+        c_lay.addSpacing(16)
 
-        ctk.CTkFrame(loc_inner, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", pady=(0, 16))
+        btn_row = QWidget()
+        btn_row.setStyleSheet("background: transparent;")
+        br_lay = QHBoxLayout(btn_row)
+        br_lay.setContentsMargins(0, 0, 0, 0)
+        br_lay.setSpacing(10)
 
-        loc_btns = ctk.CTkFrame(loc_inner, fg_color="transparent")
-        loc_btns.pack(fill="x")
-        loc_btns.columnconfigure(0, weight=1)
-        loc_btns.columnconfigure(1, weight=1)
+        self.connect_btn = QPushButton("Select Local Mode" if IS_WINDOWS else "Windows Only")
+        self.connect_btn.setObjectName("outlineBtn")
+        self.connect_btn.setFixedHeight(44)
+        self.connect_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        if IS_WINDOWS:
+            self.connect_btn.clicked.connect(self.start_relay)
+        else:
+            self.connect_btn.setEnabled(False)
 
-        self.connect_btn = _btn_outline(
-            loc_btns,
-            "Select Local Mode" if IS_WINDOWS else "Windows Only",
-            self.start_relay if IS_WINDOWS else lambda: None,
-            height=44,
-            state="normal" if IS_WINDOWS else "disabled"
-        )
-        self.connect_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        stop_btn = QPushButton("Stop")
+        stop_btn.setObjectName("dangerBtn")
+        stop_btn.setFixedHeight(44)
+        stop_btn.clicked.connect(self.stop_relay)
 
-        _btn_danger(loc_btns, "Stop", self.stop_relay,
-                    height=44).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        br_lay.addWidget(self.connect_btn, 1)
+        br_lay.addWidget(stop_btn)
+        c_lay.addWidget(btn_row)
 
-        return outer
+        parent_lay.addWidget(card)
 
     # =========================================================================
     # DASHBOARD PANEL
     # =========================================================================
-    def _build_dashboard_panel(self, parent) -> ctk.CTkFrame:
-        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
-                                       scrollbar_button_color=BORDER_SOFT,
-                                       scrollbar_button_hover_color=BORDER_GLOW)
+    def _build_dashboard_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background-color: {BG};")
 
-        # ── Header row ────────────────────────────────────────────────────────
-        hdr_row = ctk.CTkFrame(frame, fg_color="transparent")
-        hdr_row.pack(fill="x", padx=24, pady=(24, 0))
-        _label(hdr_row, "Dashboard", font=FONT_DISPLAY, color=FG).pack(side="left")
+        inner = QWidget()
+        inner.setStyleSheet(f"background-color: {BG};")
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(28, 28, 28, 28)
+        lay.setSpacing(0)
+        scroll.setWidget(inner)
 
-        refresh_row = ctk.CTkFrame(hdr_row, fg_color="transparent")
-        refresh_row.pack(side="right")
-        self._live_dot2 = ctk.CTkLabel(refresh_row, text="●", text_color=DANGER,
-                                       font=(FONT_BODY[0], 10), fg_color="transparent")
-        self._live_dot2.pack(side="left", padx=(0, 6), pady=10)
-        _btn_outline(refresh_row, "↺  Refresh", self._do_refresh,
-                     height=36, width=110).pack(side="left", pady=8)
-        _btn_outline(refresh_row, "Open Web Dashboard",
-                     lambda: webbrowser.open(self.bridge_url_var.get().rstrip("/") + "/dashboard"),
-                     height=36).pack(side="left", padx=(8, 0), pady=8)
+        # Header
+        hdr_row = QWidget()
+        hdr_row.setStyleSheet("background: transparent;")
+        hr_lay = QHBoxLayout(hdr_row)
+        hr_lay.setContentsMargins(0, 0, 0, 0)
+        hr_lay.addWidget(_lbl(None, "Dashboard", FG, 28, True))
+        hr_lay.addStretch()
 
-        _label(frame, "Live connection state, webhook URL, and API key.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(6, 24))
+        ref_btn = QPushButton("↺  Refresh")
+        ref_btn.setObjectName("smallBtn")
+        ref_btn.setFixedHeight(36)
+        ref_btn.clicked.connect(self._do_refresh)
+        hr_lay.addWidget(ref_btn)
+        hr_lay.addSpacing(8)
 
-        # ── Connection status cards ───────────────────────────────────────────
-        status_row = ctk.CTkFrame(frame, fg_color="transparent")
-        status_row.pack(fill="x", padx=24, pady=(0, 24))
-        status_row.columnconfigure(0, weight=1)
-        status_row.columnconfigure(1, weight=1)
-        status_row.columnconfigure(2, weight=1)
+        web_btn = QPushButton("Open Web Dashboard")
+        web_btn.setObjectName("smallBtn")
+        web_btn.setFixedHeight(36)
+        web_btn.clicked.connect(lambda: webbrowser.open(
+            self.bridge_entry.text().rstrip("/") + "/dashboard" if self.bridge_entry else "#"
+        ))
+        hr_lay.addWidget(web_btn)
+        lay.addWidget(hdr_row)
+        lay.addSpacing(6)
+        lay.addWidget(_lbl(None, "Live connection state, webhook URL, and API key.", FG_MUTED, 12))
+        lay.addSpacing(24)
+
+        # Status ring cards
+        rings_row = QWidget()
+        rings_row.setStyleSheet("background: transparent;")
+        rr_lay = QHBoxLayout(rings_row)
+        rr_lay.setContentsMargins(0, 0, 0, 0)
+        rr_lay.setSpacing(12)
 
         conn_meta = {
             "Bridge": ("Cloud server",  "Routes signals to MT5"),
             "MT5":    ("MT5 terminal",  "Executes trade orders"),
             "Broker": ("Broker server", "Confirms fills & balance"),
         }
-        for col_i, (name, (subtitle, desc)) in enumerate(conn_meta.items()):
-            # Ring card: the visible colored ring is the CTkFrame border
-            ring_outer = ctk.CTkFrame(
-                status_row,
-                fg_color=BG_CARD,
-                corner_radius=20,
-                border_width=1,
-                border_color=BORDER,
+        for name, (subtitle, desc) in conn_meta.items():
+            ring_card = QFrame()
+            ring_card.setObjectName("card")
+            rc_lay = QVBoxLayout(ring_card)
+            rc_lay.setContentsMargins(20, 28, 20, 24)
+            rc_lay.setSpacing(0)
+            rc_lay.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+            # Ring
+            ring = QFrame()
+            ring.setFixedSize(84, 84)
+            ring.setStyleSheet(
+                f"QFrame {{ border-radius: 42px; border: 7px solid {DANGER}; "
+                f"background-color: {DANGER_BG}; }}"
             )
-            ring_outer.grid(row=0, column=col_i, sticky="nsew",
-                            padx=(0 if col_i == 0 else 8, 8 if col_i < 2 else 0))
-            ring_outer.grid_propagate(True)
+            rc_lay.addWidget(ring, 0, Qt.AlignmentFlag.AlignHCenter)
 
-            # Ring indicator — thick colored border = status ring
-            ring_frame = ctk.CTkFrame(
-                ring_outer,
-                width=84, height=84,
-                corner_radius=42,
-                border_width=7,
-                border_color=DANGER,
-                fg_color=DANGER_BG,
+            letter = QLabel("—")
+            letter.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            letter.setGeometry(0, 0, 84, 84)
+            letter.setParent(ring)
+            letter.setStyleSheet(
+                f"color: {DANGER}; font-size: 16px; font-weight: bold; "
+                f"background: transparent; border: none;"
             )
-            ring_frame.pack(pady=(28, 12))
-            ring_frame.pack_propagate(False)
+            letter.setGeometry(0, 0, 84, 84)
 
-            # Status letter in center of ring
-            ring_letter = ctk.CTkLabel(
-                ring_frame, text="—",
-                text_color=DANGER,
-                font=(FONT_LABEL[0], 16, "bold"),
-                fg_color="transparent"
-            )
-            ring_letter.place(relx=0.5, rely=0.5, anchor="center")
+            rc_lay.addSpacing(12)
+            rc_lay.addWidget(_lbl(None, name, FG, 13, True), 0, Qt.AlignmentFlag.AlignHCenter)
+            rc_lay.addSpacing(2)
+            rc_lay.addWidget(_lbl(None, subtitle, FG_SOFT, 10), 0, Qt.AlignmentFlag.AlignHCenter)
+            rc_lay.addSpacing(4)
 
-            _label(ring_outer, name, font=FONT_LABEL, color=FG).pack()
-            _label(ring_outer, subtitle, font=(FONT_SMALL[0], 10), color=FG_SOFT).pack(pady=(2, 0))
-            lbl_new = _label(ring_outer, "Offline", color=DANGER, font=(FONT_SMALL[0], 10, "bold"))
-            lbl_new.pack(pady=(4, 0))
-            _label(ring_outer, desc, color=FG_FAINT, font=(FONT_SMALL[0], 9)).pack(pady=(2, 24))
+            status_lbl = _lbl(None, "Offline", DANGER, 10, True)
+            rc_lay.addWidget(status_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+            rc_lay.addSpacing(2)
+            rc_lay.addWidget(_lbl(None, desc, FG_FAINT, 9, wrap=True), 0, Qt.AlignmentFlag.AlignHCenter)
 
-            dot, lbl = self.status_dots[name]
-            self.status_dots[name] = (ring_letter, lbl_new)
+            rr_lay.addWidget(ring_card, 1)
 
-            if not hasattr(self, "_status_rings"):
-                self._status_rings = {}
-            self._status_rings[name] = ring_frame
-            if not hasattr(self, "_status_bars"):
-                self._status_bars = {}
-            self._status_bars[name] = ring_frame  # keep compat
+            self._status_rings[name]   = ring
+            self._ring_letters[name]   = letter
+            self._ring_status_lbl[name] = status_lbl
 
-        # ── Webhook URL ───────────────────────────────────────────────────────
-        webhook_card = ctk.CTkFrame(
-            frame, fg_color=BG_CARD, corner_radius=14,
-            border_width=1, border_color=GOLD_BORDER
-        )
-        webhook_card.pack(fill="x", padx=24, pady=(0, 16))
+        lay.addWidget(rings_row)
+        lay.addSpacing(24)
 
-        wh_hdr = ctk.CTkFrame(webhook_card, fg_color="transparent")
-        wh_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(wh_hdr, "Webhook URL", font=FONT_LABEL, color=FG).pack(side="left")
-        _chip(wh_hdr, "PASTE INTO TRADINGVIEW", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
+        # Webhook URL card
+        wh_card = QFrame()
+        wh_card.setObjectName("goldCard")
+        wh_lay = QVBoxLayout(wh_card)
+        wh_lay.setContentsMargins(20, 20, 20, 20)
+        wh_lay.setSpacing(6)
 
-        _label(webhook_card,
-               "Paste this URL into TradingView alert → Notifications → Webhook URL",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 10))
+        wh_hdr = QWidget()
+        wh_hdr.setStyleSheet("background: transparent;")
+        whh_lay = QHBoxLayout(wh_hdr)
+        whh_lay.setContentsMargins(0, 0, 0, 0)
+        whh_lay.addWidget(_lbl(None, "Webhook URL", FG, 13, True))
+        whh_lay.addStretch()
+        whh_lay.addWidget(_chip_label("PASTE INTO TRADINGVIEW", GLASS_EM, GREEN_LT))
+        wh_lay.addWidget(wh_hdr)
+        wh_lay.addWidget(_lbl(None,
+            "Paste this URL into TradingView alert → Notifications → Webhook URL",
+            FG_MUTED, 11))
 
-        url_row = ctk.CTkFrame(webhook_card, fg_color="transparent")
-        url_row.pack(fill="x", padx=20, pady=(0, 20))
+        url_row = QWidget()
+        url_row.setStyleSheet("background: transparent;")
+        url_lay = QHBoxLayout(url_row)
+        url_lay.setContentsMargins(0, 0, 0, 0)
+        url_lay.setSpacing(10)
 
-        url_entry = ctk.CTkEntry(
-            url_row,
-            textvariable=self.webhook_url_var,
-            fg_color=BG_INPUT, border_color=GOLD_BORDER,
-            text_color=GOLD_LT, font=FONT_MONO,
-            height=46, corner_radius=10, state="readonly"
-        )
-        url_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.webhook_entry = QLineEdit()
+        self.webhook_entry.setPlaceholderText("Sign in to view your webhook URL")
+        self.webhook_entry.setReadOnly(True)
+        self.webhook_entry.setFixedHeight(46)
 
-        self._webhook_copy_btn = _btn_primary(url_row, "Copy", height=46, width=90,
-                                              command=lambda: self._copy_to_clipboard(
-                                                  self.webhook_url_var.get(),
-                                                  self._webhook_copy_btn))
-        self._webhook_copy_btn.pack(side="right")
+        self._webhook_copy_btn = QPushButton("Copy")
+        self._webhook_copy_btn.setObjectName("smallBtn")
+        self._webhook_copy_btn.setFixedSize(80, 46)
+        self._webhook_copy_btn.clicked.connect(lambda: self._copy_to_clipboard(
+            self.webhook_entry.text(), self._webhook_copy_btn))
 
-        # ── API Key ───────────────────────────────────────────────────────────
-        api_card = _card(frame)
-        api_card.pack(fill="x", padx=24, pady=(0, 16))
+        url_lay.addWidget(self.webhook_entry, 1)
+        url_lay.addWidget(self._webhook_copy_btn)
+        wh_lay.addWidget(url_row)
+        lay.addWidget(wh_card)
+        lay.addSpacing(16)
 
-        ak_hdr = ctk.CTkFrame(api_card, fg_color="transparent")
-        ak_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(ak_hdr, "API Key", font=FONT_LABEL, color=FG).pack(side="left")
-        _chip(ak_hdr, "KEEP SECRET", DANGER_BG, text_color=DANGER).pack(side="right")
+        # API key card
+        ak_card = QFrame()
+        ak_card.setObjectName("card")
+        ak_lay = QVBoxLayout(ak_card)
+        ak_lay.setContentsMargins(20, 20, 20, 20)
+        ak_lay.setSpacing(6)
 
-        _label(api_card,
-               "Include this in every TradingView alert message to authenticate your trades.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(6, 10))
+        ak_hdr = QWidget()
+        ak_hdr.setStyleSheet("background: transparent;")
+        akh_lay = QHBoxLayout(ak_hdr)
+        akh_lay.setContentsMargins(0, 0, 0, 0)
+        akh_lay.addWidget(_lbl(None, "API Key", FG, 13, True))
+        akh_lay.addStretch()
+        akh_lay.addWidget(_chip_label("KEEP SECRET", DANGER_BG, DANGER))
+        ak_lay.addWidget(ak_hdr)
+        ak_lay.addWidget(_lbl(None, "Use this key in webhooks instead of your password.", FG_MUTED, 11))
 
-        ak_row = ctk.CTkFrame(api_card, fg_color="transparent")
-        ak_row.pack(fill="x", padx=20, pady=(0, 8))
+        ak_row = QWidget()
+        ak_row.setStyleSheet("background: transparent;")
+        akr_lay = QHBoxLayout(ak_row)
+        akr_lay.setContentsMargins(0, 0, 0, 0)
+        akr_lay.setSpacing(8)
 
-        self._apikey_entry = ctk.CTkEntry(
-            ak_row,
-            textvariable=self.api_key_var,
-            fg_color=BG_INPUT, border_color=BORDER_SOFT,
-            text_color=ACCENT_LT, font=FONT_MONO,
-            height=46, corner_radius=10, state="readonly",
-            show="•"
-        )
-        self._apikey_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.api_key_edit = QLineEdit()
+        self.api_key_edit.setPlaceholderText("—")
+        self.api_key_edit.setReadOnly(True)
+        self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_edit.setFixedHeight(46)
 
-        self._ak_reveal_btn = _btn_outline(ak_row, "Show", height=46, width=72,
-                                           command=self._toggle_api_key_reveal)
-        self._ak_reveal_btn.pack(side="left", padx=(0, 8))
+        show_btn = QPushButton("Show")
+        show_btn.setObjectName("smallBtn")
+        show_btn.setFixedHeight(46)
+        show_btn.clicked.connect(self._toggle_api_key_reveal)
 
-        self._ak_copy_btn = _btn_outline(ak_row, "Copy", height=46, width=72,
-                                         command=lambda: self._copy_to_clipboard(
-                                             self.api_key_var.get(), self._ak_copy_btn))
-        self._ak_copy_btn.pack(side="left")
+        copy_ak_btn = QPushButton("Copy")
+        copy_ak_btn.setObjectName("smallBtn")
+        copy_ak_btn.setFixedHeight(46)
+        copy_ak_btn.clicked.connect(lambda: self._copy_to_clipboard(self.api_key_edit.text()))
 
-        _label(api_card,
-               "Don't have an API key? Sign in via OAuth or visit your web dashboard.",
-               color=FG_FAINT, font=(FONT_SMALL[0], 10)).pack(anchor="w", padx=20, pady=(4, 20))
+        akr_lay.addWidget(self.api_key_edit, 1)
+        akr_lay.addWidget(show_btn)
+        akr_lay.addWidget(copy_ak_btn)
+        ak_lay.addWidget(ak_row)
+        lay.addWidget(ak_card)
+        lay.addSpacing(16)
 
-        # ── Live Summary Mirror ───────────────────────────────────────────────
-        mirror_card = _card(frame)
-        mirror_card.pack(fill="x", padx=24, pady=(0, 24))
+        # Summary card
+        sum_card = QFrame()
+        sum_card.setObjectName("card")
+        sc_lay = QVBoxLayout(sum_card)
+        sc_lay.setContentsMargins(20, 20, 20, 20)
+        sc_lay.setSpacing(8)
+        sc_lay.addWidget(_lbl(None, "Account Summary", FG, 13, True))
 
-        mir_hdr = ctk.CTkFrame(mirror_card, fg_color="transparent")
-        mir_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(mir_hdr, "Account Summary", font=FONT_LABEL, color=FG).pack(side="left")
-        _chip(mir_hdr, "Live", GLASS_EMERALD, text_color=PRIMARY_LT).pack(side="right")
+        self.summary_text = QTextEdit()
+        self.summary_text.setReadOnly(True)
+        self.summary_text.setFixedHeight(180)
+        self.summary_text.setPlaceholderText("Sign in and refresh to load summary…")
+        sc_lay.addWidget(self.summary_text)
+        lay.addWidget(sum_card)
+        lay.addStretch()
 
-        ctk.CTkFrame(mirror_card, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", padx=0, pady=(12, 0))
-
-        self.summary_text = ctk.CTkTextbox(
-            mirror_card, height=220,
-            fg_color=BG_INPUT, text_color=FG,
-            border_color=BORDER_SOFT, border_width=1,
-            font=FONT_MONO, corner_radius=10,
-        )
-        self.summary_text.pack(fill="x", padx=20, pady=(12, 20))
-        self.summary_text.insert("end", "Sign in to load your dashboard summary.")
-        self.summary_text.configure(state="disabled")
-
-        return frame
+        return scroll
 
     # =========================================================================
-    # TRADINGVIEW SETUP PANEL
+    # TRADINGVIEW PANEL
     # =========================================================================
-    def _build_tradingview_panel(self, parent) -> ctk.CTkFrame:
-        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
-                                       scrollbar_button_color=BORDER_SOFT,
-                                       scrollbar_button_hover_color=BORDER_GLOW)
+    def _build_tradingview_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background-color: {BG};")
 
-        _label(frame, "TradingView Setup", font=FONT_DISPLAY, color=FG).pack(
-            anchor="w", padx=24, pady=(24, 4))
-        _label(frame, "Build your alert message and copy it straight into TradingView.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 24))
+        inner = QWidget()
+        inner.setStyleSheet(f"background-color: {BG};")
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(40, 32, 40, 32)
+        lay.setSpacing(0)
+        scroll.setWidget(inner)
 
-        # ── Two-column layout ─────────────────────────────────────────────────
-        cols = ctk.CTkFrame(frame, fg_color="transparent")
-        cols.pack(fill="both", expand=True, padx=24)
-        cols.columnconfigure(0, weight=5)
-        cols.columnconfigure(1, weight=7)
+        lay.addWidget(_lbl(None, "TradingView", FG, 28, True))
+        lay.addSpacing(6)
+        lay.addWidget(_lbl(None, "Generate alert message JSON for your TradingView webhooks.", FG_MUTED, 12))
+        lay.addSpacing(24)
 
-        left = ctk.CTkFrame(cols, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        card = _card()
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(28, 28, 28, 28)
+        c_lay.setSpacing(0)
 
-        right = ctk.CTkFrame(cols, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        # BUY / SELL toggle
+        act_row = QWidget()
+        act_row.setStyleSheet("background: transparent;")
+        ar_lay = QHBoxLayout(act_row)
+        ar_lay.setContentsMargins(0, 0, 0, 20)
+        ar_lay.setSpacing(10)
+        ar_lay.addWidget(_lbl(None, "Action", FG, 13, True))
+        ar_lay.addStretch()
 
-        # ── LEFT: Step-by-step guide ──────────────────────────────────────────
-        guide_card = _card(left)
-        guide_card.pack(fill="x", pady=(0, 10))
+        self._buy_btn = QPushButton("BUY")
+        self._buy_btn.setObjectName("buyBtnActive")
+        self._buy_btn.setFixedHeight(36)
+        self._buy_btn.clicked.connect(lambda: self._set_tv_action("BUY"))
 
-        _label(guide_card, "How to set up alerts", font=FONT_LABEL, color=FG).pack(
-            anchor="w", padx=20, pady=(20, 16))
+        self._sell_btn = QPushButton("SELL")
+        self._sell_btn.setObjectName("sellBtn")
+        self._sell_btn.setFixedHeight(36)
+        self._sell_btn.clicked.connect(lambda: self._set_tv_action("SELL"))
 
-        steps = [
-            ("1", "Get your Webhook URL",
-             "Find it in the Dashboard tab. Copy it."),
-            ("2", "Open TradingView",
-             "Go to a chart → click the Alert (bell) icon."),
-            ("3", "Set alert condition",
-             "Choose your indicator or strategy conditions."),
-            ("4", "Set Webhook URL",
-             "In Notifications → check Webhook URL → paste your URL."),
-            ("5", "Set alert message",
-             "Copy the JSON from the Message Builder and paste it into the Message field."),
-            ("6", "Save and test",
-             "Click Save. Trigger a test alert and watch the relay execute."),
+        ar_lay.addWidget(self._buy_btn)
+        ar_lay.addWidget(self._sell_btn)
+        c_lay.addWidget(act_row)
+
+        # Fields grid
+        grid_w = QWidget()
+        grid_w.setStyleSheet("background: transparent;")
+        grid_lay = QGridLayout(grid_w)
+        grid_lay.setContentsMargins(0, 0, 0, 20)
+        grid_lay.setSpacing(12)
+
+        fields = [
+            ("Symbol",      "{{ticker}}",  0, 0),
+            ("Size (lots)", "0.1",         0, 1),
+            ("Stop Loss",   "0.0",         1, 0),
+            ("Take Profit", "0.0",         1, 1),
+            ("Script Name", "",            2, 0),
         ]
+        self.tv_symbol_edit = _entry("{{ticker}}")
+        self.tv_symbol_edit.setText("{{ticker}}")
+        self.tv_size_edit   = _entry("0.1")
+        self.tv_size_edit.setText("0.1")
+        self.tv_sl_edit     = _entry("0.0")
+        self.tv_tp_edit     = _entry("0.0")
+        self.tv_script_edit = _entry("")
 
-        for num, title, desc in steps:
-            step_row = ctk.CTkFrame(guide_card, fg_color="transparent")
-            step_row.pack(fill="x", padx=20, pady=(0, 14))
+        widgets = [self.tv_symbol_edit, self.tv_size_edit, self.tv_sl_edit,
+                   self.tv_tp_edit, self.tv_script_edit]
 
-            num_badge = ctk.CTkLabel(step_row, text=num,
-                                     fg_color=PRIMARY_DK, text_color=PRIMARY_LT,
-                                     font=(FONT_LABEL[0], 11, "bold"),
-                                     width=26, height=26, corner_radius=13)
-            num_badge.pack(side="left", padx=(0, 12))
+        for (label, placeholder, row, col), widget in zip(fields, widgets):
+            wrap = QWidget()
+            wrap.setStyleSheet("background: transparent;")
+            wl = QVBoxLayout(wrap)
+            wl.setContentsMargins(0, 0, 0, 0)
+            wl.setSpacing(5)
+            wl.addWidget(_lbl(None, label.upper(), FG_SOFT, 10, True))
+            wl.addWidget(widget)
+            grid_lay.addWidget(wrap, row, col)
 
-            text_col = ctk.CTkFrame(step_row, fg_color="transparent")
-            text_col.pack(side="left", fill="x", expand=True)
-            _label(text_col, title, font=(FONT_BODY[0], 11, "bold"), color=FG).pack(anchor="w")
-            _label(text_col, desc, font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
-
-        _divider(guide_card)
-
-        # Quick webhook URL copy
-        _label(guide_card, "Your Webhook URL", color=FG_MUTED, font=FONT_SMALL).pack(
-            anchor="w", padx=20, pady=(0, 6))
-        wh_row = ctk.CTkFrame(guide_card, fg_color="transparent")
-        wh_row.pack(fill="x", padx=20, pady=(0, 20))
-        ctk.CTkEntry(wh_row, textvariable=self.webhook_url_var,
-                     fg_color=BG_INPUT, border_color=BORDER_SOFT,
-                     text_color=PRIMARY_LT, font=FONT_MONO_SM,
-                     height=36, corner_radius=10,
-                     state="readonly").pack(side="left", fill="x", expand=True, padx=(0, 8))
-        _tv_wh_copy = _btn_primary(wh_row, "Copy", height=36, width=70,
-                                   command=lambda: self._copy_to_clipboard(
-                                       self.webhook_url_var.get(), _tv_wh_copy))
-        _tv_wh_copy.pack(side="right")
-
-        # Dynamic vars tip
-        tip_card = _card(left, fg_color=GLASS_DARK)
-        tip_card.pack(fill="x", pady=(0, 10))
-        _label(tip_card, "TradingView Variables", font=(FONT_LABEL[0], 11, "bold"),
-               color=ACCENT).pack(anchor="w", padx=16, pady=(14, 6))
-        tips = [
-            ("{{ticker}}", "Current chart symbol"),
-            ("{{strategy.order.action}}", "BUY or SELL (strategy only)"),
-            ("{{close}}", "Last close price"),
-        ]
-        for var, desc in tips:
-            row = ctk.CTkFrame(tip_card, fg_color="transparent")
-            row.pack(fill="x", padx=16, pady=(0, 6))
-            _label(row, var, font=FONT_MONO_SM, color=PRIMARY_LT).pack(side="left")
-            _label(row, f"  — {desc}", font=FONT_SMALL, color=FG_MUTED).pack(side="left")
-        ctk.CTkFrame(tip_card, height=8, fg_color="transparent").pack()
-
-        # ── RIGHT: Message Builder ────────────────────────────────────────────
-        builder_card = _card(right, gold=True)
-        builder_card.pack(fill="x", pady=(0, 10))
-
-        bld_hdr = ctk.CTkFrame(builder_card, fg_color="transparent")
-        bld_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(bld_hdr, "Alert Message Builder", font=FONT_HERO, color=FG).pack(side="left")
-        _chip(bld_hdr, "LIVE PREVIEW", GLASS_GOLD, text_color=ACCENT_LT).pack(side="right")
-
-        _label(builder_card, "Fill in the fields — JSON updates instantly as you type.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(4, 16))
-
-        # Action
-        _label(builder_card, "Action", color=FG_SOFT, font=FONT_SMALL).pack(
-            anchor="w", padx=20, pady=(0, 4))
-        action_frame = ctk.CTkFrame(builder_card, fg_color="transparent")
-        action_frame.pack(fill="x", padx=20, pady=(0, 12))
-        _action_colors = {
-            "BUY":  (SUCCESS_BG, SUCCESS,  "#0A2010"),
-            "SELL": (DANGER_BG,  DANGER,   "#200A06"),
-        }
-        for action_val in ["BUY", "SELL"]:
-            is_sel = self.tv_action_var.get() == action_val
-            bg_sel, fg_sel, bg_hov = _action_colors[action_val]
-            btn = ctk.CTkButton(
-                action_frame, text=action_val,
-                height=40, width=88, corner_radius=10,
-                fg_color=bg_sel if is_sel else GLASS,
-                hover_color=bg_hov,
-                text_color=fg_sel if is_sel else FG_MUTED,
-                border_width=1,
-                border_color=fg_sel if is_sel else BORDER,
-                font=(FONT_BODY[0], 12, "bold"),
-                command=lambda v=action_val: self._set_tv_action(v)
-            )
-            btn.pack(side="left", padx=(0, 8))
-            if not hasattr(self, "_tv_action_btns"):
-                self._tv_action_btns = {}
-            self._tv_action_btns[action_val] = btn
-
-        # Symbol / Size / SL / TP / Script in a grid
-        fields_grid = ctk.CTkFrame(builder_card, fg_color="transparent")
-        fields_grid.pack(fill="x", padx=20, pady=(0, 12))
-        fields_grid.columnconfigure(0, weight=1)
-        fields_grid.columnconfigure(1, weight=1)
-
-        # Symbol field with quick-pick buttons
-        sym_fc = ctk.CTkFrame(fields_grid, fg_color="transparent")
-        sym_fc.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 8))
-        _label(sym_fc, "Symbol", color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", pady=(0, 4))
-        _entry(sym_fc, self.tv_symbol_var, "{{ticker}} or EURUSD", height=38).pack(fill="x")
-        sym_quick = ctk.CTkFrame(sym_fc, fg_color="transparent")
-        sym_quick.pack(fill="x", pady=(4, 0))
-        for sym in ["EURUSD", "XAUUSD", "BTCUSD", "{{ticker}}"]:
-            ctk.CTkButton(
-                sym_quick, text=sym, height=24,
-                font=(FONT_SMALL[0], 9), corner_radius=6,
-                fg_color=GLASS, hover_color=BORDER_SOFT,
-                text_color=FG_MUTED, border_width=1, border_color=BORDER,
-                command=lambda s=sym: self.tv_symbol_var.set(s)
-            ).pack(side="left", padx=(0, 4))
-
-        field_data = [
-            ("Lot Size",    self.tv_size_var,   "0.1",                  0, 1),
-            ("SL (pips)",   self.tv_sl_var,     "20  (optional)",       1, 0),
-            ("TP (pips)",   self.tv_tp_var,     "40  (optional)",       1, 1),
-            ("Script Name", self.tv_script_var, "MyStrategy (optional)", 2, 0),
-        ]
-        for label_text, var, ph, row_i, col_i in field_data:
-            fc = ctk.CTkFrame(fields_grid, fg_color="transparent")
-            fc.grid(row=row_i, column=col_i, sticky="ew",
-                    padx=(0 if col_i == 0 else 6, 6 if col_i == 0 else 0),
-                    pady=(0, 8))
-            _label(fc, label_text, color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", pady=(0, 4))
-            _entry(fc, var, ph, height=38).pack(fill="x")
-
-        # Use dynamic action variable checkbox
-        dyn_row = ctk.CTkFrame(builder_card, fg_color="transparent")
-        dyn_row.pack(fill="x", padx=20, pady=(0, 12))
-        ctk.CTkCheckBox(
-            dyn_row,
-            text='Use  {{strategy.order.action}}  for action (Pine Script strategies)',
-            variable=self.tv_dynamic_var,
-            text_color=FG_MUTED, font=FONT_SMALL,
-            fg_color=PRIMARY, hover_color=PRIMARY_LT, checkmark_color=BG
-        ).pack(side="left")
+        c_lay.addWidget(grid_w)
 
         # Preview
-        _divider(builder_card)
-        _label(builder_card, "Generated JSON  (copy into TradingView alert message)",
-               color=FG_SOFT, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 8))
+        c_lay.addWidget(_lbl(None, "JSON PREVIEW", FG_SOFT, 10, True))
+        c_lay.addSpacing(8)
 
-        self._tv_preview = ctk.CTkTextbox(
-            builder_card, height=220,
-            fg_color=BG_INPUT, text_color=PRIMARY_LT,
-            border_color=BORDER_GLOW, border_width=1,
-            font=FONT_MONO, corner_radius=10, wrap="none"
-        )
-        self._tv_preview.pack(fill="x", padx=20, pady=(0, 12))
+        self.tv_preview = QTextEdit()
+        self.tv_preview.setReadOnly(True)
+        self.tv_preview.setFixedHeight(160)
+        c_lay.addWidget(self.tv_preview)
+        c_lay.addSpacing(14)
 
-        copy_row = ctk.CTkFrame(builder_card, fg_color="transparent")
-        copy_row.pack(fill="x", padx=20, pady=(0, 20))
+        # Buttons
+        btn_row = QWidget()
+        btn_row.setStyleSheet("background: transparent;")
+        br_lay = QHBoxLayout(btn_row)
+        br_lay.setContentsMargins(0, 0, 0, 0)
+        br_lay.setSpacing(10)
 
-        self._tv_copy_btn = _btn_gold(copy_row, "Copy Alert Message  →", height=46,
-                                      command=self._copy_tv_message)
-        self._tv_copy_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        copy_btn = QPushButton("Copy Message")
+        copy_btn.setObjectName("goldBtn")
+        copy_btn.setFixedHeight(44)
+        copy_btn.clicked.connect(self._copy_tv_message)
 
-        _btn_outline(copy_row, "Reset", height=46, width=80,
-                     command=self._reset_tv_fields).pack(side="right")
+        reset_btn = QPushButton("Reset")
+        reset_btn.setObjectName("outlineBtn")
+        reset_btn.setFixedHeight(44)
+        reset_btn.clicked.connect(self._reset_tv_fields)
 
-        self._update_tv_preview()
-        return frame
+        br_lay.addWidget(copy_btn, 1)
+        br_lay.addWidget(reset_btn)
+        c_lay.addWidget(btn_row)
+
+        lay.addWidget(card)
+        lay.addStretch()
+
+        # Connect live preview
+        for w in [self.tv_symbol_edit, self.tv_size_edit, self.tv_sl_edit,
+                  self.tv_tp_edit, self.tv_script_edit]:
+            w.textChanged.connect(lambda _: self._update_tv_preview())
+
+        return scroll
 
     # =========================================================================
-    # INSTRUCTIONS PANEL
+    # GUIDE PANEL
     # =========================================================================
-    def _build_instructions_panel(self, parent) -> ctk.CTkFrame:
-        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
-                                       scrollbar_button_color=BORDER_SOFT,
-                                       scrollbar_button_hover_color=BORDER_GLOW)
+    def _build_guide_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background-color: {BG};")
 
-        # ── Header ────────────────────────────────────────────────────────────
-        hdr = ctk.CTkFrame(frame, fg_color="transparent")
-        hdr.pack(fill="x", padx=24, pady=(28, 0))
-        _label(hdr, "Quick Start Guide", font=FONT_DISPLAY, color=FG).pack(anchor="w")
-        _label(frame,
-               "Everything you need to go from download to live execution in minutes.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(6, 28))
+        inner = QWidget()
+        inner.setStyleSheet(f"background-color: {BG};")
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(40, 32, 40, 40)
+        lay.setSpacing(16)
+        scroll.setWidget(inner)
 
-        # ── Journey progress bar ──────────────────────────────────────────────
-        journey_card = _card(frame, gold=True)
-        journey_card.pack(fill="x", padx=24, pady=(0, 20))
+        lay.addWidget(_lbl(None, "Guide", FG, 28, True))
+        lay.addWidget(_lbl(None, "Step-by-step instructions to get trading in minutes.", FG_MUTED, 12))
 
-        jc_inner = ctk.CTkFrame(journey_card, fg_color="transparent")
-        jc_inner.pack(fill="x", padx=24, pady=20)
-
-        steps_short = ["Sign In", "Connect MT5", "Get Webhook", "Set Alert", "Go Live"]
-        jc_inner.columnconfigure(tuple(range(len(steps_short))), weight=1)
-
-        for i, step_name in enumerate(steps_short):
-            col = ctk.CTkFrame(jc_inner, fg_color="transparent")
-            col.grid(row=0, column=i, sticky="nsew")
-
-            # Connector line
-            line_row = ctk.CTkFrame(col, fg_color="transparent", height=20)
-            line_row.pack(fill="x")
-            line_row.pack_propagate(False)
-            if i > 0:
-                ctk.CTkFrame(line_row, height=2, fg_color=GOLD_BORDER, corner_radius=0).pack(
-                    side="left", fill="x", expand=True, pady=9)
-            # Step circle
-            circle = ctk.CTkLabel(line_row,
-                                  text=str(i + 1),
-                                  fg_color=GOLD_GLOW, text_color=GOLD_LT,
-                                  font=(FONT_LABEL[0], 11, "bold"),
-                                  width=24, height=24, corner_radius=12)
-            circle.pack(side="left")
-            if i < len(steps_short) - 1:
-                ctk.CTkFrame(line_row, height=2, fg_color=GOLD_BORDER, corner_radius=0).pack(
-                    side="left", fill="x", expand=True, pady=9)
-
-            _label(col, step_name, color=FG_MUTED, font=(FONT_SMALL[0], 10)).pack(pady=(4, 0))
-
-        # ── Expandable step sections ───────────────────────────────────────────
-        sections = [
-            {
-                "num":   "01",
-                "title": "Sign In to PlatAlgo",
-                "color": PRIMARY_LT,
-                "bg":    PRIMARY_GLOW,
-                "icon":  "⊕",
-                "quick": "Go to the Connect tab → Sign in with Google or Facebook OAuth.",
-                "steps": [
-                    ("Open the Connect tab", "Click Connect in the left sidebar."),
-                    ("Choose OAuth", "Click Google or Facebook — no password needed."),
-                    ("Browser opens", "Complete login in the browser window that appears."),
-                    ("Auto-detected", "The app detects your login automatically within seconds."),
-                ],
-                "tip": "OAuth is the fastest and most secure way to sign in. Your credentials are never stored locally.",
-            },
-            {
-                "num":   "02",
-                "title": "Connect Your MT5 Broker",
-                "color": GOLD_LT,
-                "bg":    GOLD_GLOW,
-                "icon":  "◉",
-                "quick": "Enter your MT5 account number, password, and broker server name.",
-                "steps": [
-                    ("Find your broker server", "Open MT5 → File → Login → note the server name (e.g. ICMarkets-Live01)."),
-                    ("Enter credentials", "Fill in Account Number, Password, and Server in the Connect tab."),
-                    ("Choose execution mode", "VPS Mode = 24/7 cloud execution. Local Mode = this machine only."),
-                    ("Activate", "Click Login to MT5 on VPS (recommended) or Connect Local MT5."),
-                ],
-                "tip": "VPS Mode runs your trades even when your computer is off. Highly recommended for strategies that trade around the clock.",
-            },
-            {
-                "num":   "03",
-                "title": "Get Your Webhook URL",
-                "color": ACCENT_LT,
-                "bg":    ACCENT_GLOW,
-                "icon":  "◎",
-                "quick": "Sign in first, then copy your Webhook URL from the Dashboard tab.",
-                "steps": [
-                    ("Open Dashboard tab", "Click Dashboard in the sidebar after signing in."),
-                    ("Locate Webhook URL", "It appears in the Your Webhook URL card."),
-                    ("Copy it", "Click the Copy button — the URL is now in your clipboard."),
-                    ("Keep it private", "This URL is unique to your account. Don't share it publicly."),
-                ],
-                "tip": "Your webhook URL looks like: http://app.platalgo.com/webhook/your_user_id",
-            },
-            {
-                "num":   "04",
-                "title": "Configure TradingView Alert",
-                "color": PRIMARY_LT,
-                "bg":    PRIMARY_GLOW,
-                "icon":  "◈",
-                "quick": "Use the TradingView tab to build your alert message JSON, then paste into TradingView.",
-                "steps": [
-                    ("Open TradingView Setup tab", "Click TradingView in the sidebar."),
-                    ("Build your message", "Fill in Symbol, Lot Size, SL, TP in the Message Builder."),
-                    ("Copy JSON", "Click Copy Alert Message to copy the generated JSON."),
-                    ("Go to TradingView", "On any chart, click the Alert (bell) icon → Create Alert."),
-                    ("Set Webhook URL", "In Notifications → enable Webhook URL → paste your URL."),
-                    ("Set Message", "In the Message box, paste your JSON payload."),
-                    ("Save", "Click Save. Your alert is now wired to PlatAlgo."),
-                ],
-                "tip": "Use {{strategy.order.action}} for action if your alert comes from a Pine Script strategy — it auto-fills BUY or SELL.",
-            },
-            {
-                "num":   "05",
-                "title": "Go Live & Monitor",
-                "color": ACCENT_LT,
-                "bg":    ACCENT_GLOW,
-                "icon":  "⊞",
-                "quick": "Trigger a test alert and watch the execution log in Settings → Execution Logs.",
-                "steps": [
-                    ("Trigger a test", "In TradingView, use 'Add Alert' and trigger it once manually."),
-                    ("Check Dashboard", "The Bridge, MT5, and Broker indicators should all be green."),
-                    ("Check Execution Logs", "Go to Settings → Execution Logs to see the trade confirmation."),
-                    ("Monitor live", "The Dashboard updates in real-time as signals arrive."),
-                    ("Troubleshoot", "If a dot stays red, check Settings → Bridge URL and MT5 path."),
-                ],
-                "tip": "Always do a test with a micro lot (0.01) before running live. Check your broker's minimum lot size.",
-            },
+        steps = [
+            ("1", "Sign In", [
+                "Click 'Connect' in the sidebar.",
+                "Use Google or Facebook OAuth (recommended), or enter email + password.",
+                "Your session is stored securely — you won't need to sign in again.",
+            ]),
+            ("2", "Choose Execution Mode", [
+                "VPS Mode: The cloud server executes trades 24/7, even when your PC is off.",
+                "Local Mode: PlatAlgo connects to MT5 on this machine directly (Windows only).",
+                "VPS mode is recommended for reliability.",
+            ]),
+            ("3", "Enter MT5 Credentials (VPS Mode)", [
+                "Fill in Account Number, MT5 Password, and Broker Server in the MT5 card.",
+                "Click 'Login to MT5 on VPS' — credentials are encrypted before being sent.",
+                "The VPS will initialize and begin monitoring for TradingView signals.",
+            ]),
+            ("4", "Configure TradingView Alert", [
+                "Go to the Dashboard panel and copy your Webhook URL.",
+                "In TradingView, create an alert → Notifications → Webhook URL.",
+                "Use the TradingView panel to generate the correct JSON message format.",
+                "Paste the generated JSON into the TradingView alert message box.",
+            ]),
+            ("5", "Monitor on Dashboard", [
+                "The Dashboard shows live Bridge, MT5, and Broker connection status.",
+                "Green ring = connected and healthy.  Red ring = disconnected.",
+                "Check the Account Summary for signal and execution counts.",
+            ]),
         ]
 
-        for sec in sections:
-            sec_card = _card(frame)
-            sec_card.pack(fill="x", padx=24, pady=(0, 12))
+        for num, title, sub_steps in steps:
+            step_card = QFrame()
+            step_card.setObjectName("card")
+            sc_lay = QVBoxLayout(step_card)
+            sc_lay.setContentsMargins(24, 20, 24, 20)
+            sc_lay.setSpacing(8)
 
-            # Section header row
-            hdr_row = ctk.CTkFrame(sec_card, fg_color="transparent")
-            hdr_row.pack(fill="x", padx=20, pady=(18, 0))
+            hdr_row = QWidget()
+            hdr_row.setStyleSheet("background: transparent;")
+            hr_lay = QHBoxLayout(hdr_row)
+            hr_lay.setContentsMargins(0, 0, 0, 0)
+            hr_lay.setSpacing(12)
 
-            # Step badge
-            badge = ctk.CTkLabel(hdr_row,
-                                 text=sec["num"],
-                                 fg_color=sec["bg"], text_color=sec["color"],
-                                 font=(FONT_LABEL[0], 11, "bold"),
-                                 width=34, height=34, corner_radius=10)
-            badge.pack(side="left", padx=(0, 14))
+            num_lbl = QLabel(num)
+            num_lbl.setFixedSize(32, 32)
+            num_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            num_lbl.setStyleSheet(
+                f"background-color: {GREEN_BG}; color: {GREEN_LT}; "
+                f"border-radius: 16px; font-size: 14px; font-weight: bold; border: none;"
+            )
+            hr_lay.addWidget(num_lbl)
+            hr_lay.addWidget(_lbl(None, title, FG, 14, True))
+            sc_lay.addWidget(hdr_row)
 
-            # Title + quick summary
-            title_col = ctk.CTkFrame(hdr_row, fg_color="transparent")
-            title_col.pack(side="left", fill="x", expand=True)
-            _label(title_col, sec["title"], font=FONT_HERO, color=FG).pack(anchor="w")
-            _label(title_col, sec["quick"], font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
+            for step_txt in sub_steps:
+                step_row = QWidget()
+                step_row.setStyleSheet("background: transparent;")
+                sr_lay = QHBoxLayout(step_row)
+                sr_lay.setContentsMargins(44, 0, 0, 0)
+                sr_lay.setSpacing(8)
+                sr_lay.addWidget(_lbl(None, "›", GREEN, 12))
+                lbl = _lbl(None, step_txt, FG_MUTED, 12, wrap=True)
+                sr_lay.addWidget(lbl, 1)
+                sc_lay.addWidget(step_row)
 
-            # Divider
-            ctk.CTkFrame(sec_card, height=1, fg_color=BORDER, corner_radius=0).pack(
-                fill="x", padx=0, pady=(14, 0))
+            lay.addWidget(step_card)
 
-            # Steps list
-            steps_frame = ctk.CTkFrame(sec_card, fg_color="transparent")
-            steps_frame.pack(fill="x", padx=20, pady=(12, 0))
-
-            for step_i, (step_title, step_desc) in enumerate(sec["steps"]):
-                step_row = ctk.CTkFrame(steps_frame, fg_color="transparent")
-                step_row.pack(fill="x", pady=(0, 10))
-
-                # Number dot
-                num_dot = ctk.CTkLabel(step_row,
-                                       text=str(step_i + 1),
-                                       fg_color=GLASS, text_color=FG_SOFT,
-                                       font=(FONT_CAPTION[0], 10, "bold"),
-                                       width=22, height=22, corner_radius=11)
-                num_dot.pack(side="left", padx=(0, 12))
-
-                # Step text
-                text_col = ctk.CTkFrame(step_row, fg_color="transparent")
-                text_col.pack(side="left", fill="x", expand=True)
-                _label(text_col, step_title,
-                       font=(FONT_BODY[0], 11, "bold"), color=FG).pack(anchor="w")
-                _label(text_col, step_desc,
-                       font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
-
-            # Pro tip
-            tip_row = ctk.CTkFrame(sec_card,
-                                   fg_color=sec["bg"],
-                                   corner_radius=10,
-                                   border_width=1, border_color=BORDER_GOLD)
-            tip_row.pack(fill="x", padx=20, pady=(10, 18))
-
-            tip_inner = ctk.CTkFrame(tip_row, fg_color="transparent")
-            tip_inner.pack(fill="x", padx=14, pady=12)
-            _label(tip_inner, "⚡ Pro tip", font=(FONT_CAPTION[0], 10, "bold"),
-                   color=sec["color"]).pack(anchor="w", pady=(0, 4))
-            _label(tip_inner, sec["tip"],
-                   font=FONT_SMALL, color=FG_MUTED).pack(anchor="w")
-
-        # ── FAQ section ───────────────────────────────────────────────────────
-        _label(frame, "Common Questions",
-               font=FONT_TITLE, color=FG).pack(anchor="w", padx=24, pady=(16, 4))
-        _label(frame, "Quick answers to the most frequent setup issues.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 16))
-
-        faqs = [
-            ("My MT5 won't connect — what do I check?",
-             "Verify your Account Number (login), Password, and Server name match exactly what you see in MetaTrader 5 → File → Login. The server name is case-sensitive (e.g. 'ICMarkets-Live01', not 'icmarkets-live01')."),
-            ("I don't see my signals executing — why?",
-             "Check the Dashboard tab — all three dots (Bridge, MT5, Broker) must be green. Also verify your TradingView alert message matches the JSON format in the TradingView Setup tab exactly, including the correct api_key."),
-            ("What's the difference between VPS Mode and Local Mode?",
-             "VPS Mode runs MT5 on our cloud server — trades execute 24/7 even when your computer is off. Local Mode connects to an MT5 terminal running on this machine — stops when you close MT5 or shut down."),
-            ("Is my MT5 password secure?",
-             "Yes. Passwords are encrypted before storage using AES-256 and are never transmitted in plain text. OAuth tokens (Google/Facebook) replace passwords entirely for dashboard access."),
-            ("The app says 'Bridge Offline' — what does that mean?",
-             "The app can't reach the PlatAlgo server. Check your internet connection, or go to Settings and verify the Bridge URL is set to http://app.platalgo.com"),
-        ]
-
-        for q, a in faqs:
-            faq_card = _card(frame)
-            faq_card.pack(fill="x", padx=24, pady=(0, 8))
-
-            fq = ctk.CTkFrame(faq_card, fg_color="transparent")
-            fq.pack(fill="x", padx=20, pady=(16, 0))
-            ctk.CTkLabel(fq, text="?", fg_color=PRIMARY_GLOW, text_color=PRIMARY_LT,
-                         font=(FONT_LABEL[0], 11, "bold"),
-                         width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 12))
-            _label(fq, q, font=(FONT_BODY[0], 12, "bold"), color=FG).pack(side="left", anchor="w")
-
-            ctk.CTkFrame(faq_card, height=1, fg_color=BORDER, corner_radius=0).pack(
-                fill="x", padx=0, pady=(10, 0))
-            _label(faq_card, a, font=FONT_SMALL, color=FG_MUTED, wraplength=700).pack(
-                anchor="w", padx=20, pady=(10, 18))
-
-        # ── Quick actions ─────────────────────────────────────────────────────
-        qa_row = ctk.CTkFrame(frame, fg_color="transparent")
-        qa_row.pack(fill="x", padx=24, pady=(8, 32))
-        qa_row.columnconfigure(0, weight=1)
-        qa_row.columnconfigure(1, weight=1)
-        qa_row.columnconfigure(2, weight=1)
-
-        _btn_primary(qa_row, "→ Go to Connect",
-                     lambda: self._switch_panel("connect"),
-                     height=42).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        _btn_gold(qa_row, "→ Open Dashboard",
-                  lambda: self._switch_panel("dashboard"),
-                  height=42).grid(row=0, column=1, sticky="ew", padx=3)
-        _btn_outline(qa_row, "→ TradingView Setup",
-                     lambda: self._switch_panel("tradingview"),
-                     height=42).grid(row=0, column=2, sticky="ew", padx=(6, 0))
-
-        return frame
+        lay.addStretch()
+        return scroll
 
     # =========================================================================
     # SETTINGS PANEL
     # =========================================================================
-    def _build_settings_panel(self, parent) -> ctk.CTkFrame:
-        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent",
-                                       scrollbar_button_color=BORDER_SOFT,
-                                       scrollbar_button_hover_color=BORDER_GLOW)
+    def _build_settings_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background-color: {BG};")
 
-        _label(frame, "Settings", font=FONT_DISPLAY, color=FG).pack(
-            anchor="w", padx=24, pady=(24, 4))
-        _label(frame, "Advanced configuration and execution logs.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=24, pady=(0, 24))
+        inner = QWidget()
+        inner.setStyleSheet(f"background-color: {BG};")
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(40, 32, 40, 32)
+        lay.setSpacing(16)
+        scroll.setWidget(inner)
 
-        # ── Connection Settings ───────────────────────────────────────────────
-        conn_card = _card(frame)
-        conn_card.pack(fill="x", padx=24, pady=(0, 16))
+        lay.addWidget(_lbl(None, "Settings", FG, 28, True))
+        lay.addWidget(_lbl(None, "Configure bridge connection and local MT5 path.", FG_MUTED, 12))
 
-        _section_header(conn_card, "Bridge Connection",
-                        "Override only if using a self-hosted bridge server.")
+        # Connection card
+        conn_card = QFrame()
+        conn_card.setObjectName("card")
+        cc_lay = QVBoxLayout(conn_card)
+        cc_lay.setContentsMargins(24, 24, 24, 24)
+        cc_lay.setSpacing(12)
+        cc_lay.addWidget(_lbl(None, "Bridge Connection", FG, 14, True))
+        cc_lay.addWidget(_lbl(None, "BRIDGE URL", FG_SOFT, 10, True))
 
-        _label(conn_card, "Bridge URL", color=FG_MUTED, font=FONT_SMALL).pack(
-            anchor="w", padx=20, pady=(0, 4))
-        _entry(conn_card, self.bridge_url_var, "http://app.platalgo.com").pack(
-            fill="x", padx=20, pady=(0, 20))
+        self.bridge_entry = QLineEdit(PRODUCTION_BRIDGE_URL)
+        self.bridge_entry.setFixedHeight(44)
+        cc_lay.addWidget(self.bridge_entry)
+        lay.addWidget(conn_card)
 
-        # ── MT5 Settings (Windows only) ───────────────────────────────────────
+        # MT5 path card (Windows)
         if IS_WINDOWS:
-            mt5_card = _card(frame)
-            mt5_card.pack(fill="x", padx=24, pady=(0, 16))
+            mt5_card = QFrame()
+            mt5_card.setObjectName("card")
+            mc_lay = QVBoxLayout(mt5_card)
+            mc_lay.setContentsMargins(24, 24, 24, 24)
+            mc_lay.setSpacing(12)
+            mc_lay.addWidget(_lbl(None, "MT5 Terminal Path", FG, 14, True))
+            mc_lay.addWidget(_lbl(None, "MT5 PATH", FG_SOFT, 10, True))
 
-            _section_header(mt5_card, "MT5 Terminal Path",
-                            "Path to terminal64.exe. Auto-detected if left blank.")
+            path_row = QWidget()
+            path_row.setStyleSheet("background: transparent;")
+            pr_lay = QHBoxLayout(path_row)
+            pr_lay.setContentsMargins(0, 0, 0, 0)
+            pr_lay.setSpacing(8)
 
-            _label(mt5_card, "Terminal Path", color=FG_MUTED, font=FONT_SMALL).pack(
-                anchor="w", padx=20, pady=(0, 4))
-            path_row = ctk.CTkFrame(mt5_card, fg_color="transparent")
-            path_row.pack(fill="x", padx=20, pady=(0, 20))
-            _entry(path_row, self.mt5_path_var, r"C:\Program Files\MetaTrader 5\terminal64.exe").pack(
-                side="left", fill="x", expand=True, padx=(0, 8))
-            _btn_outline(path_row, "Auto-detect", height=44, width=110,
-                         command=lambda: self.mt5_path_var.set(detect_mt5_path())).pack(side="right")
+            self.mt5_path_edit = QLineEdit(detect_mt5_path())
+            self.mt5_path_edit.setFixedHeight(44)
+            pr_lay.addWidget(self.mt5_path_edit, 1)
 
-        # ── Startup ───────────────────────────────────────────────────────────
-        startup_card = _card(frame)
-        startup_card.pack(fill="x", padx=24, pady=(0, 16))
+            browse_btn = QPushButton("Browse")
+            browse_btn.setObjectName("smallBtn")
+            browse_btn.setFixedHeight(44)
+            browse_btn.clicked.connect(self._browse_mt5_path)
+            pr_lay.addWidget(browse_btn)
+            mc_lay.addWidget(path_row)
+            lay.addWidget(mt5_card)
 
-        _section_header(startup_card, "Startup Behavior",
-                        "Control whether the relay launches automatically with your system.")
+        # Log card
+        log_card = QFrame()
+        log_card.setObjectName("card")
+        lc_lay = QVBoxLayout(log_card)
+        lc_lay.setContentsMargins(24, 24, 24, 24)
+        lc_lay.setSpacing(10)
 
-        startup_row = ctk.CTkFrame(startup_card, fg_color="transparent")
-        startup_row.pack(fill="x", padx=20, pady=(0, 24))
-        ctk.CTkSwitch(
-            startup_row,
-            text="Launch relay on system startup",
-            variable=self.startup_var,
-            command=self._toggle_startup,
-            text_color=FG_SOFT, font=FONT_BODY,
-            button_color=PRIMARY, button_hover_color=PRIMARY_LT,
-            progress_color=PRIMARY_DK,
-        ).pack(side="left")
+        log_hdr = QWidget()
+        log_hdr.setStyleSheet("background: transparent;")
+        lh_lay = QHBoxLayout(log_hdr)
+        lh_lay.setContentsMargins(0, 0, 0, 0)
+        lh_lay.addWidget(_lbl(None, "Relay Log", FG, 14, True))
+        lh_lay.addStretch()
 
-        # ── Danger Zone ───────────────────────────────────────────────────────
-        danger_card = _card(frame, fg_color=DANGER_BG, border_color=DANGER_BORDER)
-        danger_card.pack(fill="x", padx=24, pady=(0, 16))
+        clr_btn = QPushButton("Clear")
+        clr_btn.setObjectName("smallBtn")
+        clr_btn.setFixedHeight(32)
+        clr_btn.clicked.connect(self._clear_logs)
+        lh_lay.addWidget(clr_btn)
+        lc_lay.addWidget(log_hdr)
 
-        _label(danger_card, "Danger Zone", font=FONT_LABEL, color=DANGER).pack(
-            anchor="w", padx=20, pady=(20, 4))
-        _label(danger_card, "Stop all active connections. This will interrupt any running relay loops.",
-               color=FG_MUTED, font=FONT_SMALL).pack(anchor="w", padx=20, pady=(0, 12))
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setFixedHeight(240)
+        lc_lay.addWidget(self.log_box)
+        lay.addWidget(log_card)
+        lay.addStretch()
 
-        dz_row = ctk.CTkFrame(danger_card, fg_color="transparent")
-        dz_row.pack(fill="x", padx=20, pady=(0, 20))
-        _btn_danger(dz_row, "Stop All Connections", self.stop_relay, height=44).pack(
-            side="left", padx=(0, 10))
-        _btn_danger(dz_row, "Disable VPS Mode", self.disable_managed_mode, height=44).pack(side="left")
-
-        # ── Execution Logs ────────────────────────────────────────────────────
-        log_card = _card(frame)
-        log_card.pack(fill="x", padx=24, pady=(0, 24))
-
-        log_hdr = ctk.CTkFrame(log_card, fg_color="transparent")
-        log_hdr.pack(fill="x", padx=20, pady=(20, 0))
-        _label(log_hdr, "Execution Logs", font=FONT_LABEL, color=FG).pack(side="left")
-        _btn_outline(log_hdr, "Clear", height=32, width=72,
-                     command=self._clear_logs).pack(side="right")
-
-        ctk.CTkFrame(log_card, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", padx=0, pady=(12, 0))
-
-        self.log_box = ctk.CTkTextbox(
-            log_card, height=200,
-            fg_color=BG_INPUT, text_color=FG_MUTED,
-            border_color=BORDER_SOFT, border_width=1,
-            font=FONT_MONO_SM, corner_radius=12, wrap="word"
-        )
-        self.log_box.pack(fill="x", padx=20, pady=(12, 20))
-
-        return frame
+        return scroll
 
     # =========================================================================
-    # UI Helpers & Actions
+    # SIGNAL SLOTS (main thread)
     # =========================================================================
-    def _set_tv_action(self, value: str):
-        self.tv_action_var.set(value)
-        _action_colors = {
-            "BUY":  (SUCCESS_BG, SUCCESS,  BORDER),
-            "SELL": (DANGER_BG,  DANGER,   BORDER),
-        }
-        for v, btn in self._tv_action_btns.items():
-            active = v == value
-            bg_sel, fg_sel, _ = _action_colors[v]
-            btn.configure(
-                fg_color=bg_sel if active else GLASS,
-                text_color=fg_sel if active else FG_MUTED,
-                border_color=fg_sel if active else BORDER,
+    def _on_status_changed(self, text: str):
+        if self._status_pill:
+            self._status_pill.setText(f"● {text}")
+
+    def _on_log_appended(self, text: str):
+        if self.log_box:
+            self.log_box.append(text)
+
+    def _on_dot_changed(self, name: str, online: bool):
+        color    = GREEN    if online else DANGER
+        bg_color = SUCCESS_BG if online else DANGER_BG
+        text     = "Online" if online else "Offline"
+        letter   = "●"     if online else "—"
+
+        if name in self._status_rings:
+            self._status_rings[name].setStyleSheet(
+                f"QFrame {{ border-radius: 42px; border: 7px solid {color}; "
+                f"background-color: {bg_color}; }}"
+            )
+        if name in self._ring_letters:
+            self._ring_letters[name].setText(letter)
+            self._ring_letters[name].setStyleSheet(
+                f"color: {color}; font-size: 16px; font-weight: bold; "
+                f"background: transparent; border: none;"
+            )
+        if name in self._ring_status_lbl:
+            self._ring_status_lbl[name].setText(text)
+            self._ring_status_lbl[name].setStyleSheet(
+                f"color: {color}; font-size: 10px; font-weight: bold; "
+                f"background: transparent; border: none;"
+            )
+        if name in self._header_dots:
+            dot_lbl, text_lbl = self._header_dots[name]
+            dot_lbl.setStyleSheet(f"color: {color}; font-size: 9px; border: none; background: transparent;")
+            text_lbl.setText(f" {name}: {text}")
+
+    def _on_summary_updated(self, text: str):
+        if self.summary_text:
+            self.summary_text.setPlainText(text)
+
+    def _on_oauth_success(self, provider: str, uid: str, from_cache: bool):
+        self._oauth_provider = provider
+        if not from_cache:
+            self._save_oauth_credentials(uid, provider)
+        if self._oauth_prov_lbl:
+            self._oauth_prov_lbl.setText(f"Signed in via {provider.title()}")
+        if self._oauth_user_lbl:
+            self._oauth_user_lbl.setText(uid)
+        if self._login_form:
+            self._login_form.hide()
+        if self._oauth_frame:
+            self._oauth_frame.show()
+
+    def _on_webhook_updated(self, url: str):
+        if self.webhook_entry:
+            self.webhook_entry.setText(url)
+
+    def _on_apikey_updated(self, key: str):
+        if self.api_key_edit:
+            self.api_key_edit.setText(key)
+
+    def _on_vps_activated(self):
+        self.vps_active = True
+        if self.vps_btn:
+            self.vps_btn.setText("✓  VPS Active — 24/7")
+            self.vps_btn.setStyleSheet(
+                f"QPushButton {{ background-color: {GLASS_EM}; color: {GREEN_LT}; "
+                f"border: 1px solid {BORDER_SOFT}; border-radius: 11px; "
+                f"font-size: 14px; font-weight: bold; padding: 14px 24px; }}"
+            )
+        if self.vps_status_lbl:
+            self.vps_status_lbl.setText("● VPS ACTIVE")
+            self.vps_status_lbl.setStyleSheet(
+                f"color: {GREEN}; font-size: 10px; background: transparent; border: none;"
             )
 
-    def _update_tv_preview(self):
-        if not self._tv_preview:
-            return
-        uid = self.user_id_var.get().strip() or "your_username"
-        ak  = self.api_key_var.get().strip() or "your_api_key"
-        action = ("{{strategy.order.action}}"
-                  if self.tv_dynamic_var.get()
-                  else self.tv_action_var.get())
-        symbol = self.tv_symbol_var.get().strip() or "{{ticker}}"
-        msg = {
-            "user_id": uid,
-            "api_key": ak,
-            "action":  action,
-            "symbol":  symbol,
+    def _on_vps_failed(self, err: str):
+        if self.vps_btn:
+            self.vps_btn.setText("Login to MT5 on VPS  →")
+            self.vps_btn.setStyleSheet("")  # restore QSS
+            self.vps_btn.setObjectName("goldBtn")
+            self.vps_btn.style().unpolish(self.vps_btn)
+            self.vps_btn.style().polish(self.vps_btn)
+            self.vps_btn.setEnabled(True)
+        QMessageBox.critical(self, "VPS Setup Failed", err)
+
+    def _on_vps_btn_reset(self):
+        if self.vps_btn:
+            self.vps_btn.setText("Login to MT5 on VPS  →")
+            self.vps_btn.setStyleSheet("")
+            self.vps_btn.setObjectName("goldBtn")
+            self.vps_btn.style().unpolish(self.vps_btn)
+            self.vps_btn.style().polish(self.vps_btn)
+            self.vps_btn.setEnabled(True)
+
+    def _on_connect_enabled(self, enabled: bool):
+        if self.connect_btn:
+            self.connect_btn.setEnabled(enabled)
+
+    def _on_avatar_updated(self, text: str):
+        if self._avatar:
+            self._avatar.setText(text)
+
+    # =========================================================================
+    # BUSINESS LOGIC (unchanged from original)
+    # =========================================================================
+    def update_status(self, text: str):
+        self.sig.status_changed.emit(text)
+
+    def append_log(self, text: str):
+        self.sig.log_appended.emit(text)
+
+    def _set_dot(self, name: str, online: bool):
+        self.sig.dot_changed.emit(name, online)
+
+    def _set_status(self, bridge=None, mt5=None, broker=None):
+        if bridge  is not None: self._set_dot("Bridge", bridge)
+        if mt5     is not None: self._set_dot("MT5",    mt5)
+        if broker  is not None: self._set_dot("Broker", broker)
+
+    def _set_state_callback(self, state: dict):
+        self._set_status(
+            bridge=state.get("bridge_connected"),
+            mt5=state.get("mt5_connected"),
+            broker=state.get("broker_connected"),
+        )
+
+    def _get_bridge_url(self) -> str:
+        if self.bridge_entry:
+            return self.bridge_entry.text().strip() or PRODUCTION_BRIDGE_URL
+        return PRODUCTION_BRIDGE_URL
+
+    def _get_mt5_creds(self) -> dict:
+        return {
+            "login":    self.mt5_acct_edit.text().strip()   if self.mt5_acct_edit   else "",
+            "password": self.mt5_pw_edit.text()             if self.mt5_pw_edit     else "",
+            "server":   self.mt5_server_edit.text().strip() if self.mt5_server_edit else "",
+            "path":     self.mt5_path_edit.text().strip()   if self.mt5_path_edit   else detect_mt5_path(),
         }
-        try:
-            size = float(self.tv_size_var.get())
-            msg["size"] = size
-        except ValueError:
-            pass
-        sl = self.tv_sl_var.get().strip()
-        if sl:
-            try:
-                msg["sl"] = float(sl)
-            except ValueError:
-                pass
-        tp = self.tv_tp_var.get().strip()
-        if tp:
-            try:
-                msg["tp"] = float(tp)
-            except ValueError:
-                pass
-        sc = self.tv_script_var.get().strip()
-        if sc:
-            msg["script_name"] = sc
 
-        preview = json.dumps(msg, indent=2)
-        self._tv_preview.configure(state="normal")
-        self._tv_preview.delete("1.0", "end")
-        self._tv_preview.insert("end", preview)
-        self._tv_preview.configure(state="disabled")
-
-    def _copy_tv_message(self):
-        if not self._tv_preview:
-            return
-        self._tv_preview.configure(state="normal")
-        text = self._tv_preview.get("1.0", "end").strip()
-        self._tv_preview.configure(state="disabled")
-        self._copy_to_clipboard(text, self._tv_copy_btn)
-
-    def _reset_tv_fields(self):
-        self.tv_symbol_var.set("{{ticker}}")
-        self.tv_size_var.set("0.1")
-        self.tv_sl_var.set("")
-        self.tv_tp_var.set("")
-        self.tv_script_var.set("")
-        self.tv_dynamic_var.set(True)
-        self._set_tv_action("BUY")
-
-    def _copy_to_clipboard(self, text: str, btn=None):
-        try:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(text)
-            self.root.update()
-        except Exception:
-            pass
+    def _copy_to_clipboard(self, text: str, btn: QPushButton = None):
+        QApplication.clipboard().setText(text)
         if btn:
-            orig = btn.cget("text")
-            btn.configure(text="✓ Copied!", fg_color=PRIMARY_DK, text_color=PRIMARY_LT)
-            self.root.after(2000, lambda: btn.configure(
-                text=orig, fg_color=GLASS_GOLD if "→" in orig else "transparent",
-                text_color=ACCENT_LT if "→" in orig else FG_SOFT))
+            orig = btn.text()
+            btn.setText("Copied!")
+            QTimer.singleShot(1500, lambda: btn.setText(orig))
 
     def _toggle_api_key_reveal(self):
-        self.api_key_visible = not self.api_key_visible
-        if self._apikey_entry:
-            self._apikey_entry.configure(show="" if self.api_key_visible else "•")
-        if self._ak_reveal_btn:
-            self._ak_reveal_btn.configure(text="Hide" if self.api_key_visible else "Show")
+        if self.api_key_edit:
+            if self._api_key_visible:
+                self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            else:
+                self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+            self._api_key_visible = not self._api_key_visible
+
+    def _toggle_startup(self, checked: bool):
+        try:
+            if checked:
+                _enable_startup()
+            else:
+                _disable_startup()
+        except Exception as e:
+            QMessageBox.warning(self, "Startup error", str(e))
+
+    def _browse_mt5_path(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select MT5 terminal64.exe", "C:\\Program Files\\MetaTrader 5",
+            "Executables (*.exe)")
+        if path and self.mt5_path_edit:
+            self.mt5_path_edit.setText(path)
 
     def _clear_logs(self):
         if self.log_box:
-            self.log_box.configure(state="normal")
-            self.log_box.delete("1.0", "end")
-            self.log_box.configure(state="disabled")
+            self.log_box.clear()
 
-    def toggle_advanced(self):
-        """Kept for compatibility."""
-        self._switch_panel("settings")
+    def _set_tv_action(self, action: str):
+        self._tv_action = action
+        if self._buy_btn and self._sell_btn:
+            self._buy_btn.setObjectName("buyBtnActive" if action == "BUY" else "buyBtn")
+            self._sell_btn.setObjectName("sellBtnActive" if action == "SELL" else "sellBtn")
+            for btn in (self._buy_btn, self._sell_btn):
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
+        self._update_tv_preview()
 
-    def toggle_logs(self):
-        """Kept for compatibility."""
-        self._switch_panel("settings")
-
-    def _set_dot(self, name: str, online: bool):
-        color    = SUCCESS if online else DANGER
-        bg_color = SUCCESS_BG if online else DANGER_BG
-        label    = "Online" if online else "Offline"
-        letter   = "●" if online else "—"
-        # Update dashboard ring card
-        if name in self.status_dots:
-            ring_lbl, status_lbl = self.status_dots[name]
-            ring_lbl.configure(text=letter, text_color=color)
-            status_lbl.configure(text=label, text_color=color)
-        if hasattr(self, "_status_rings") and name in self._status_rings:
-            self._status_rings[name].configure(border_color=color, fg_color=bg_color)
-        # Update header pill dot
-        if name in self._header_dots:
-            hdot, hlbl = self._header_dots[name]
-            hdot.configure(text_color=color)
-            hlbl.configure(text_color=FG_SOFT if online else FG_MUTED,
-                           text=f"{name}: {label}")
-
-    def _set_status(self, bridge=None, mt5=None, broker=None):
-        if bridge is not None: self._set_dot("Bridge", bridge)
-        if mt5    is not None: self._set_dot("MT5",    mt5)
-        if broker is not None: self._set_dot("Broker", broker)
-        any_on = any(x is True for x in (bridge, mt5, broker))
-        all_on = all(x is True for x in (bridge, mt5, broker) if x is not None)
-        color = SUCCESS if any_on else DANGER
-        if self._live_dot:
-            self._live_dot.configure(text_color=color)
-        if hasattr(self, "_live_dot2"):
-            self._live_dot2.configure(text_color=color)
-        if hasattr(self, "_latency_badge"):
-            if all_on:
-                self._latency_badge.configure(text="● LIVE", text_color=SUCCESS)
-            elif any_on:
-                self._latency_badge.configure(text="◐ PARTIAL", text_color=GOLD_LT)
-            else:
-                self._latency_badge.configure(text="○ OFFLINE", text_color=FG_FAINT)
-
-    def _set_state_callback(self, state: dict):
-        self.root.after(0, lambda: self._set_status(
-            bridge=bool(state.get("cloud_connected")),
-            mt5=bool(state.get("mt5_connected")),
-            broker=bool(state.get("broker_connected")),
-        ))
-
-    def append_log(self, text: str):
-        if self.log_box:
-            self.log_box.configure(state="normal")
-            self.log_box.insert("end", text + "\n")
-            self.log_box.see("end")
-            self.log_box.configure(state="disabled")
-
-    def update_status(self, text: str):
-        self.root.after(0, lambda: self.status_var.set(text))
-        self.root.after(0, lambda: self.append_log(text))
-
-    # ── Credentials ───────────────────────────────────────────────────────────
-    def _save_cached_credentials(self, user_id: str, password: str):
-        if not self.remember_var.get():
+    def _update_tv_preview(self):
+        if not self.tv_preview:
             return
-        if keyring:
-            keyring.set_password(KEYRING_SERVICE, user_id, password)
-        data = {"user_id": user_id}
-        if self._oauth_provider:
-            data["oauth_provider"] = self._oauth_provider
-        if self.mt5_acct_var.get():
-            data["mt5_acct"]   = self.mt5_acct_var.get()
-            data["mt5_server"] = self.mt5_server_var.get()
+        uid = self.user_entry.text().strip() if self.user_entry else ""
+        api_key = self.api_key or (self.api_key_edit.text() if self.api_key_edit else "")
+        msg = {
+            "action":      self._tv_action,
+            "symbol":      self.tv_symbol_edit.text() if self.tv_symbol_edit else "{{ticker}}",
+            "size":        self.tv_size_edit.text()   if self.tv_size_edit   else "0.1",
+            "user_id":     uid,
+            "api_key":     api_key or "YOUR_API_KEY",
+        }
+        sl = self.tv_sl_edit.text()   if self.tv_sl_edit   else ""
+        tp = self.tv_tp_edit.text()   if self.tv_tp_edit   else ""
+        sc = self.tv_script_edit.text() if self.tv_script_edit else ""
+        if sl: msg["sl"] = sl
+        if tp: msg["tp"] = tp
+        if sc: msg["script_name"] = sc
+        self.tv_preview.setPlainText(json.dumps(msg, indent=2))
+
+    def _copy_tv_message(self):
+        if self.tv_preview:
+            QApplication.clipboard().setText(self.tv_preview.toPlainText())
+            self.update_status("JSON copied to clipboard")
+
+    def _reset_tv_fields(self):
+        if self.tv_symbol_edit: self.tv_symbol_edit.setText("{{ticker}}")
+        if self.tv_size_edit:   self.tv_size_edit.setText("0.1")
+        if self.tv_sl_edit:     self.tv_sl_edit.clear()
+        if self.tv_tp_edit:     self.tv_tp_edit.clear()
+        if self.tv_script_edit: self.tv_script_edit.clear()
+        self._set_tv_action("BUY")
+
+    # ── Credential persistence ─────────────────────────────────────────────────
+    def _save_cached_credentials(self, user_id: str, password: str):
         try:
+            if keyring:
+                keyring.set_password(KEYRING_SERVICE, user_id, password)
+        except Exception:
+            pass
+        try:
+            data = {}
+            if os.path.exists(LAST_USER_FILE):
+                with open(LAST_USER_FILE) as f:
+                    data = json.load(f) or {}
+            data["user_id"] = user_id
             with open(LAST_USER_FILE, "w") as f:
                 json.dump(data, f)
-        except OSError as exc:
-            import logging
-            logging.getLogger(__name__).warning(f"Could not save credentials cache: {exc}")
+        except Exception:
+            pass
 
     def _save_oauth_credentials(self, user_id: str, provider: str):
-        """Always saves OAuth state (no remember_var check)."""
-        data = {"user_id": user_id, "oauth_provider": provider}
-        if self.mt5_acct_var.get():
-            data["mt5_acct"]   = self.mt5_acct_var.get()
-            data["mt5_server"] = self.mt5_server_var.get()
         try:
+            data = {}
+            if os.path.exists(LAST_USER_FILE):
+                with open(LAST_USER_FILE) as f:
+                    data = json.load(f) or {}
+            data["user_id"]        = user_id
+            data["oauth_provider"] = provider
             with open(LAST_USER_FILE, "w") as f:
                 json.dump(data, f)
-        except OSError:
+        except Exception:
             pass
 
     def _load_cached_credentials(self):
-        if not os.path.exists(LAST_USER_FILE):
-            return
         try:
+            if not os.path.exists(LAST_USER_FILE):
+                return
             with open(LAST_USER_FILE) as f:
                 data = json.load(f) or {}
-            uid = data.get("user_id", "")
-            if uid:
-                self.user_id_var.set(uid)
-                self._avatar.configure(text=uid[:2].upper())
-            if keyring and uid:
-                pw = keyring.get_password(KEYRING_SERVICE, uid)
-                if pw:
-                    self.password_var.set(pw)
-            if data.get("mt5_acct"):
-                self.mt5_acct_var.set(data["mt5_acct"])
-            if data.get("mt5_server"):
-                self.mt5_server_var.set(data["mt5_server"])
+            uid      = data.get("user_id", "")
             provider = data.get("oauth_provider", "")
-            if provider and uid:
-                self._oauth_provider = provider
-                self.root.after(50, lambda: self._on_oauth_success(provider, uid, from_cache=True))
+            if uid and self.user_entry:
+                self.user_entry.setText(uid)
+            if provider:
+                self.api_key = data.get("api_key", "")
+                return  # will auto-connect via oauth
+            if uid and keyring:
+                pw = keyring.get_password(KEYRING_SERVICE, uid)
+                if pw and self.pass_entry:
+                    self.pass_entry.setText(pw)
+                    if self.remember_cb:
+                        self.remember_cb.setChecked(True)
         except Exception:
             pass
 
     def _auto_connect_if_cached(self):
-        uid = self.user_id_var.get().strip()
-        pw  = self.password_var.get()
-        if uid and pw:
-            if IS_WINDOWS:
-                self.root.after(600, self.start_relay)
-            else:
-                self.root.after(600, self._do_refresh)
-        elif uid and self._oauth_provider:
-            # OAuth user — refresh dashboard (no password needed, api_key will be None until re-auth)
-            self.root.after(600, self._do_refresh)
-
-    # ── Startup ───────────────────────────────────────────────────────────────
-    def _toggle_startup(self):
         try:
-            if self.startup_var.get():
-                _enable_startup()
-                self.update_status("Start-on-boot enabled")
-            else:
-                _disable_startup()
-                self.update_status("Start-on-boot disabled")
-        except Exception as e:
-            self.update_status(f"Startup error: {e}")
-            self.startup_var.set(_startup_enabled())
+            if not os.path.exists(LAST_USER_FILE):
+                return
+            with open(LAST_USER_FILE) as f:
+                data = json.load(f) or {}
+            provider = data.get("oauth_provider", "")
+            uid      = data.get("user_id", "")
+            api_key  = data.get("api_key", "")
+            if provider and uid:
+                self.api_key = api_key
+                if self.api_key_edit:
+                    self.api_key_edit.setText(api_key)
+                self.sig.avatar_updated.emit(uid[:2].upper())
+                self.sig.oauth_success.emit(provider, uid, True)
+                threading.Thread(
+                    target=self._refresh_dashboard_summary, daemon=True).start()
+                if IS_WINDOWS:
+                    QTimer.singleShot(200, self.start_relay)
+        except Exception:
+            pass
 
-    # ── MT5 credentials ───────────────────────────────────────────────────────
-    def _get_mt5_creds(self) -> dict:
-        """Return MT5 credentials from GUI fields only. No config.json fallback."""
-        return {
-            "login":    self.mt5_acct_var.get().strip(),
-            "password": self.mt5_pw_var.get(),
-            "server":   self.mt5_server_var.get().strip(),
-            "path":     self.mt5_path_var.get().strip() if IS_WINDOWS else "",
-        }
-
-    # ── Actions ───────────────────────────────────────────────────────────────
+    # ── Sign in / OAuth ───────────────────────────────────────────────────────
     def _sign_in(self):
-        uid = self.user_id_var.get().strip()
-        pw  = self.password_var.get()
-        if not uid or not pw:
-            messagebox.showerror("Missing fields", "Username and password are required.")
+        user_id  = self.user_entry.text().strip()  if self.user_entry  else ""
+        password = self.pass_entry.text()          if self.pass_entry  else ""
+        if not user_id or not password:
+            QMessageBox.warning(self, "Missing fields", "Enter email and password.")
             return
-        if IS_WINDOWS:
-            self.start_relay()
-        else:
-            self._save_cached_credentials(uid, pw)
-            self._avatar.configure(text=uid[:2].upper())
-            self.update_status("Signed in — fetching dashboard…")
-            self._do_refresh()
+        self._save_cached_credentials(user_id, password)
+        self.sig.avatar_updated.emit(user_id[:2].upper())
+        self.start_relay()
 
     def _open_oauth(self, provider: str):
-        base = self.bridge_url_var.get().rstrip("/")
+        base = self._get_bridge_url()
         try:
             resp = requests.post(f"{base}/auth/desktop/start",
                                  json={"provider": provider}, timeout=8)
             if resp.status_code != 200:
-                messagebox.showerror("OAuth error", resp.text or "Could not start OAuth")
+                QMessageBox.critical(self, "OAuth error", resp.text or "Could not start OAuth")
                 return
             data     = resp.json()
             auth_url = data.get("auth_url")
             state    = data.get("state")
             if not (auth_url and state):
-                messagebox.showerror("OAuth error", "Missing auth URL or state")
+                QMessageBox.critical(self, "OAuth error", "Missing auth URL or state")
                 return
         except Exception as exc:
-            messagebox.showerror(
-                "Cannot connect to OAuth",
-                f"Could not reach the PlatAlgo server.\n\n"
-                f"Bridge URL: {base}\n\n"
-                f"Check your internet connection or verify the Bridge URL in Settings.\n\n"
-                f"Details: {exc}"
-            )
+            QMessageBox.critical(self, "Cannot connect",
+                f"Could not reach the PlatAlgo server.\n\nBridge URL: {base}\n\nDetails: {exc}")
             return
 
         self.update_status(f"Login with {provider.title()}…")
-        threading.Thread(target=self._poll_desktop_token, args=(state, provider), daemon=True).start()
+        threading.Thread(
+            target=self._poll_desktop_token, args=(state, provider), daemon=True).start()
 
         if webview:
             def launch_webview():
-                window = webview.create_window("PlatAlgo Login", auth_url,
-                                               width=1024, height=760, resizable=True)
-                if hasattr(window, "events"):
-                    window.events.closed += lambda: self.root.after(
-                        0, lambda: self.update_status("Login window closed"))
+                window = webview.create_window("PlatAlgo Login", auth_url, width=1024, height=760)
                 webview.start()
             threading.Thread(target=launch_webview, daemon=True).start()
         else:
-            messagebox.showinfo("Opening browser",
-                                "Install 'pywebview' to keep login inside the app.")
             webbrowser.open(auth_url)
 
     def _poll_desktop_token(self, state: str, provider: str = ""):
-        base = self.bridge_url_var.get().rstrip("/")
+        base = self._get_bridge_url()
         for i in range(180):
             try:
                 resp = requests.get(f"{base}/auth/desktop/consume/{state}", timeout=6)
@@ -2080,86 +2058,59 @@ class RelayGuiApp:
                     api_key = data.get("api_key", "")
                     if uid and api_key:
                         self.api_key = api_key
-                        self.api_key_var.set(api_key)
-                        self.password_var.set("")
-                        self.user_id_var.set(uid)
-                        self._avatar.configure(text=uid[:2].upper())
-                        self.root.after(0, lambda p=provider, u=uid: self._on_oauth_success(p, u))
+                        self.sig.apikey_updated.emit(api_key)
+                        self.sig.avatar_updated.emit(uid[:2].upper())
+                        if self.user_entry:
+                            QTimer.singleShot(0, lambda u=uid: self.user_entry.setText(u))
+                        self.sig.oauth_success.emit(provider, uid, False)
                         self.update_status("OAuth linked — ready to connect")
-                        self._do_refresh()
+                        threading.Thread(
+                            target=self._refresh_dashboard_summary, daemon=True).start()
                         if IS_WINDOWS:
-                            self.root.after(0, self.start_relay)
+                            QTimer.singleShot(100, self.start_relay)
                         return
                 elif resp.status_code == 410:
                     self.update_status("OAuth flow expired — start again")
                     return
-                elif resp.status_code in (202, 404):
-                    if i % 10 == 0:
-                        self.update_status("Waiting for OAuth confirmation…")
-                else:
-                    if i % 10 == 0:
-                        self.update_status(f"OAuth waiting ({resp.status_code})…")
             except Exception as exc:
                 if i % 10 == 0:
                     self.update_status(f"Waiting for OAuth… ({exc})")
             time.sleep(1)
         self.update_status("OAuth login timed out — try again")
 
-    def _on_oauth_success(self, provider: str, uid: str, from_cache: bool = False):
-        """Show logged-in banner and hide the username/password form."""
-        self._oauth_provider = provider
-        if not from_cache:
-            self._save_oauth_credentials(uid, provider)
-        icon = "G" if provider == "google" else "f" if provider == "facebook" else "●"
-        provider_name = provider.title()
-        if self._oauth_provider_lbl:
-            self._oauth_provider_lbl.configure(
-                text=f"Signed in via {provider_name}"
-            )
-        if self._oauth_provider_icon:
-            self._oauth_provider_icon.configure(
-                text=icon,
-                text_color=PRIMARY_LT if provider == "google" else ACCENT_LT
-            )
-        if self._oauth_user_lbl:
-            self._oauth_user_lbl.configure(text=uid)
-        if self._login_form_inner:
-            self._login_form_inner.pack_forget()
-        if self._oauth_logged_in_frame:
-            self._oauth_logged_in_frame.pack(fill="x")
-
     def _sign_out_oauth(self):
-        """Clear OAuth state and show the login form again."""
         self._oauth_provider = None
         self.api_key = None
-        self.api_key_var.set("")
-        self.password_var.set("")
-        # Remove cached OAuth state
+        if self.api_key_edit:
+            self.api_key_edit.clear()
         try:
             if os.path.exists(LAST_USER_FILE):
                 with open(LAST_USER_FILE) as f:
                     data = json.load(f) or {}
                 data.pop("oauth_provider", None)
+                data.pop("api_key", None)
                 with open(LAST_USER_FILE, "w") as f:
                     json.dump(data, f)
         except Exception:
             pass
-        if self._oauth_logged_in_frame:
-            self._oauth_logged_in_frame.pack_forget()
-        if self._login_form_inner:
-            self._login_form_inner.pack(fill="x")
+        if self._oauth_frame:
+            self._oauth_frame.hide()
+        if self._login_form:
+            self._login_form.show()
         self.update_status("Signed out")
 
+    # ── Relay control ─────────────────────────────────────────────────────────
     def start_relay(self):
-        user_id  = self.user_id_var.get().strip()
-        password = self.password_var.get()
+        user_id  = self.user_entry.text().strip() if self.user_entry else ""
+        password = self.pass_entry.text()         if self.pass_entry else ""
         if not user_id or not (password or self.api_key):
-            messagebox.showerror("Missing fields", "Provide password or complete OAuth login.")
+            QMessageBox.warning(self, "Missing fields",
+                                "Provide password or complete OAuth login.")
             return
         if password:
             self._save_cached_credentials(user_id, password)
-        self._avatar.configure(text=user_id[:2].upper())
-        bridge = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
+        self.sig.avatar_updated.emit(user_id[:2].upper())
+        bridge = self._get_bridge_url()
         mt5    = self._get_mt5_creds()
         self.relay = Relay(
             bridge, user_id, password,
@@ -2169,10 +2120,10 @@ class RelayGuiApp:
             mt5_server=mt5.get("server") or None,
             mt5_path=mt5.get("path") or None,
         )
-        if not self.relay.executor.get_connection_state().get("mt5_connected"):
-            self.update_status("MT5 not connected — open your MT5 terminal or use VPS mode")
-        self.connect_btn.configure(state="disabled")
+        if self.connect_btn:
+            self.connect_btn.setEnabled(False)
         self.update_status("Connecting to bridge…")
+
         def run():
             ok = self.relay.start(on_status=self.update_status,
                                   on_state=self._set_state_callback)
@@ -2180,34 +2131,35 @@ class RelayGuiApp:
                 self.update_status("Auth failed — check username / password")
             elif ok is None:
                 self.update_status("Relay stopped")
-            self.root.after(0, lambda: self.connect_btn.configure(state="normal"))
+            self.sig.connect_enabled.emit(True)
+
         threading.Thread(target=run, daemon=True).start()
         threading.Thread(target=self._refresh_dashboard_summary, daemon=True).start()
 
     def enable_managed_mode(self):
-        user_id  = self.user_id_var.get().strip()
-        password = self.password_var.get()
+        user_id  = self.user_entry.text().strip() if self.user_entry else ""
+        password = self.pass_entry.text()         if self.pass_entry else ""
         api_key  = self.api_key
         if not user_id or not (password or api_key):
-            messagebox.showerror("Missing fields",
-                                 "Sign in first (username/password or Google/Facebook).")
+            QMessageBox.warning(self, "Missing fields",
+                                "Sign in first (username/password or Google/Facebook).")
             return
         mt5 = self._get_mt5_creds()
         if not mt5.get("login") or not mt5.get("password") or not mt5.get("server"):
-            messagebox.showerror(
-                "MT5 credentials required",
+            QMessageBox.warning(self, "MT5 credentials required",
                 "Fill in MT5 Account Number, MT5 Password, and MT5 Server.\n\n"
-                "The cloud server will execute trades 24/7 on your behalf."
-            )
+                "The cloud server will execute trades 24/7 on your behalf.")
             return
         if password:
             self._save_cached_credentials(user_id, password)
-        self._avatar.configure(text=user_id[:2].upper())
-        self.vps_btn.configure(state="disabled", text="Connecting…")
+        self.sig.avatar_updated.emit(user_id[:2].upper())
+        if self.vps_btn:
+            self.vps_btn.setText("Connecting…")
+            self.vps_btn.setEnabled(False)
         self.update_status("Enabling VPS 24/7 mode…")
 
         def run_setup():
-            bridge = self.bridge_url_var.get().strip() or PRODUCTION_BRIDGE_URL
+            bridge = self._get_bridge_url()
             client = RelayClient(bridge, user_id)
             if api_key:
                 ok = client.setup_managed_execution(
@@ -2216,66 +2168,46 @@ class RelayGuiApp:
                 ok = client.setup_managed_execution_with_login(
                     password, mt5, mt5_path_override=mt5.get("path") or None)
             if ok is True:
-                self.update_status("VPS 24/7 mode active — cloud is trading on your behalf")
+                self.update_status("VPS 24/7 mode active")
                 self._set_status(bridge=True, mt5=True, broker=True)
-                self.vps_active = True
-                def _activate():
-                    self.vps_btn.configure(
-                        text="✓  VPS Active — 24/7",
-                        fg_color=GLASS_EMERALD, hover_color=PRIMARY_DK,
-                        border_color=BORDER_GLOW, text_color=PRIMARY_LT, state="normal"
-                    )
-                    if self.vps_status_chip:
-                        self.vps_status_chip.configure(
-                            text="● VPS ACTIVE",
-                            fg_color=GLASS_EMERALD, text_color=PRIMARY_LT
-                        )
-                    if self.vps_card:
-                        self.vps_card.configure(border_color=BORDER_GLOW)
-                self.root.after(0, _activate)
-                threading.Thread(target=self._refresh_dashboard_summary, daemon=True).start()
+                self.sig.vps_activated.emit()
+                threading.Thread(
+                    target=self._refresh_dashboard_summary, daemon=True).start()
             else:
-                err_detail = ok if isinstance(ok, str) else "unknown error"
-                self.update_status(f"VPS setup failed: {err_detail}")
-                self.root.after(0, lambda: messagebox.showerror("VPS Setup Failed", err_detail))
-                self.root.after(0, lambda: self.vps_btn.configure(
-                    text="Login to MT5 on VPS  →",
-                    fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
-                    border_color=ACCENT_DK, text_color=ACCENT_LT, state="normal"
-                ))
+                err = ok if isinstance(ok, str) else "Unknown error"
+                self.update_status(f"VPS setup failed: {err}")
+                self.sig.vps_failed.emit(err)
+
         threading.Thread(target=run_setup, daemon=True).start()
 
     def disable_managed_mode(self):
-        user_id = self.user_id_var.get().strip()
+        user_id = self.user_entry.text().strip() if self.user_entry else ""
+
         def run():
             ok = False
             try:
                 resp = requests.post(
-                    f"{self.bridge_url_var.get().rstrip('/')}/relay/managed/disable",
+                    f"{self._get_bridge_url()}/relay/managed/disable",
                     json={"user_id": user_id},
                     headers={"X-User-ID": user_id},
-                    timeout=10
+                    timeout=10,
                 )
                 ok = resp.status_code == 200
             except Exception:
                 pass
-            def update():
-                if ok:
-                    if self.vps_status_chip:
-                        self.vps_status_chip.configure(
-                            text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_FAINT)
-                    self.vps_btn.configure(
-                        text="Login to MT5 on VPS  →",
-                        fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
-                        border_color=ACCENT_DK, text_color=ACCENT_LT, state="normal"
-                    )
-                    if self.vps_card:
-                        self.vps_card.configure(border_color=BORDER_GOLD)
-                    self.vps_active = False
-                    self.update_status("VPS mode disabled")
-                else:
-                    self.update_status("Failed to disable VPS mode — check connection")
-            self.root.after(0, update)
+            if ok:
+                self.sig.vps_btn_reset.emit()
+                self.vps_active = False
+                self.update_status("VPS mode disabled")
+                if self.vps_status_lbl:
+                    QTimer.singleShot(0, lambda: (
+                        self.vps_status_lbl.setText("● VPS INACTIVE"),
+                        self.vps_status_lbl.setStyleSheet(
+                            f"color: {FG_FAINT}; font-size: 10px; background: transparent; border: none;")
+                    ))
+            else:
+                self.update_status("Failed to disable VPS mode — check connection")
+
         threading.Thread(target=run, daemon=True).start()
 
     def stop_relay(self):
@@ -2283,28 +2215,17 @@ class RelayGuiApp:
             self.relay.stop()
         self._set_status(bridge=False, mt5=False, broker=False)
         self.update_status("Stopped")
-        if hasattr(self, "connect_btn") and self.connect_btn:
-            self.connect_btn.configure(state="normal")
-        if self.vps_btn:
-            self.vps_btn.configure(
-                text="Login to MT5 on VPS  →",
-                fg_color=GLASS_GOLD, hover_color=ACCENT_DK,
-                border_color=ACCENT_DK, text_color=ACCENT_LT
-            )
-        if self.vps_status_chip:
-            self.vps_status_chip.configure(
-                text="● VPS INACTIVE", fg_color=GLASS, text_color=FG_FAINT)
-        if self.vps_card:
-            self.vps_card.configure(border_color=BORDER_GOLD)
+        self.sig.connect_enabled.emit(True)
+        self.sig.vps_btn_reset.emit()
         self.vps_active = False
 
-    # ── Dashboard mirror ──────────────────────────────────────────────────────
+    # ── Dashboard refresh ─────────────────────────────────────────────────────
     def _do_refresh(self):
         threading.Thread(target=self._refresh_dashboard_summary, daemon=True).start()
 
     def _refresh_dashboard_summary(self):
-        uid     = self.user_id_var.get().strip()
-        pw      = self.password_var.get()
+        uid = self.user_entry.text().strip() if self.user_entry else ""
+        pw  = self.pass_entry.text()         if self.pass_entry else ""
         payload = {"user_id": uid}
         if pw:
             payload["password"] = pw
@@ -2314,60 +2235,47 @@ class RelayGuiApp:
             return
         try:
             resp = requests.post(
-                f"{self.bridge_url_var.get().rstrip('/')}/dashboard/summary/login",
+                f"{self._get_bridge_url()}/dashboard/summary/login",
                 json=payload, timeout=8,
             )
             if resp.status_code != 200:
                 return
+            self._set_dot("Bridge", True)
+            d    = resp.json()
+            dash = d.get("dashboard", {})
 
-            self.root.after(0, lambda: self._set_dot("Bridge", True))
-
-            d       = resp.json()
-            dash    = d.get("dashboard", {})
-            scripts = dash.get("scripts", [])
-
-            # Update webhook URL
             wh_url = d.get("webhook_url", "")
             if wh_url:
-                self.root.after(0, lambda u=wh_url: self.webhook_url_var.set(u))
+                self.sig.webhook_updated.emit(wh_url)
 
-            # Update API key if returned
             ak = d.get("api_key", "")
             if ak and not self.api_key:
                 self.api_key = ak
-                self.root.after(0, lambda k=ak: self.api_key_var.set(k))
+                self.sig.apikey_updated.emit(ak)
 
-            # Build summary text
-            lines = [
+            scripts = dash.get("scripts", [])
+            lines   = [
                 f"Account      : {uid}",
                 f"Webhook URL  : {wh_url}",
                 f"Relays       : {dash.get('relay_online', 0)}/{dash.get('relay_total', 0)} online",
                 f"Scripts      : {len(scripts)}",
             ]
             if scripts:
-                lines.append("")
-                lines.append("── Script Performance ──")
+                lines += ["", "── Script Performance ──"]
                 for s in scripts:
                     lines.append(
                         f"  {s.get('script_name', '—'):<24} "
                         f"{s.get('executed_count', 0)} executed  /  "
                         f"{s.get('signals_count', 0)} signals"
                     )
-            txt = "\n".join(lines)
-            self.root.after(0, lambda: self._update_summary_text(txt))
+            self.sig.summary_updated.emit("\n".join(lines))
         except Exception:
             pass
 
-    def _update_summary_text(self, text: str):
-        self.summary_text.configure(state="normal")
-        self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("end", text)
-        self.summary_text.configure(state="disabled")
-
+    # ── Auto-updater ──────────────────────────────────────────────────────────
     def _check_updates(self):
         try:
-            resp = requests.get(
-                f"{self.bridge_url_var.get().rstrip('/')}/version", timeout=5)
+            resp = requests.get(f"{self._get_bridge_url()}/version", timeout=5)
             if resp.status_code != 200:
                 return
             info   = resp.json()
@@ -2375,59 +2283,73 @@ class RelayGuiApp:
             url    = info.get("windows_url" if IS_WINDOWS else "mac_url") or \
                      info.get("relay_download_url", "")
             if latest and latest != APP_VERSION and url:
-                self.root.after(0, lambda v=latest, u=url: self._prompt_update(v, u))
+                self.sig.update_prompt.emit(latest, url)
         except Exception:
             pass
 
     def _prompt_update(self, version: str, url: str):
-        """Show a polished update-available dialog."""
-        dlg = ctk.CTkToplevel(self.root)
-        dlg.title("Update Available")
-        dlg.resizable(False, False)
-        dlg.geometry("420x220")
-        if hasattr(dlg, "configure"):
-            dlg.configure(fg_color=BG_ELEVATED)
-        dlg.grab_set()
-        dlg.lift()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Update Available")
+        dlg.setFixedSize(420, 200)
+        dlg.setStyleSheet(f"background-color: {BG_SIDE};")
 
-        _label(dlg, "Update Available", font=FONT_HERO, color=FG).pack(pady=(28, 4))
-        _label(dlg, f"v{version} is ready  —  you're on v{APP_VERSION}",
-               color=FG_MUTED, font=FONT_SMALL).pack()
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(32, 32, 32, 24)
+        lay.setSpacing(10)
+        lay.addWidget(_lbl(None, "Update Available", FG, 16, True))
+        lay.addWidget(_lbl(None, f"v{version} is ready — you're on v{APP_VERSION}", FG_MUTED, 12))
+        lay.addStretch()
 
-        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
-        btn_row.pack(pady=28)
+        btn_row = QWidget()
+        btn_row.setStyleSheet("background: transparent;")
+        br_lay = QHBoxLayout(btn_row)
+        br_lay.setContentsMargins(0, 0, 0, 0)
+        br_lay.setSpacing(10)
 
-        def _start_update():
-            dlg.destroy()
-            self._download_and_install(url, version)
+        update_btn = QPushButton("Update Now  →")
+        update_btn.setObjectName("goldBtn")
+        update_btn.setFixedHeight(44)
+        update_btn.clicked.connect(lambda: (dlg.accept(), self._download_and_install(url, version)))
 
-        _btn_primary(btn_row, "Update Now  →", _start_update, width=160).pack(side="left", padx=(0, 10))
-        _btn_outline(btn_row, "Later", dlg.destroy, width=90).pack(side="left")
+        later_btn = QPushButton("Later")
+        later_btn.setObjectName("outlineBtn")
+        later_btn.setFixedHeight(44)
+        later_btn.clicked.connect(dlg.reject)
+
+        br_lay.addWidget(update_btn, 1)
+        br_lay.addWidget(later_btn)
+        lay.addWidget(btn_row)
+        dlg.exec()
 
     def _download_and_install(self, url: str, version: str):
-        """Download the new binary with a progress bar, then self-replace."""
         import tempfile
 
-        prog_win = ctk.CTkToplevel(self.root)
-        prog_win.title("Downloading Update")
-        prog_win.resizable(False, False)
-        prog_win.geometry("420x160")
-        if hasattr(prog_win, "configure"):
-            prog_win.configure(fg_color=BG_ELEVATED)
-        prog_win.grab_set()
-        prog_win.lift()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Downloading Update")
+        dlg.setFixedSize(420, 160)
+        dlg.setStyleSheet(f"background-color: {BG_SIDE};")
 
-        status_lbl = _label(prog_win, f"Downloading v{version}…", color=FG_MUTED, font=FONT_SMALL)
-        status_lbl.pack(pady=(28, 10))
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(28, 28, 28, 24)
+        lay.setSpacing(10)
 
-        bar = ctk.CTkProgressBar(prog_win, width=360, height=12,
-                                 fg_color=GLASS, progress_color=PRIMARY,
-                                 corner_radius=6)
-        bar.set(0)
-        bar.pack(padx=30)
+        status_lbl = _lbl(None, f"Downloading v{version}…", FG_MUTED, 12)
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        bar.setValue(0)
+        bar.setFixedHeight(12)
+        pct_lbl = _lbl(None, "0%", FG_FAINT, 11)
 
-        pct_lbl = _label(prog_win, "0%", color=FG_FAINT, font=FONT_SMALL)
-        pct_lbl.pack(pady=(6, 0))
+        lay.addWidget(status_lbl)
+        lay.addWidget(bar)
+        lay.addWidget(pct_lbl)
+
+        self.sig.progress_changed.connect(lambda p, t: (
+            bar.setValue(int(p * 100)),
+            pct_lbl.setText(f"{int(p * 100)}%"),
+            status_lbl.setText(t),
+        ))
+        dlg.show()
 
         def _run():
             try:
@@ -2442,38 +2364,32 @@ class RelayGuiApp:
                             f.write(chunk)
                             done += len(chunk)
                             if total:
-                                pct = done / total
-                                self.root.after(0, lambda p=pct: bar.set(p))
-                                self.root.after(0, lambda p=pct: pct_lbl.configure(
-                                    text=f"{int(p * 100)}%"))
-                self.root.after(0, lambda: status_lbl.configure(text="Installing…"))
-                self.root.after(0, lambda: bar.set(1.0))
-                self.root.after(0, lambda: pct_lbl.configure(text="100%"))
-                self.root.after(500, lambda: self._apply_update(dest))
+                                self.sig.progress_changed.emit(done / total, f"Downloading v{version}…")
+                self.sig.progress_changed.emit(1.0, "Installing…")
+                QTimer.singleShot(500, lambda: (dlg.accept(), self._apply_update(dest)))
             except Exception as exc:
-                self.root.after(0, lambda: prog_win.destroy())
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Update failed", f"Could not download update:\n{exc}"))
+                QTimer.singleShot(0, lambda: (
+                    dlg.reject(),
+                    QMessageBox.critical(self, "Update failed", f"Could not download:\n{exc}")
+                ))
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _apply_update(self, dest: str):
-        """Replace the running binary and relaunch (Windows), or open DMG (Mac)."""
         if IS_WINDOWS:
             import tempfile
             current_exe = sys.executable if getattr(sys, "frozen", False) else ""
             if not current_exe:
-                # Running from source — just open download folder
                 webbrowser.open(os.path.dirname(dest))
                 return
             bat = os.path.join(tempfile.gettempdir(), "platalgo_update.bat")
             with open(bat, "w") as f:
                 f.write(
-                    f'@echo off\r\n'
-                    f'timeout /t 2 /nobreak >nul\r\n'
-                    f'move /y "{dest}" "{current_exe}"\r\n'
-                    f'start "" "{current_exe}"\r\n'
-                    f'del "%~f0"\r\n'
+                    f"@echo off\r\n"
+                    f"timeout /t 2 /nobreak >nul\r\n"
+                    f"move /y \"{dest}\" \"{current_exe}\"\r\n"
+                    f"start \"\" \"{current_exe}\"\r\n"
+                    f"del \"%~f0\"\r\n"
                 )
             subprocess.Popen(
                 ["cmd", "/c", bat],
@@ -2482,56 +2398,77 @@ class RelayGuiApp:
             )
             sys.exit(0)
         else:
-            # Mac — open the downloaded DMG
             subprocess.run(["open", dest], check=False)
-            messagebox.showinfo("Update downloaded",
-                                "The installer has been opened. Drag PlatAlgoRelay to Applications to complete the update.")
+            QMessageBox.information(self, "Update downloaded",
+                "Drag PlatAlgoRelay to Applications to complete the update.")
 
-    # ── Tray ──────────────────────────────────────────────────────────────────
-    def _create_tray_icon(self):
-        if not pystray or not Image or not ImageDraw:
+    # ── System Tray ───────────────────────────────────────────────────────────
+    def _create_tray(self) -> QSystemTrayIcon | None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
             return None
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
-        try:
-            img = Image.open(icon_path).convert("RGBA").resize((64, 64), Image.LANCZOS)
-        except Exception:
-            img  = Image.new("RGB", (64, 64), color=(0, 0, 0))
-            draw = ImageDraw.Draw(img)
-            draw.ellipse((8, 8, 56, 56), fill=(10, 132, 255))
-        menu = pystray.Menu(
-            pystray.MenuItem("Open", lambda: self._restore_window()),
-            pystray.MenuItem("Exit", lambda: self._quit_from_tray()),
-        )
-        return pystray.Icon("platalgo-relay", img, "PlatAlgo Relay", menu)
+        icon = QIcon(icon_path) if os.path.exists(icon_path) else QApplication.style().standardIcon(
+            QApplication.style().StandardPixmap.SP_ComputerIcon)
+
+        tray = QSystemTrayIcon(icon, self)
+        menu = QMenu()
+        open_act = menu.addAction("Open PlatAlgo Relay")
+        open_act.triggered.connect(self._restore_window)
+        menu.addSeparator()
+        quit_act = menu.addAction("Exit")
+        quit_act.triggered.connect(self._quit_from_tray)
+        tray.setContextMenu(menu)
+        tray.activated.connect(lambda reason: (
+            self._restore_window()
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None
+        ))
+        return tray
 
     def _restore_window(self):
-        self.root.after(0, self.root.deiconify)
+        self.showNormal()
+        self.activateWindow()
         if self.tray_icon:
-            self.tray_icon.stop()
+            self.tray_icon.hide()
             self.tray_icon = None
 
     def _quit_from_tray(self):
         if self.tray_icon:
-            self.tray_icon.stop()
-            self.tray_icon = None
-        self.root.after(0, self.root.destroy)
+            self.tray_icon.hide()
+        QApplication.quit()
 
-    def on_close(self):
-        icon = self._create_tray_icon()
-        if icon:
-            self.root.withdraw()
-            self.tray_icon = icon
-            threading.Thread(target=self.tray_icon.run, daemon=True).start()
-            self.update_status("Running in system tray")
+    def closeEvent(self, event):
+        tray = self._create_tray()
+        if tray:
+            self.tray_icon = tray
+            tray.show()
+            tray.showMessage("PlatAlgo Relay", "Running in system tray. Double-click to open.",
+                             QSystemTrayIcon.MessageIcon.Information, 2000)
+            self.hide()
+            event.ignore()
         else:
-            self.root.destroy()
+            event.accept()
 
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 def main():
-    root = ctk.CTk() if hasattr(ctk, "CTk") else ctk.Tk()
-    RelayGuiApp(root)
-    root.mainloop()
+    if IS_WINDOWS:
+        import ctypes
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("PlatAlgo Relay")
+    app.setStyleSheet(QSS)
+
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+
+    window = RelayGuiApp()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
