@@ -1920,9 +1920,13 @@ class RelayGuiApp(QMainWindow):
         )
 
     def _get_bridge_url(self) -> str:
+        url = PRODUCTION_BRIDGE_URL
         if self.bridge_entry:
-            return self.bridge_entry.text().strip() or PRODUCTION_BRIDGE_URL
-        return PRODUCTION_BRIDGE_URL
+            url = self.bridge_entry.text().strip() or PRODUCTION_BRIDGE_URL
+        # Caddy listens on port 80 only — force http
+        if url.startswith("https://"):
+            url = url.replace("https://", "http://", 1)
+        return url
 
     def _get_mt5_creds(self) -> dict:
         return {
