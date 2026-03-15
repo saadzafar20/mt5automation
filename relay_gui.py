@@ -582,9 +582,15 @@ class RelayGuiApp(QMainWindow):
         self._webhook_copy_btn = None
 
         self._connect_signals()
+        self._settings_startup_cb = None
+        self._settings_tray_cb = None
+        self._notif_sound_cb = None
+        self._notif_desktop_cb = None
+
         self._build_ui()
         self._load_cached_credentials()
-        self.startup_cb.setChecked(_startup_enabled())
+        startup_on = _startup_enabled()
+        self.startup_cb.setChecked(startup_on)
 
         threading.Thread(target=self._check_updates, daemon=True).start()
         self._auto_connect_if_cached()
@@ -1711,30 +1717,43 @@ class RelayGuiApp(QMainWindow):
         scroll.setWidget(inner)
 
         lay.addWidget(_lbl(None, "Settings", FG, 28, True))
-        lay.addWidget(_lbl(None, "Configure bridge connection and local MT5 path.", FG_MUTED, 12))
+        lay.addWidget(_lbl(None, "Configure your relay preferences.", FG_MUTED, 12))
 
-        # Connection card
-        conn_card = QFrame()
-        conn_card.setObjectName("card")
-        cc_lay = QVBoxLayout(conn_card)
-        cc_lay.setContentsMargins(24, 24, 24, 24)
-        cc_lay.setSpacing(12)
-        cc_lay.addWidget(_lbl(None, "Bridge Connection", FG, 14, True))
-        cc_lay.addWidget(_lbl(None, "BRIDGE URL", FG_SOFT, 10, True))
-
+        # Hidden bridge entry (not shown, but keeps code working)
         self.bridge_entry = QLineEdit(PRODUCTION_BRIDGE_URL)
-        self.bridge_entry.setFixedHeight(44)
-        cc_lay.addWidget(self.bridge_entry)
-        lay.addWidget(conn_card)
+        self.bridge_entry.hide()
 
-        # MT5 path card (Windows)
+        # ── General card ──────────────────────────────────────────────────────
+        gen_card = QFrame()
+        gen_card.setObjectName("card")
+        gc_lay = QVBoxLayout(gen_card)
+        gc_lay.setContentsMargins(24, 24, 24, 24)
+        gc_lay.setSpacing(14)
+        gc_lay.addWidget(_lbl(None, "General", FG, 14, True))
+
+        # Launch on startup
+        self._settings_startup_cb = QCheckBox("Launch on startup")
+        self._settings_startup_cb.setChecked(_startup_enabled())
+        self._settings_startup_cb.toggled.connect(self._toggle_startup)
+        gc_lay.addWidget(self._settings_startup_cb)
+
+        # Minimize to tray
+        self._settings_tray_cb = QCheckBox("Minimize to system tray on close")
+        self._settings_tray_cb.setChecked(True)
+        gc_lay.addWidget(self._settings_tray_cb)
+
+        lay.addWidget(gen_card)
+
+        # ── MT5 path card (Windows only) ──────────────────────────────────────
         if IS_WINDOWS:
             mt5_card = QFrame()
             mt5_card.setObjectName("card")
             mc_lay = QVBoxLayout(mt5_card)
             mc_lay.setContentsMargins(24, 24, 24, 24)
             mc_lay.setSpacing(12)
-            mc_lay.addWidget(_lbl(None, "MT5 Terminal Path", FG, 14, True))
+            mc_lay.addWidget(_lbl(None, "MT5 Terminal", FG, 14, True))
+            mc_lay.addWidget(_lbl(None, "Path to MetaTrader 5 terminal (for local execution only).",
+                                  FG_FAINT, 11))
             mc_lay.addWidget(_lbl(None, "MT5 PATH", FG_SOFT, 10, True))
 
             path_row = QWidget()
@@ -1748,14 +1767,34 @@ class RelayGuiApp(QMainWindow):
             pr_lay.addWidget(self.mt5_path_edit, 1)
 
             browse_btn = QPushButton("Browse")
-            browse_btn.setObjectName("smallBtn")
+            browse_btn.setStyleSheet(_SS_OUTLINE)
             browse_btn.setFixedHeight(44)
             browse_btn.clicked.connect(self._browse_mt5_path)
             pr_lay.addWidget(browse_btn)
             mc_lay.addWidget(path_row)
             lay.addWidget(mt5_card)
 
-        # Log card
+        # ── Notifications card ────────────────────────────────────────────────
+        notif_card = QFrame()
+        notif_card.setObjectName("card")
+        nc_lay = QVBoxLayout(notif_card)
+        nc_lay.setContentsMargins(24, 24, 24, 24)
+        nc_lay.setSpacing(12)
+        nc_lay.addWidget(_lbl(None, "Notifications", FG, 14, True))
+        nc_lay.addWidget(_lbl(None, "Get alerts when trades execute. Configure in your dashboard.",
+                              FG_FAINT, 11))
+
+        self._notif_sound_cb = QCheckBox("Play sound on trade execution")
+        self._notif_sound_cb.setChecked(True)
+        nc_lay.addWidget(self._notif_sound_cb)
+
+        self._notif_desktop_cb = QCheckBox("Show desktop notifications")
+        self._notif_desktop_cb.setChecked(True)
+        nc_lay.addWidget(self._notif_desktop_cb)
+
+        lay.addWidget(notif_card)
+
+        # ── Log card ─────────────────────────────────────────────────────────
         log_card = QFrame()
         log_card.setObjectName("card")
         lc_lay = QVBoxLayout(log_card)
@@ -1770,7 +1809,7 @@ class RelayGuiApp(QMainWindow):
         lh_lay.addStretch()
 
         clr_btn = QPushButton("Clear")
-        clr_btn.setObjectName("smallBtn")
+        clr_btn.setStyleSheet(_SS_OUTLINE)
         clr_btn.setFixedHeight(32)
         clr_btn.clicked.connect(self._clear_logs)
         lh_lay.addWidget(clr_btn)
@@ -1781,8 +1820,19 @@ class RelayGuiApp(QMainWindow):
         self.log_box.setFixedHeight(240)
         lc_lay.addWidget(self.log_box)
         lay.addWidget(log_card)
-        lay.addStretch()
 
+        # ── About card ───────────────────────────────────────────────────────
+        about_card = QFrame()
+        about_card.setObjectName("card")
+        ac_lay = QVBoxLayout(about_card)
+        ac_lay.setContentsMargins(24, 24, 24, 24)
+        ac_lay.setSpacing(8)
+        ac_lay.addWidget(_lbl(None, "About", FG, 14, True))
+        ac_lay.addWidget(_lbl(None, f"PlatAlgo Relay  v{APP_VERSION}", FG_MUTED, 12))
+        ac_lay.addWidget(_lbl(None, f"Bridge: {PRODUCTION_BRIDGE_URL}", FG_FAINT, 11))
+        lay.addWidget(about_card)
+
+        lay.addStretch()
         return scroll
 
     # =========================================================================
@@ -1978,6 +2028,15 @@ class RelayGuiApp(QMainWindow):
                 _enable_startup()
             else:
                 _disable_startup()
+            # Keep both checkboxes in sync
+            if self.startup_cb and self.startup_cb.isChecked() != checked:
+                self.startup_cb.blockSignals(True)
+                self.startup_cb.setChecked(checked)
+                self.startup_cb.blockSignals(False)
+            if self._settings_startup_cb and self._settings_startup_cb.isChecked() != checked:
+                self._settings_startup_cb.blockSignals(True)
+                self._settings_startup_cb.setChecked(checked)
+                self._settings_startup_cb.blockSignals(False)
         except Exception as e:
             QMessageBox.warning(self, "Startup error", str(e))
 
@@ -2091,23 +2150,38 @@ class RelayGuiApp(QMainWindow):
             pass
 
     def _auto_connect_if_cached(self):
+        """Auto-connect on app launch if we have cached credentials."""
         try:
             if not os.path.exists(LAST_USER_FILE):
                 return
             with open(LAST_USER_FILE) as f:
                 data = json.load(f) or {}
-            provider = data.get("oauth_provider", "")
             uid      = data.get("user_id", "")
+            provider = data.get("oauth_provider", "")
             api_key  = data.get("api_key", "")
-            if provider and uid:
+            if not uid:
+                return
+            # Restore OAuth state
+            if provider:
                 self.api_key = api_key
                 if self.api_key_edit:
                     self.api_key_edit.setText(api_key)
                 self.sig.avatar_updated.emit(uid[:2].upper())
                 self.sig.oauth_success.emit(provider, uid, True)
+            # Check for saved password via keyring
+            has_password = False
+            if keyring:
+                try:
+                    pw = keyring.get_password(KEYRING_SERVICE, uid)
+                    if pw:
+                        has_password = True
+                except Exception:
+                    pass
+            # Auto-connect if we have any form of auth
+            if provider or api_key or has_password:
                 threading.Thread(
                     target=self._refresh_dashboard_summary, daemon=True).start()
-                QTimer.singleShot(200, self.start_relay)  # safe: runs on main thread
+                QTimer.singleShot(300, self.start_relay)  # safe: runs on main thread
         except Exception:
             pass
 
@@ -2557,16 +2631,18 @@ class RelayGuiApp(QMainWindow):
         QApplication.quit()
 
     def closeEvent(self, event):
-        tray = self._create_tray()
-        if tray:
-            self.tray_icon = tray
-            tray.show()
-            tray.showMessage("PlatAlgo Relay", "Running in system tray. Double-click to open.",
-                             QSystemTrayIcon.MessageIcon.Information, 2000)
-            self.hide()
-            event.ignore()
-        else:
-            event.accept()
+        minimize_to_tray = (self._settings_tray_cb is None or self._settings_tray_cb.isChecked())
+        if minimize_to_tray:
+            tray = self._create_tray()
+            if tray:
+                self.tray_icon = tray
+                tray.show()
+                tray.showMessage("PlatAlgo Relay", "Running in system tray. Double-click to open.",
+                                 QSystemTrayIcon.MessageIcon.Information, 2000)
+                self.hide()
+                event.ignore()
+                return
+        event.accept()
 
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
