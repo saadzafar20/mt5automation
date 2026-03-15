@@ -12,6 +12,7 @@ from pathlib import Path
 
 import requests
 
+from typing import Optional
 from PyQt6.QtCore import (Qt, QObject, pyqtSignal, QTimer, QSize)
 from PyQt6.QtGui import (QFont, QIcon, QPixmap, QPainter, QColor, QCursor)
 from PyQt6.QtWidgets import (
@@ -2403,7 +2404,7 @@ class RelayGuiApp(QMainWindow):
                 "Drag PlatAlgoRelay to Applications to complete the update.")
 
     # ── System Tray ───────────────────────────────────────────────────────────
-    def _create_tray(self) -> QSystemTrayIcon | None:
+    def _create_tray(self) -> Optional[QSystemTrayIcon]:
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return None
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
@@ -2451,13 +2452,6 @@ class RelayGuiApp(QMainWindow):
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 def main():
-    if IS_WINDOWS:
-        import ctypes
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        except Exception:
-            pass
-
     app = QApplication(sys.argv)
     app.setApplicationName("PlatAlgo Relay")
     app.setStyleSheet(QSS)

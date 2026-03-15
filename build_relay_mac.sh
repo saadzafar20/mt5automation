@@ -41,7 +41,7 @@ source venv/bin/activate
 
 echo "Installing/updating dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
+pip install --quiet pyinstaller PyQt6 pillow keyring requests
 
 # Ensure config.json exists
 [ -f config.json ] || echo '{}' > config.json
@@ -54,11 +54,13 @@ pyinstaller --noconfirm --windowed \
   --icon icon.png \
   --add-data "config.json:." \
   --add-data "_version.py:." \
-  --hidden-import customtkinter \
-  --hidden-import PIL._tkinter_finder \
+  --hidden-import PyQt6 \
+  --hidden-import PyQt6.QtCore \
+  --hidden-import PyQt6.QtGui \
+  --hidden-import PyQt6.QtWidgets \
   --hidden-import keyring.backends.macOS \
   --hidden-import keyring.backends.fail \
-  --collect-all customtkinter \
+  --collect-all PyQt6 \
   --osx-bundle-identifier "$BUNDLE_ID" \
   relay_gui.py
 

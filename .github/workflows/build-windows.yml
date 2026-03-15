@@ -31,19 +31,20 @@ jobs:
       - name: Build .exe
         run: |
           pip install --quiet --upgrade pip
-          pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
+          pip install --quiet pyinstaller PyQt6 pillow keyring requests
           if (-not (Test-Path "config.json")) { '{}' | Out-File -Encoding utf8 config.json }
           pyinstaller --noconfirm --onefile --windowed `
             --name PlatAlgoRelay `
             --icon icon.ico `
             --add-data "config.json;." `
             --add-data "_version.py;." `
-            --hidden-import customtkinter `
-            --hidden-import PIL._tkinter_finder `
-            --hidden-import pystray `
+            --hidden-import PyQt6 `
+            --hidden-import PyQt6.QtCore `
+            --hidden-import PyQt6.QtGui `
+            --hidden-import PyQt6.QtWidgets `
             --hidden-import keyring.backends.Windows `
             --hidden-import keyring.backends.fail `
-            --collect-all customtkinter `
+            --collect-all PyQt6 `
             relay_gui.py
         shell: pwsh
 
