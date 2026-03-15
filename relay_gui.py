@@ -2323,12 +2323,9 @@ class RelayGuiApp(QMainWindow):
         self.update_status("Connecting to bridge…")
 
         def run():
-            ok = self.relay.start(on_status=self.update_status,
-                                  on_state=self._set_state_callback)
-            if ok is False:
-                self.update_status("Auth failed — check username / password")
-            elif ok is None:
-                self.update_status("Relay stopped")
+            self.relay.start(on_status=self.update_status,
+                             on_state=self._set_state_callback)
+            self.update_status("Relay stopped")
             self.sig.connect_enabled.emit(True)
 
         threading.Thread(target=run, daemon=True).start()

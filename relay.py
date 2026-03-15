@@ -506,106 +506,127 @@ class Relay:
         self.running = False
         self._hb_failures = 0
 
-    def start(self, on_status=None, on_state=None):
-        """Start relay loop."""
-        logger.info(f"Starting relay: {self.client.relay_id}")
-        if on_status:
-            on_status("Starting relay authentication...")
-        
-        auth_ok = False
+    def _authenticate(self, on_status=None):
+        """Authenticate with the bridge. Returns True on success."""
         for attempt in range(1, 4):
+            if not self.running:
+                return False
             if self.password:
                 auth_ok = self.client.login(self.password)
             elif self.client.api_key:
                 auth_ok = self.client.register()
+            else:
+                return False
             if auth_ok:
-                break
-            wait = 2 ** attempt  # 2, 4, 8 seconds
+                return True
+            wait = 2 ** attempt
             logger.warning(f"Auth attempt {attempt} failed; retrying in {wait}s")
             if on_status:
                 on_status(f"Auth failed (attempt {attempt}/3); retrying in {wait}s…")
             time.sleep(wait)
+        return False
 
-        if not auth_ok:
-            logger.error("Failed to authenticate relay with bridge after 3 attempts")
-            if on_status:
-                on_status("Authentication failed. Check credentials or API key.")
-            return False
-        if on_status:
-            on_status(f"Connected as {self.client.user_id} ({self.client.relay_id})")
-        if on_state:
-            state = self.executor.get_connection_state()
-            state["cloud_connected"] = True
-            on_state(state)
-
+    def start(self, on_status=None, on_state=None):
+        """Start relay loop with auto-reconnect."""
+        logger.info(f"Starting relay: {self.client.relay_id}")
         self.running = True
-        last_heartbeat = 0
-        # Send first heartbeat immediately to get VPS status
 
+        while self.running:
+            # ── Authenticate ─────────────────────────────────────────────────
+            if on_status:
+                on_status("Connecting to bridge…")
+            if on_state:
+                on_state({"cloud_connected": False, "mt5_connected": False, "broker_connected": False})
 
-        try:
-            while self.running:
-                now = time.time()
+            if not self._authenticate(on_status):
+                if not self.running:
+                    break
+                logger.error("Failed to authenticate after 3 attempts")
+                if on_status:
+                    on_status("Authentication failed — retrying in 10s…")
+                for _ in range(10):
+                    if not self.running:
+                        break
+                    time.sleep(1)
+                continue
 
-                # Heartbeat every N seconds
-                if now - last_heartbeat > self.client.heartbeat_interval:
-                    conn_state = self.executor.get_connection_state()
-                    metadata = {
-                        "version": "1.0",
-                        "mt5_connected": conn_state.get("mt5_connected", False),
-                        "broker_connected": conn_state.get("broker_connected", False),
-                        "uptime": time.time(),
-                    }
-                    hb_resp = self.client.heartbeat(metadata)
-                    hb_ok = bool(hb_resp)
-                    last_heartbeat = now
-                    if hb_ok:
-                        self._hb_failures = 0
-                        # Use VPS-side MT5 status if available (for managed users)
-                        if hb_resp.get("vps_active"):
-                            conn_state["mt5_connected"] = hb_resp.get("vps_mt5_connected", False)
-                            conn_state["broker_connected"] = hb_resp.get("vps_mt5_connected", False)
-                    else:
-                        self._hb_failures += 1
-                    if on_status:
-                        on_status("Heartbeat sent" if hb_ok else f"Bridge unreachable ({self._hb_failures}x)")
-                    if on_state:
-                        conn_state["cloud_connected"] = hb_ok
-                        on_state(conn_state)
-                    # Exponential backoff after 3 consecutive failures (max 60s extra delay)
-                    if not hb_ok and self._hb_failures > 3:
-                        backoff = min(60, self.client.heartbeat_interval * (2 ** (self._hb_failures - 3)))
-                        logger.warning(f"Bridge unreachable; backing off next heartbeat by {backoff:.0f}s")
-                        last_heartbeat = now + backoff - self.client.heartbeat_interval
+            if on_status:
+                on_status(f"Connected as {self.client.user_id}")
+            if on_state:
+                state = self.executor.get_connection_state()
+                state["cloud_connected"] = True
+                on_state(state)
 
-                # Wait-poll for commands (low latency)
-                commands = self.client.poll()
-                for cmd in commands:
-                    result = self.executor.execute_command(cmd)
-                    cmd_status = result.get("status", "failed")
-                    for _retry in range(3):
-                        if self.client.report_result(cmd["id"], cmd_status, result):
-                            break
-                        time.sleep(1)
-                    else:
-                        logger.error(f"Failed to report result for command {cmd['id']} after 3 attempts")
-                    if on_status:
-                        action = cmd.get("action", "")
-                        symbol = cmd.get("symbol", "")
-                        on_status(f"Executed {action} {symbol}: {result.get('status', 'unknown')}")
-                    if on_state:
+            self._hb_failures = 0
+            last_heartbeat = 0
+
+            # ── Main loop ────────────────────────────────────────────────────
+            try:
+                while self.running:
+                    now = time.time()
+
+                    # Heartbeat every N seconds
+                    if now - last_heartbeat > self.client.heartbeat_interval:
                         conn_state = self.executor.get_connection_state()
-                        conn_state["cloud_connected"] = True
-                        on_state(conn_state)
+                        metadata = {
+                            "version": "1.0",
+                            "mt5_connected": conn_state.get("mt5_connected", False),
+                            "broker_connected": conn_state.get("broker_connected", False),
+                            "uptime": time.time(),
+                        }
+                        hb_resp = self.client.heartbeat(metadata)
+                        hb_ok = bool(hb_resp)
+                        last_heartbeat = now
+                        if hb_ok:
+                            self._hb_failures = 0
+                            # Use VPS-side MT5 status if available (for managed users)
+                            if hb_resp.get("vps_active"):
+                                conn_state["mt5_connected"] = hb_resp.get("vps_mt5_connected", False)
+                                conn_state["broker_connected"] = hb_resp.get("vps_mt5_connected", False)
+                        else:
+                            self._hb_failures += 1
+                        if on_status:
+                            on_status("Heartbeat sent" if hb_ok else f"Bridge unreachable ({self._hb_failures}x)")
+                        if on_state:
+                            conn_state["cloud_connected"] = hb_ok
+                            on_state(conn_state)
+                        # Auto-reconnect after consecutive failures
+                        if self._hb_failures >= 5:
+                            logger.warning("Too many heartbeat failures — reconnecting")
+                            if on_status:
+                                on_status("Connection lost — reconnecting…")
+                            break  # breaks inner loop → outer loop re-authenticates
 
-                # No sleep — poll() already does server-side long-polling (up to poll_timeout seconds)
+                    # Wait-poll for commands (low latency)
+                    commands = self.client.poll()
+                    for cmd in commands:
+                        result = self.executor.execute_command(cmd)
+                        cmd_status = result.get("status", "failed")
+                        for _retry in range(3):
+                            if self.client.report_result(cmd["id"], cmd_status, result):
+                                break
+                            time.sleep(1)
+                        else:
+                            logger.error(f"Failed to report result for command {cmd['id']} after 3 attempts")
+                        if on_status:
+                            action = cmd.get("action", "")
+                            symbol = cmd.get("symbol", "")
+                            on_status(f"Executed {action} {symbol}: {result.get('status', 'unknown')}")
+                        if on_state:
+                            conn_state = self.executor.get_connection_state()
+                            conn_state["cloud_connected"] = True
+                            on_state(conn_state)
 
-        except KeyboardInterrupt:
-            logger.info("Relay interrupted")
-        except Exception as e:
-            logger.error(f"Relay error: {e}")
-        finally:
-            self.running = False
+                    # No sleep — poll() already does server-side long-polling
+
+            except KeyboardInterrupt:
+                logger.info("Relay interrupted")
+                self.running = False
+            except Exception as e:
+                logger.error(f"Relay error: {e}")
+                if self.running and on_status:
+                    on_status(f"Error: {e} — reconnecting in 5s…")
+                time.sleep(5)  # brief pause before reconnect
 
     def stop(self):
         """Stop relay loop."""
