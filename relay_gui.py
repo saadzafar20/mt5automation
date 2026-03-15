@@ -353,6 +353,24 @@ QDialog {{
 }}
 """
 
+# ── Reusable inline stylesheets (avoids objectName/QSS lookup failures) ───────
+_SS_GOLD = f"""
+    QPushButton {{
+        background-color: {GOLD}; color: #0A0600; border: none;
+        border-radius: 10px; font-size: 13px; font-weight: bold; padding: 0px 20px;
+    }}
+    QPushButton:hover {{ background-color: {GOLD_LT}; }}
+    QPushButton:disabled {{ background-color: {GOLD_DK}; color: #92400E; }}
+"""
+_SS_OUTLINE = f"""
+    QPushButton {{
+        background-color: transparent; color: {FG_MUTED};
+        border: 1px solid {BORDER}; border-radius: 10px;
+        font-size: 13px; padding: 0px 16px;
+    }}
+    QPushButton:hover {{ background-color: {GREEN_HOVER}; border-color: {GREEN}; }}
+"""
+
 # ── MT5 path detection ────────────────────────────────────────────────────────
 def detect_mt5_path() -> str:
     if winreg:
@@ -908,7 +926,7 @@ class RelayGuiApp(QMainWindow):
 
         # Sign In button
         sign_in_btn = QPushButton("Sign In  →")
-        sign_in_btn.setObjectName("goldBtn")
+        sign_in_btn.setStyleSheet(_SS_GOLD)
         sign_in_btn.setFixedHeight(52)
         sign_in_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         sign_in_btn.clicked.connect(self._sign_in)
@@ -957,7 +975,7 @@ class RelayGuiApp(QMainWindow):
         of_lay.addSpacing(12)
 
         sign_out_btn = QPushButton("Sign out / Switch account")
-        sign_out_btn.setObjectName("outlineBtn")
+        sign_out_btn.setStyleSheet(_SS_OUTLINE)
         sign_out_btn.setFixedHeight(40)
         sign_out_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         sign_out_btn.clicked.connect(self._sign_out_oauth)
@@ -1223,7 +1241,7 @@ class RelayGuiApp(QMainWindow):
         br_lay.setSpacing(10)
 
         self.connect_btn = QPushButton("Select Local Mode" if IS_WINDOWS else "Windows Only")
-        self.connect_btn.setObjectName("outlineBtn")
+        self.connect_btn.setStyleSheet(_SS_OUTLINE)
         self.connect_btn.setFixedHeight(44)
         self.connect_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         if IS_WINDOWS:
@@ -1552,12 +1570,12 @@ class RelayGuiApp(QMainWindow):
         br_lay.setSpacing(10)
 
         copy_btn = QPushButton("Copy Message")
-        copy_btn.setObjectName("goldBtn")
+        copy_btn.setStyleSheet(_SS_GOLD)
         copy_btn.setFixedHeight(44)
         copy_btn.clicked.connect(self._copy_tv_message)
 
         reset_btn = QPushButton("Reset")
-        reset_btn.setObjectName("outlineBtn")
+        reset_btn.setStyleSheet(_SS_OUTLINE)
         reset_btn.setFixedHeight(44)
         reset_btn.clicked.connect(self._reset_tv_fields)
 
@@ -2084,13 +2102,12 @@ class RelayGuiApp(QMainWindow):
         base = self._get_bridge_url()
         self.update_status(f"Connecting to server…")
 
-        # Run the request in a background thread so the UI stays responsive
         def _start():
             last_exc = None
-            for attempt in range(3):
+            for attempt in range(4):
                 try:
                     resp = requests.post(f"{base}/auth/desktop/start",
-                                         json={"provider": provider}, timeout=12)
+                                         json={"provider": provider}, timeout=20)
                     if resp.status_code != 200:
                         QTimer.singleShot(0, lambda t=resp.text: QMessageBox.critical(
                             self, "OAuth error", t or "Could not start OAuth"))
@@ -2102,19 +2119,17 @@ class RelayGuiApp(QMainWindow):
                         QTimer.singleShot(0, lambda: QMessageBox.critical(
                             self, "OAuth error", "Missing auth URL or state from server"))
                         return
-                    # Success — hand off to main thread
                     QTimer.singleShot(0, lambda a=auth_url, s=state: self._launch_oauth(a, s, provider))
                     return
                 except Exception as exc:
                     last_exc = exc
-                    if attempt < 2:
-                        self.update_status(f"Retrying… ({attempt + 2}/3)")
-                        time.sleep(2)
+                    if attempt < 3:
+                        self.update_status(f"Connecting… (attempt {attempt + 2}/4)")
             QTimer.singleShot(0, lambda e=last_exc: QMessageBox.critical(
                 self, "Cannot connect",
-                f"Could not reach the PlatAlgo server after 3 attempts.\n\n"
+                f"Could not reach the PlatAlgo server.\n\n"
                 f"Bridge URL: {base}\n\n"
-                f"Check the URL in Settings — it should be http:// not https://\n\n"
+                f"Ensure the URL uses http:// (not https://) in Settings.\n\n"
                 f"Details: {e}"))
             self.update_status("Connection failed")
 
@@ -2397,12 +2412,12 @@ class RelayGuiApp(QMainWindow):
         br_lay.setSpacing(10)
 
         update_btn = QPushButton("Update Now  →")
-        update_btn.setObjectName("goldBtn")
+        update_btn.setStyleSheet(_SS_GOLD)
         update_btn.setFixedHeight(44)
         update_btn.clicked.connect(lambda: (dlg.accept(), self._download_and_install(url, version)))
 
         later_btn = QPushButton("Later")
-        later_btn.setObjectName("outlineBtn")
+        later_btn.setStyleSheet(_SS_OUTLINE)
         later_btn.setFixedHeight(44)
         later_btn.clicked.connect(dlg.reject)
 
