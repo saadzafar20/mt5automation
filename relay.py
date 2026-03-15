@@ -553,12 +553,12 @@ class Relay:
             if on_status:
                 on_status(f"Connected as {self.client.user_id}")
             if on_state:
-                state = self.executor.get_connection_state()
-                state["cloud_connected"] = True
-                on_state(state)
+                # Only report bridge connected — MT5/broker status comes from
+                # the first heartbeat (which includes VPS-side status)
+                on_state({"cloud_connected": True})
 
             self._hb_failures = 0
-            last_heartbeat = 0
+            last_heartbeat = 0  # triggers immediate first heartbeat
 
             # ── Main loop ────────────────────────────────────────────────────
             try:

@@ -2365,15 +2365,16 @@ if __name__ == "__main__":
 
     port = args.port
     host = args.host
-    debug = DEV_MODE
-    
+
     # Re-validate at startup
     validate_startup_config()
-    
-    if args.workers > 1:
-        logger.info(f"For multi-worker mode, run: gunicorn -w {args.workers} -b {host}:{port} cloud_bridge:app")
-    
+
     logger.info(f"Starting Cloud Bridge on {host}:{port}")
-    
-    # Use threaded mode for better handling of long-poll requests
-    app.run(host=host, port=port, debug=debug, threaded=True)
+
+    if DEV_MODE:
+        logger.info("Running in DEVELOPMENT mode (Flask debug server)")
+        app.run(host=host, port=port, debug=True, threaded=True)
+    else:
+        logger.info("Running in PRODUCTION mode (waitress)")
+        from waitress import serve
+        serve(app, host=host, port=port, threads=8)

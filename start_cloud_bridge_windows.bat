@@ -37,7 +37,7 @@ echo Starting Cloud Bridge on port !PORT!...
 echo ====================================
 echo.
 
-REM Start cloud bridge
+REM Start cloud bridge (production mode via waitress — no file-watching restarts)
 python cloud_bridge.py --port !PORT!
 
 REM Pause to see any errors

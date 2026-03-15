@@ -1985,7 +1985,7 @@ class RelayGuiApp(QMainWindow):
 
     def _set_state_callback(self, state: dict):
         self._set_status(
-            bridge=state.get("bridge_connected"),
+            bridge=state.get("cloud_connected", state.get("bridge_connected")),
             mt5=state.get("mt5_connected"),
             broker=state.get("broker_connected"),
         )
