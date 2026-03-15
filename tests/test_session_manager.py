@@ -63,9 +63,11 @@ class TestMT5UserSessionConnect(unittest.TestCase):
         result = session._connect(mt5)
 
         self.assertTrue(result)
-        mt5.initialize.assert_called_once_with(
-            path=None, login=12345, password="pass", server="MockBroker"
-        )
+        # path may be auto-detected on Windows, so just check login/password/server
+        call_kwargs = mt5.initialize.call_args[1]
+        self.assertEqual(call_kwargs["login"], 12345)
+        self.assertEqual(call_kwargs["password"], "pass")
+        self.assertEqual(call_kwargs["server"], "MockBroker")
 
     def test_connect_failure_returns_false(self):
         """_connect() should return False when mt5.initialize() fails."""

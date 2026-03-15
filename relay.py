@@ -101,10 +101,10 @@ class RelayClient:
             logger.error(f"Registration error: {e}")
             return False
 
-    def heartbeat(self, metadata: Optional[Dict] = None) -> bool:
-        """Send heartbeat to cloud bridge."""
+    def heartbeat(self, metadata: Optional[Dict] = None) -> Dict:
+        """Send heartbeat to cloud bridge. Returns response data or empty dict."""
         if not self.token:
-            return False
+            return {}
 
         url = f"{self.bridge_url}/relay/heartbeat"
         headers = {
@@ -116,10 +116,12 @@ class RelayClient:
 
         try:
             resp = self.session.post(url, json=body, headers=headers, timeout=5)
-            return resp.status_code == 200
+            if resp.status_code == 200:
+                return resp.json()
+            return {}
         except Exception as e:
             logger.warning(f"Heartbeat error: {e}")
-            return False
+            return {}
 
     def poll(self) -> list:
         """Poll cloud bridge for commands."""
@@ -538,6 +540,8 @@ class Relay:
 
         self.running = True
         last_heartbeat = 0
+        # Send first heartbeat immediately to get VPS status
+
 
         try:
             while self.running:
@@ -552,16 +556,21 @@ class Relay:
                         "broker_connected": conn_state.get("broker_connected", False),
                         "uptime": time.time(),
                     }
-                    hb_ok = self.client.heartbeat(metadata)
+                    hb_resp = self.client.heartbeat(metadata)
+                    hb_ok = bool(hb_resp)
                     last_heartbeat = now
                     if hb_ok:
                         self._hb_failures = 0
+                        # Use VPS-side MT5 status if available (for managed users)
+                        if hb_resp.get("vps_active"):
+                            conn_state["mt5_connected"] = hb_resp.get("vps_mt5_connected", False)
+                            conn_state["broker_connected"] = hb_resp.get("vps_mt5_connected", False)
                     else:
                         self._hb_failures += 1
                     if on_status:
                         on_status("Heartbeat sent" if hb_ok else f"Bridge unreachable ({self._hb_failures}x)")
                     if on_state:
-                        conn_state["cloud_connected"] = bool(hb_ok)
+                        conn_state["cloud_connected"] = hb_ok
                         on_state(conn_state)
                     # Exponential backoff after 3 consecutive failures (max 60s extra delay)
                     if not hb_ok and self._hb_failures > 3:

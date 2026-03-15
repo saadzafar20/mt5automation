@@ -65,10 +65,10 @@ class TestRelayClient(unittest.TestCase):
     def test_heartbeat(self, mock_post):
         """Test heartbeat sending."""
         self.client.token = "valid-token"
-        mock_post.return_value = MagicMock(status_code=200)
-        
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"status": "ack"})
+
         result = self.client.heartbeat({"version": "1.0"})
-        
+
         self.assertTrue(result)
         mock_post.assert_called_once()
 

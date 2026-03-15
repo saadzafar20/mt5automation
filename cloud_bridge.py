@@ -2051,9 +2051,13 @@ def relay_heartbeat():
     if not store.heartbeat(user_id, relay_id, data.get("metadata")):
         return jsonify({"error": "relay not found"}), 404
 
+    # Include server-side MT5 session status for managed/VPS users
+    session = session_manager.session_status(user_id)
     return jsonify({
         "status": "ack",
         "timestamp": datetime.utcnow().isoformat(),
+        "vps_mt5_connected": session.get("connected", False),
+        "vps_active": session.get("active", False),
     })
 
 @app.route("/relay/poll", methods=["POST"])
