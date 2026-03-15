@@ -2107,8 +2107,7 @@ class RelayGuiApp(QMainWindow):
                 self.sig.oauth_success.emit(provider, uid, True)
                 threading.Thread(
                     target=self._refresh_dashboard_summary, daemon=True).start()
-                if IS_WINDOWS:
-                    QTimer.singleShot(200, self.start_relay)  # safe: runs on main thread
+                QTimer.singleShot(200, self.start_relay)  # safe: runs on main thread
         except Exception:
             pass
 
@@ -2189,11 +2188,10 @@ class RelayGuiApp(QMainWindow):
                         self.sig.avatar_updated.emit(uid[:2].upper())
                         self.sig.user_entry_set.emit(uid)
                         self.sig.oauth_success.emit(provider, uid, False)
-                        self.update_status("OAuth linked — ready to connect")
+                        self.update_status("OAuth linked — connecting…")
                         threading.Thread(
                             target=self._refresh_dashboard_summary, daemon=True).start()
-                        if IS_WINDOWS:
-                            self.sig.auto_start_relay.emit()
+                        self.sig.auto_start_relay.emit()
                         return
                 elif resp.status_code == 410:
                     self.update_status("OAuth flow expired — start again")
