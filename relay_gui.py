@@ -1008,6 +1008,26 @@ class RelayGuiApp(QMainWindow):
         c_lay.addWidget(self.mt5_pw_edit)
         c_lay.addSpacing(10)
         c_lay.addWidget(self.mt5_server_edit)
+        c_lay.addSpacing(16)
+
+        mt5_connect_btn = QPushButton("Login to MT5 on VPS  →")
+        mt5_connect_btn.setFixedHeight(48)
+        mt5_connect_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        mt5_connect_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GOLD};
+                color: #0A0600;
+                border: none;
+                border-radius: 10px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 0px 20px;
+            }}
+            QPushButton:hover {{ background-color: {GOLD_LT}; }}
+            QPushButton:disabled {{ background-color: {GOLD_DK}; color: #92400E; }}
+        """)
+        mt5_connect_btn.clicked.connect(self.enable_managed_mode)
+        c_lay.addWidget(mt5_connect_btn)
 
         parent_lay.addWidget(card)
 
@@ -1089,14 +1109,36 @@ class RelayGuiApp(QMainWindow):
         br_lay.setSpacing(10)
 
         self.vps_btn = QPushButton("Login to MT5 on VPS  →")
-        self.vps_btn.setObjectName("goldBtn")
-        self.vps_btn.setFixedHeight(52)
+        self.vps_btn.setMinimumHeight(48)
         self.vps_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.vps_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GOLD};
+                color: #0A0600;
+                border: none;
+                border-radius: 10px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 0px 20px;
+            }}
+            QPushButton:hover {{ background-color: {GOLD_LT}; }}
+            QPushButton:disabled {{ background-color: {GOLD_DK}; color: #92400E; }}
+        """)
         self.vps_btn.clicked.connect(self.enable_managed_mode)
 
         self.vps_disable_btn = QPushButton("Disconnect")
-        self.vps_disable_btn.setObjectName("outlineBtn")
-        self.vps_disable_btn.setFixedHeight(52)
+        self.vps_disable_btn.setMinimumHeight(48)
+        self.vps_disable_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {FG_MUTED};
+                border: 1px solid {BORDER};
+                border-radius: 10px;
+                font-size: 13px;
+                padding: 0px 16px;
+            }}
+            QPushButton:hover {{ background-color: {GREEN_HOVER}; border-color: {GREEN}; }}
+        """)
         self.vps_disable_btn.clicked.connect(self.disable_managed_mode)
 
         br_lay.addWidget(self.vps_btn, 1)
@@ -1778,11 +1820,18 @@ class RelayGuiApp(QMainWindow):
         self.vps_active = True
         if self.vps_btn:
             self.vps_btn.setText("✓  VPS Active — 24/7")
-            self.vps_btn.setStyleSheet(
-                f"QPushButton {{ background-color: {GLASS_EM}; color: {GREEN_LT}; "
-                f"border: 1px solid {BORDER_SOFT}; border-radius: 11px; "
-                f"font-size: 14px; font-weight: bold; padding: 14px 24px; }}"
-            )
+            self.vps_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {GLASS_EM};
+                    color: {GREEN_LT};
+                    border: 1px solid {BORDER_SOFT};
+                    border-radius: 10px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 0px 20px;
+                }}
+                QPushButton:hover {{ background-color: {GREEN_BG}; }}
+            """)
         if self.vps_status_lbl:
             self.vps_status_lbl.setText("● VPS ACTIVE")
             self.vps_status_lbl.setStyleSheet(
@@ -1790,23 +1839,29 @@ class RelayGuiApp(QMainWindow):
             )
 
     def _on_vps_failed(self, err: str):
-        if self.vps_btn:
-            self.vps_btn.setText("Login to MT5 on VPS  →")
-            self.vps_btn.setStyleSheet("")  # restore QSS
-            self.vps_btn.setObjectName("goldBtn")
-            self.vps_btn.style().unpolish(self.vps_btn)
-            self.vps_btn.style().polish(self.vps_btn)
-            self.vps_btn.setEnabled(True)
+        self._reset_vps_btn()
         QMessageBox.critical(self, "VPS Setup Failed", err)
 
     def _on_vps_btn_reset(self):
+        self._reset_vps_btn()
+
+    def _reset_vps_btn(self):
         if self.vps_btn:
             self.vps_btn.setText("Login to MT5 on VPS  →")
-            self.vps_btn.setStyleSheet("")
-            self.vps_btn.setObjectName("goldBtn")
-            self.vps_btn.style().unpolish(self.vps_btn)
-            self.vps_btn.style().polish(self.vps_btn)
             self.vps_btn.setEnabled(True)
+            self.vps_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {GOLD};
+                    color: #0A0600;
+                    border: none;
+                    border-radius: 10px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 0px 20px;
+                }}
+                QPushButton:hover {{ background-color: {GOLD_LT}; }}
+                QPushButton:disabled {{ background-color: {GOLD_DK}; color: #92400E; }}
+            """)
 
     def _on_connect_enabled(self, enabled: bool):
         if self.connect_btn:
