@@ -462,6 +462,14 @@ class AppSignals(QObject):
     connect_enabled  = pyqtSignal(bool)
     avatar_updated   = pyqtSignal(str)
     progress_changed = pyqtSignal(float, str)
+    # Thread-safe signals replacing QTimer.singleShot from background threads
+    oauth_launch     = pyqtSignal(str, str, str)   # auth_url, state, provider
+    oauth_error      = pyqtSignal(str, str)         # title, message
+    user_entry_set   = pyqtSignal(str)              # user_id text
+    auto_start_relay = pyqtSignal()                 # trigger start_relay on main thread
+    vps_inactive     = pyqtSignal()                 # update VPS status label
+    update_done      = pyqtSignal(str)              # dest path for apply_update
+    update_failed    = pyqtSignal(str)              # error message
 
 
 # ── Helper widget builders ────────────────────────────────────────────────────
@@ -596,6 +604,13 @@ class RelayGuiApp(QMainWindow):
         s.vps_btn_reset.connect(self._on_vps_btn_reset)
         s.connect_enabled.connect(self._on_connect_enabled)
         s.avatar_updated.connect(self._on_avatar_updated)
+        s.oauth_launch.connect(self._launch_oauth)
+        s.oauth_error.connect(lambda t, m: QMessageBox.critical(self, t, m))
+        s.user_entry_set.connect(lambda u: self.user_entry.setText(u) if self.user_entry else None)
+        s.auto_start_relay.connect(self.start_relay)
+        s.vps_inactive.connect(self._on_vps_inactive)
+        s.update_done.connect(self._apply_update)
+        s.update_failed.connect(lambda m: QMessageBox.critical(self, "Update failed", m))
 
     # =========================================================================
     # UI BUILD
@@ -1866,6 +1881,12 @@ class RelayGuiApp(QMainWindow):
         self._reset_vps_btn()
         QMessageBox.critical(self, "VPS Setup Failed", err)
 
+    def _on_vps_inactive(self):
+        if self.vps_status_lbl:
+            self.vps_status_lbl.setText("● VPS INACTIVE")
+            self.vps_status_lbl.setStyleSheet(
+                f"color: {FG_FAINT}; font-size: 10px; background: transparent; border: none;")
+
     def _on_vps_btn_reset(self):
         self._reset_vps_btn()
 
@@ -2087,7 +2108,7 @@ class RelayGuiApp(QMainWindow):
                 threading.Thread(
                     target=self._refresh_dashboard_summary, daemon=True).start()
                 if IS_WINDOWS:
-                    QTimer.singleShot(200, self.start_relay)
+                    QTimer.singleShot(200, self.start_relay)  # safe: runs on main thread
         except Exception:
             pass
 
@@ -2113,28 +2134,27 @@ class RelayGuiApp(QMainWindow):
                     resp = requests.post(f"{base}/auth/desktop/start",
                                          json={"provider": provider}, timeout=20)
                     if resp.status_code != 200:
-                        QTimer.singleShot(0, lambda t=resp.text: QMessageBox.critical(
-                            self, "OAuth error", t or "Could not start OAuth"))
+                        self.sig.oauth_error.emit("OAuth error",
+                            resp.text or "Could not start OAuth")
                         return
                     data     = resp.json()
                     auth_url = data.get("auth_url")
                     state    = data.get("state")
                     if not (auth_url and state):
-                        QTimer.singleShot(0, lambda: QMessageBox.critical(
-                            self, "OAuth error", "Missing auth URL or state from server"))
+                        self.sig.oauth_error.emit("OAuth error",
+                            "Missing auth URL or state from server")
                         return
-                    QTimer.singleShot(0, lambda a=auth_url, s=state: self._launch_oauth(a, s, provider))
+                    self.sig.oauth_launch.emit(auth_url, state, provider)
                     return
                 except Exception as exc:
                     last_exc = exc
                     if attempt < 3:
                         self.update_status(f"Connecting… (attempt {attempt + 2}/4)")
-            QTimer.singleShot(0, lambda e=last_exc: QMessageBox.critical(
-                self, "Cannot connect",
+            self.sig.oauth_error.emit("Cannot connect",
                 f"Could not reach the PlatAlgo server.\n\n"
                 f"Bridge URL: {base}\n\n"
                 f"Ensure the URL uses http:// (not https://) in Settings.\n\n"
-                f"Details: {e}"))
+                f"Details: {last_exc}")
             self.update_status("Connection failed")
 
         threading.Thread(target=_start, daemon=True).start()
@@ -2167,14 +2187,13 @@ class RelayGuiApp(QMainWindow):
                         self.api_key = api_key
                         self.sig.apikey_updated.emit(api_key)
                         self.sig.avatar_updated.emit(uid[:2].upper())
-                        if self.user_entry:
-                            QTimer.singleShot(0, lambda u=uid: self.user_entry.setText(u))
+                        self.sig.user_entry_set.emit(uid)
                         self.sig.oauth_success.emit(provider, uid, False)
                         self.update_status("OAuth linked — ready to connect")
                         threading.Thread(
                             target=self._refresh_dashboard_summary, daemon=True).start()
                         if IS_WINDOWS:
-                            QTimer.singleShot(100, self.start_relay)
+                            self.sig.auto_start_relay.emit()
                         return
                 elif resp.status_code == 410:
                     self.update_status("OAuth flow expired — start again")
@@ -2308,12 +2327,7 @@ class RelayGuiApp(QMainWindow):
                 self.sig.vps_btn_reset.emit()
                 self.vps_active = False
                 self.update_status("VPS mode disabled")
-                if self.vps_status_lbl:
-                    QTimer.singleShot(0, lambda: (
-                        self.vps_status_lbl.setText("● VPS INACTIVE"),
-                        self.vps_status_lbl.setStyleSheet(
-                            f"color: {FG_FAINT}; font-size: 10px; background: transparent; border: none;")
-                    ))
+                self.sig.vps_inactive.emit()
             else:
                 self.update_status("Failed to disable VPS mode — check connection")
 
@@ -2458,6 +2472,8 @@ class RelayGuiApp(QMainWindow):
             pct_lbl.setText(f"{int(p * 100)}%"),
             status_lbl.setText(t),
         ))
+        self.sig.update_done.connect(lambda _: dlg.accept())
+        self.sig.update_failed.connect(lambda _: dlg.reject())
         dlg.show()
 
         def _run():
@@ -2475,12 +2491,9 @@ class RelayGuiApp(QMainWindow):
                             if total:
                                 self.sig.progress_changed.emit(done / total, f"Downloading v{version}…")
                 self.sig.progress_changed.emit(1.0, "Installing…")
-                QTimer.singleShot(500, lambda: (dlg.accept(), self._apply_update(dest)))
+                self.sig.update_done.emit(dest)
             except Exception as exc:
-                QTimer.singleShot(0, lambda: (
-                    dlg.reject(),
-                    QMessageBox.critical(self, "Update failed", f"Could not download:\n{exc}")
-                ))
+                self.sig.update_failed.emit(f"Could not download:\n{exc}")
 
         threading.Thread(target=_run, daemon=True).start()
 
