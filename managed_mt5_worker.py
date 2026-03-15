@@ -8,6 +8,7 @@ broker connection drops.
 """
 
 import logging
+import os
 import queue
 import threading
 import time
@@ -154,13 +155,24 @@ class MT5UserSession:
             except Exception:
                 pass
 
+            # Auto-detect MT5 path on the VPS if not explicitly provided
+            path = self._path
+            if not path:
+                for candidate in [
+                    r"C:\Program Files\MetaTrader 5\terminal64.exe",
+                    r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe",
+                ]:
+                    if os.path.exists(candidate):
+                        path = candidate
+                        break
+
             init_kwargs: dict = {
                 "login":    self._login,
                 "password": self._password,
                 "server":   self._server,
             }
-            if self._path:          # omit path entirely when empty/None
-                init_kwargs["path"] = self._path
+            if path:                # omit path entirely when not found
+                init_kwargs["path"] = path
             ok = mt5.initialize(**init_kwargs)
             if ok:
                 info = mt5.account_info()
