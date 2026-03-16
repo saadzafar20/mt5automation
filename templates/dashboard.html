@@ -495,7 +495,7 @@
             <th>Symbol</th>
             <th>Action</th>
             <th class="hidden-mobile">Script</th>
-            <th class="hidden-mobile">Size</th>
+            <th class="hidden-mobile">Size (% eq)</th>
             <th class="right">Status</th>
           </tr>
         </thead>
@@ -516,7 +516,7 @@
                     </span>
                   </td>
                   <td class="hidden-mobile"><span style="font-size:0.8125rem;color:var(--fg-muted);">{{ script.script_name }}</span></td>
-                  <td class="hidden-mobile">{{ sig.size }}</td>
+                  <td class="hidden-mobile">{% if sig.size < 0 %}{{ "%.1f"|format(sig.size|abs) }}%{% else %}{{ sig.size }}{% endif %}</td>
                   <td class="right">
                     <span class="badge-sm
                       {% if sig.status == 'executed' %}badge-executed
@@ -803,7 +803,7 @@
                 <th>Time</th>
                 <th>Signal</th>
                 <th>Symbol</th>
-                <th>Size</th>
+                <th>Size (% eq)</th>
                 <th>Status</th>
                 <th class="hidden-mobile">Relay</th>
                 <th class="hidden-mobile">Note</th>
@@ -819,7 +819,7 @@
                     </span>
                   </td>
                   <td>{{ sig.symbol }}</td>
-                  <td>{{ sig.size }}</td>
+                  <td>{% if sig.size < 0 %}{{ "%.1f"|format(sig.size|abs) }}%{% else %}{{ sig.size }}{% endif %}</td>
                   <td>
                     <span class="badge-sm
                       {% if sig.status == 'executed' %}badge-executed

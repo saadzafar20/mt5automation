@@ -1544,16 +1544,16 @@ class RelayGuiApp(QMainWindow):
         grid_lay.setSpacing(12)
 
         fields = [
-            ("Symbol",      "{{ticker}}",  0, 0),
-            ("Size (lots)", "0.1",         0, 1),
-            ("Stop Loss",   "0.0",         1, 0),
-            ("Take Profit", "0.0",         1, 1),
-            ("Script Name", "",            2, 0),
+            ("Symbol",          "{{ticker}}",  0, 0),
+            ("Size (% equity)", "1",           0, 1),
+            ("Stop Loss",       "0.0",         1, 0),
+            ("Take Profit",     "0.0",         1, 1),
+            ("Script Name",     "",            2, 0),
         ]
         self.tv_symbol_edit = _entry("{{ticker}}")
         self.tv_symbol_edit.setText("{{ticker}}")
-        self.tv_size_edit   = _entry("0.1")
-        self.tv_size_edit.setText("0.1")
+        self.tv_size_edit   = _entry("1")
+        self.tv_size_edit.setText("1")
         self.tv_sl_edit     = _entry("0.0")
         self.tv_tp_edit     = _entry("0.0")
         self.tv_script_edit = _entry("")
@@ -2111,11 +2111,11 @@ class RelayGuiApp(QMainWindow):
         uid = self.user_entry.text().strip() if self.user_entry else ""
         api_key = self.api_key or (self.api_key_edit.text() if self.api_key_edit else "")
         msg = {
-            "action":      self._tv_action,
-            "symbol":      self.tv_symbol_edit.text() if self.tv_symbol_edit else "{{ticker}}",
-            "size":        self.tv_size_edit.text()   if self.tv_size_edit   else "0.1",
-            "user_id":     uid,
-            "api_key":     api_key or "YOUR_API_KEY",
+            "action":       self._tv_action,
+            "symbol":       self.tv_symbol_edit.text() if self.tv_symbol_edit else "{{ticker}}",
+            "lot_size_pct": self.tv_size_edit.text()   if self.tv_size_edit   else "1",
+            "user_id":      uid,
+            "api_key":      api_key or "YOUR_API_KEY",
         }
         sl = self.tv_sl_edit.text()   if self.tv_sl_edit   else ""
         tp = self.tv_tp_edit.text()   if self.tv_tp_edit   else ""
@@ -2132,7 +2132,7 @@ class RelayGuiApp(QMainWindow):
 
     def _reset_tv_fields(self):
         if self.tv_symbol_edit: self.tv_symbol_edit.setText("{{ticker}}")
-        if self.tv_size_edit:   self.tv_size_edit.setText("0.1")
+        if self.tv_size_edit:   self.tv_size_edit.setText("1")
         if self.tv_sl_edit:     self.tv_sl_edit.clear()
         if self.tv_tp_edit:     self.tv_tp_edit.clear()
         if self.tv_script_edit: self.tv_script_edit.clear()
