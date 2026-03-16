@@ -5,6 +5,23 @@
 strategy("MT5 Signal Sender", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
 // ============================================================================
+// DISCLAIMER
+// ============================================================================
+// If your script provides SL and TP values, use the "From Ticker" option below
+// so the script's calculated levels are sent to your broker automatically.
+// If your script does NOT provide SL/TP, or you prefer to override them,
+// switch to "Custom" and enter your own values.
+// The script will plot SL and TP lines on the chart so you can visually
+// confirm them before they execute. Adjust the ticker or your custom
+// values accordingly.
+// If you are unsure, you can always set your own SL/TP values using the
+// "Custom" option.
+//
+// Useful links:
+//   TradingView: https://www.tradingview.com
+//   MetaTrader 5: https://www.metatrader5.com/en/download
+
+// ============================================================================
 // INPUTS
 // ============================================================================
 
@@ -23,12 +40,14 @@ api_key = input.string(
     group="Settings"
 )
 
-// Trading Settings
-lot_size = input.float(
-    0.1,
-    title="Lot Size",
-    minval=0.01,
-    step=0.01,
+// Trading Settings — lot size as a percentage of account equity
+lot_size_pct = input.float(
+    1.0,
+    title="Lot Size (% of Equity)",
+    minval=0.1,
+    maxval=100.0,
+    step=0.1,
+    tooltip="Percentage of account equity to risk per trade. e.g. 1.0 = 1%",
     group="Trading"
 )
 
@@ -38,10 +57,36 @@ slow_length = input.int(21, title="Slow MA Length", group="Strategy")
 atr_length = input.int(14, title="ATR Length", group="Strategy")
 atr_multiplier = input.float(2.0, title="ATR Multiplier", group="Strategy")
 
-// Risk Management
+// Risk Management — SL/TP source
+sl_tp_source = input.string(
+    "From Ticker",
+    title="SL/TP Source",
+    options=["From Ticker", "Custom"],
+    tooltip="'From Ticker' uses the script's ATR-based SL/TP. 'Custom' lets you enter fixed pip values.",
+    group="Risk Management"
+)
+
 use_stop_loss = input.bool(true, title="Use Stop Loss", group="Risk Management")
 use_take_profit = input.bool(true, title="Use Take Profit", group="Risk Management")
-tp_ratio = input.float(2.0, title="TP/SL Ratio", group="Risk Management")
+tp_ratio = input.float(2.0, title="TP/SL Ratio (Ticker mode)", group="Risk Management")
+
+// Custom SL/TP inputs (only used when SL/TP Source = "Custom")
+custom_sl_pips = input.float(
+    50.0,
+    title="Custom SL (pips)",
+    minval=1.0,
+    step=1.0,
+    tooltip="Only used when SL/TP Source is set to 'Custom'",
+    group="Risk Management"
+)
+custom_tp_pips = input.float(
+    100.0,
+    title="Custom TP (pips)",
+    minval=1.0,
+    step=1.0,
+    tooltip="Only used when SL/TP Source is set to 'Custom'",
+    group="Risk Management"
+)
 
 // ============================================================================
 // INDICATOR CALCULATIONS
@@ -72,23 +117,36 @@ exit_buy_signal = fast_ma < slow_ma
 exit_sell_signal = fast_ma > slow_ma
 
 // ============================================================================
-// SIGNAL CALCULATION
+// SL/TP CALCULATION
 // ============================================================================
 
-// Calculate SL and TP levels
-stop_loss_distance = atr * atr_multiplier
-take_profit_distance = stop_loss_distance * tp_ratio
+// Pip size (approximate for visualization — broker handles exact conversion)
+pip_size = syminfo.mintick * (syminfo.mintick < 0.01 ? 10 : 1)
 
-buy_stop = close - stop_loss_distance
-buy_target = close + take_profit_distance
+// ATR-based (ticker) SL/TP distances
+ticker_sl_distance = atr * atr_multiplier
+ticker_tp_distance = ticker_sl_distance * tp_ratio
 
-sell_stop = close + stop_loss_distance
-sell_target = close - take_profit_distance
+// Custom SL/TP distances (converted from pips to price)
+custom_sl_distance = custom_sl_pips * pip_size
+custom_tp_distance = custom_tp_pips * pip_size
+
+// Resolve final SL/TP distances based on source selection
+sl_distance = sl_tp_source == "From Ticker" ? ticker_sl_distance : custom_sl_distance
+tp_distance = sl_tp_source == "From Ticker" ? ticker_tp_distance : custom_tp_distance
+
+// Calculate actual price levels
+buy_stop   = use_stop_loss   ? close - sl_distance : na
+buy_target = use_take_profit ? close + tp_distance : na
+
+sell_stop   = use_stop_loss   ? close + sl_distance : na
+sell_target = use_take_profit ? close - tp_distance : na
 
 // ============================================================================
 // WEBHOOK MESSAGE CONSTRUCTION
 // ============================================================================
 
+// Send lot_size_pct as a percentage — the relay/bridge converts it to lots
 // Buy Signal Message
 buy_message = ""
 if buy_signal
@@ -96,7 +154,7 @@ if buy_signal
         json.from_all(
             symbol=syminfo.tickerid,
             action="BUY",
-            lot_size=lot_size,
+            lot_size_pct=lot_size_pct,
             stop_loss=use_stop_loss ? buy_stop : na,
             take_profit=use_take_profit ? buy_target : na,
             timeframe=timeframe.period,
@@ -111,7 +169,7 @@ if sell_signal
         json.from_all(
             symbol=syminfo.tickerid,
             action="SELL",
-            lot_size=lot_size,
+            lot_size_pct=lot_size_pct,
             stop_loss=use_stop_loss ? sell_stop : na,
             take_profit=use_take_profit ? sell_target : na,
             timeframe=timeframe.period,
@@ -191,15 +249,32 @@ plot(slow_ma, color=color.orange, title="Slow MA")
 plotshape(buy_signal, style=shape.labelup, location=location.belowbar, color=color.green, size=size.small, title="Buy Signal")
 plotshape(sell_signal, style=shape.labeldown, location=location.abovebar, color=color.red, size=size.small, title="Sell Signal")
 
+// Track active position direction for SL/TP plotting
+var int position_dir = 0  // 0 = flat, 1 = long, -1 = short
+if buy_signal and position_dir != 1
+    position_dir := 1
+if sell_signal and position_dir != -1
+    position_dir := -1
+if (exit_buy_signal and position_dir == 1) or (exit_sell_signal and position_dir == -1)
+    position_dir := 0
+
+// Plot SL/TP levels while in a position
+active_sl = position_dir == 1 ? buy_stop : position_dir == -1 ? sell_stop : na
+active_tp = position_dir == 1 ? buy_target : position_dir == -1 ? sell_target : na
+
+plot(active_sl, color=color.red, style=plot.style_linebr, linewidth=2, title="Stop Loss")
+plot(active_tp, color=color.green, style=plot.style_linebr, linewidth=2, title="Take Profit")
+
 // ============================================================================
 // STRATEGY ENTRIES (Optional - for backtesting in TradingView)
 // ============================================================================
 
+// Use percent of equity for backtesting (matches lot_size_pct concept)
 if buy_signal and strategy.position_size == 0
-    strategy.entry("Buy", strategy.long, qty=lot_size)
+    strategy.entry("Buy", strategy.long)
 
 if sell_signal and strategy.position_size == 0
-    strategy.entry("Sell", strategy.short, qty=lot_size)
+    strategy.entry("Sell", strategy.short)
 
 if exit_buy_signal and strategy.position_size > 0
     strategy.close("Buy")

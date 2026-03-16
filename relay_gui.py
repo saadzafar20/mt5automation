@@ -1650,11 +1650,18 @@ class RelayGuiApp(QMainWindow):
             ]),
             ("4", "Configure TradingView Alert", [
                 "Go to the Dashboard panel and copy your Webhook URL.",
-                "In TradingView, create an alert → Notifications → Webhook URL.",
+                "In TradingView, create an alert \u2192 Notifications \u2192 Webhook URL.",
                 "Use the TradingView panel to generate the correct JSON message format.",
                 "Paste the generated JSON into the TradingView alert message box.",
+                "Lot size is set as a percentage of equity (e.g. 1 = 1%).",
             ]),
-            ("5", "Monitor on Dashboard", [
+            ("5", "SL/TP Setup", [
+                "If your script provides SL and TP values, use 'From Ticker' mode.",
+                "The script plots SL/TP levels on the chart \u2014 verify them visually.",
+                "If your script does NOT provide SL/TP, switch to 'Custom' and enter your own pip values.",
+                "If unsure, you can always set your own SL/TP values using the Custom option.",
+            ]),
+            ("6", "Monitor on Dashboard", [
                 "The Dashboard shows live Bridge, MT5, and Broker connection status.",
                 "Green ring = connected and healthy.  Red ring = disconnected.",
                 "Check the Account Summary for signal and execution counts.",
@@ -1697,6 +1704,43 @@ class RelayGuiApp(QMainWindow):
                 sc_lay.addWidget(step_row)
 
             lay.addWidget(step_card)
+
+        # ── Useful Links card ───────────────────────────────────────
+        links_card = QFrame()
+        links_card.setObjectName("card")
+        lc_lay = QVBoxLayout(links_card)
+        lc_lay.setContentsMargins(24, 20, 24, 20)
+        lc_lay.setSpacing(8)
+        lc_lay.addWidget(_lbl(None, "Useful Links", FG, 14, True))
+
+        for link_text, link_url in [
+            ("TradingView — Create alerts & strategies", "https://www.tradingview.com"),
+            ("MetaTrader 5 — Download MT5 terminal", "https://www.metatrader5.com/en/download"),
+        ]:
+            link_lbl = QLabel(f'<a href="{link_url}" style="color: {GREEN_LT}; text-decoration: none;">{link_text}</a>')
+            link_lbl.setOpenExternalLinks(True)
+            link_lbl.setStyleSheet(f"font-size: 12px; background: transparent; padding-left: 20px;")
+            lc_lay.addWidget(link_lbl)
+
+        lay.addWidget(links_card)
+
+        # ── SL/TP Disclaimer card ──────────────────────────────────
+        disc_card = QFrame()
+        disc_card.setObjectName("card")
+        dc_lay = QVBoxLayout(disc_card)
+        dc_lay.setContentsMargins(24, 20, 24, 20)
+        dc_lay.setSpacing(8)
+        dc_lay.addWidget(_lbl(None, "SL/TP Disclaimer", FG, 14, True))
+        disclaimer_text = (
+            "If your TradingView script outputs SL and TP values, use the "
+            "'From Ticker' option so those levels are sent directly to your broker. "
+            "The script will plot SL and TP on the chart — verify them visually before trading. "
+            "If your script does not provide SL/TP, switch to 'Custom' and set your own values. "
+            "If you are unsure, you can always enter your own SL/TP using the Custom option."
+        )
+        disc_lbl = _lbl(None, disclaimer_text, FG_MUTED, 11, wrap=True)
+        dc_lay.addWidget(disc_lbl)
+        lay.addWidget(disc_card)
 
         lay.addStretch()
         return scroll

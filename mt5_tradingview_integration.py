@@ -606,7 +606,17 @@ def receive_signal():
             return jsonify({'error': 'Missing action'}), 400
 
         # Extract values using the safe_float helper
-        lot_val = data.get('lot_size') or data.get('size')
+        # Support lot_size_pct (percentage of equity) or legacy lot_size (absolute lots)
+        lot_size_pct_raw = data.get('lot_size_pct')
+        lot_val = None
+        _pct_mode = False
+        if lot_size_pct_raw is not None:
+            _pct_mode = True
+            # Will resolve to lots after account/symbol lookup in send_order
+            lot_val = lot_size_pct_raw  # keep raw; resolved below
+        else:
+            lot_val = data.get('lot_size') or data.get('size')
+
         tp_val = data.get('take_profit') or data.get('tp')
         sl_val = data.get('stop_loss') or data.get('sl')
 
@@ -619,6 +629,24 @@ def receive_signal():
             timeframe=data.get('timeframe', 'H1'),
             comment=data.get('comment', 'TV Signal')
         )
+
+        # If percentage mode, convert lot_size from % of equity to absolute lots
+        if _pct_mode and signal.lot_size is not None and mt5_manager.connected:
+            pct = max(0.1, min(signal.lot_size, 100.0)) / 100.0
+            account = mt5.account_info()
+            trade_symbol = mt5_manager._with_suffix(signal.symbol)
+            symbol_info = mt5.symbol_info(trade_symbol)
+            if account and symbol_info:
+                contract_size = symbol_info.trade_contract_size or 100000.0
+                tick_data = mt5.symbol_info_tick(trade_symbol)
+                price = tick_data.ask if (tick_data and signal.action == "BUY") else (tick_data.bid if tick_data else 0)
+                if price > 0 and contract_size > 0:
+                    signal.lot_size = (account.equity * pct) / (contract_size * price)
+                else:
+                    signal.lot_size = config.DEFAULT_LOT_SIZE
+                logger.info(f"Percentage lot ({pct*100:.1f}%) resolved to {signal.lot_size:.4f} lots")
+            else:
+                signal.lot_size = config.DEFAULT_LOT_SIZE
 
         logger.info(f"Signal Received: {signal}")
 

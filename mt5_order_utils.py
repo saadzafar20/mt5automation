@@ -5,6 +5,7 @@ This module extracts common MT5 order logic used by both:
 - managed_mt5_worker.py (VPS managed execution)
 """
 
+import math
 from typing import Any, Dict, Optional
 
 # Common MT5 error code mappings
@@ -233,7 +234,31 @@ def execute_command(mt5, command: Dict[str, Any],
     size = float(command.get("size") or 0.1)
     sl = command.get("sl")
     tp = command.get("tp")
-    
+
+    # Negative size = percentage of equity (convention from cloud_bridge)
+    if size < 0 and action in ("BUY", "SELL"):
+        pct = abs(size) / 100.0
+        account = mt5.account_info()
+        symbol_info = mt5.symbol_info(symbol)
+        if account and symbol_info:
+            contract_size = symbol_info.trade_contract_size or 100000.0
+            tick_data = mt5.symbol_info_tick(symbol)
+            price = tick_data.ask if (tick_data and action == "BUY") else (tick_data.bid if tick_data else 0)
+            if price > 0 and contract_size > 0:
+                size = (account.equity * pct) / (contract_size * price)
+            else:
+                size = 0.01
+            vol_min = symbol_info.volume_min or 0.01
+            vol_max = symbol_info.volume_max or 100.0
+            vol_step = symbol_info.volume_step or 0.01
+            size = max(vol_min, min(size, vol_max))
+            if vol_step > 0:
+                size = math.floor(size / vol_step) * vol_step
+                if size < vol_min:
+                    size = vol_min
+        else:
+            size = 0.01
+
     if action in ("BUY", "SELL"):
         return execute_market_order(
             mt5, action, symbol, size, sl, tp,

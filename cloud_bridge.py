@@ -1731,10 +1731,23 @@ def _process_signal_for_user(user_id: str, data: dict):
 
     action = data.get("action", "").upper()
     symbol = data.get("symbol", "")
-    try:
-        size = float(data.get("size", data.get("lot_size", 0.1)))
-    except (TypeError, ValueError):
-        size = 0.1
+
+    # Support lot_size_pct (percentage of equity) or legacy lot_size (absolute lots)
+    lot_size_pct_raw = data.get("lot_size_pct")
+    if lot_size_pct_raw is not None:
+        try:
+            size = float(lot_size_pct_raw)
+        except (TypeError, ValueError):
+            size = 1.0
+        # Negative guard — treat as percentage passed through to relay/worker
+        size = max(0.1, min(size, 100.0))
+        # Store as negative to signal "percentage mode" to the relay/worker
+        size = -size
+    else:
+        try:
+            size = float(data.get("size", data.get("lot_size", 0.1)))
+        except (TypeError, ValueError):
+            size = 0.1
     sl = data.get("sl", data.get("stop_loss"))
     tp = data.get("tp", data.get("take_profit"))
     script_name = str(
@@ -1749,7 +1762,9 @@ def _process_signal_for_user(user_id: str, data: dict):
 
     settings = store.get_user_settings(user_id)
     max_lot_size = float(settings.get("max_lot_size") or 0.5)
-    if action in ("BUY", "SELL") and size > max_lot_size:
+    # Only enforce max-lot check for absolute lot sizes (positive).
+    # Negative size = percentage mode — the relay/worker converts to lots and enforces its own limits.
+    if action in ("BUY", "SELL") and size > 0 and size > max_lot_size:
         msg = f"🔴 Trade rejected: lot size {size} exceeds max {max_lot_size}."
         notify_user(user_id, msg)
         return jsonify({"error": "max lot size exceeded", "max_lot_size": max_lot_size}), 400

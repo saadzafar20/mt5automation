@@ -384,9 +384,17 @@ class MT5Executor:
             return {"status": "failed", "error": "missing symbol"}
 
         try:
+            size = float(size)
+        except (TypeError, ValueError):
+            size = 0.1
+
+        try:
             if not self.mt5_connected:
-                # Mock mode
-                logger.info(f"[MOCK] Executing {action} {size} {symbol} SL={sl} TP={tp}")
+                # Mock mode — resolve percentage for logging
+                if size < 0:
+                    logger.info(f"[MOCK] Executing {action} {abs(size):.1f}% equity {symbol} SL={sl} TP={tp}")
+                else:
+                    logger.info(f"[MOCK] Executing {action} {size} {symbol} SL={sl} TP={tp}")
                 return {
                     "status": "executed",
                     "order_id": str(uuid.uuid4()),
@@ -395,6 +403,33 @@ class MT5Executor:
 
             # Real MT5 execution
             import MetaTrader5 as mt5
+
+            # Convert percentage-based lot size to absolute lots
+            if size < 0:
+                pct = abs(size) / 100.0  # e.g. -1.0 → 0.01
+                account = mt5.account_info()
+                symbol_info = mt5.symbol_info(symbol)
+                if account and symbol_info:
+                    contract_size = symbol_info.trade_contract_size or 100000.0
+                    tick_data = mt5.symbol_info_tick(symbol)
+                    price = tick_data.ask if (tick_data and action == "BUY") else (tick_data.bid if tick_data else 0)
+                    if price > 0 and contract_size > 0:
+                        size = (account.equity * pct) / (contract_size * price)
+                    else:
+                        size = 0.01
+                    # Clamp to broker limits
+                    vol_min = symbol_info.volume_min or 0.01
+                    vol_max = symbol_info.volume_max or 100.0
+                    vol_step = symbol_info.volume_step or 0.01
+                    import math as _math
+                    size = max(vol_min, min(size, vol_max))
+                    if vol_step > 0:
+                        size = _math.floor(size / vol_step) * vol_step
+                        if size < vol_min:
+                            size = vol_min
+                else:
+                    size = 0.01
+                logger.info(f"Percentage lot resolved to {size:.4f} lots")
 
             filling = get_filling_mode(symbol)
             tick = mt5.symbol_info_tick(symbol)
