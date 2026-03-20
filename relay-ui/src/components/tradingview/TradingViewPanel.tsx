@@ -45,7 +45,7 @@ export function TradingViewPanel() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-8">
       <ScrollReveal variant="fade-up">
         <h1 className="text-xl font-bold text-fg mb-1">TradingView</h1>
         <p className="text-sm text-fg-muted">Generate webhook alert messages</p>

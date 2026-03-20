@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type Tab = 'connect' | 'dashboard' | 'tradingview' | 'guide' | 'settings';
+export type Tab = 'connect' | 'dashboard' | 'tradingview' | 'telegram' | 'guide' | 'settings';
 export type ThemeMode = 'dark' | 'light';
 export type DotStatus = 'online' | 'offline' | 'unknown';
 

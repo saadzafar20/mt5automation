@@ -13,7 +13,7 @@ export function Card({ children, gold, className = '', hover = true }: CardProps
     <motion.div
       className={`
         ${gold ? 'glass-gold' : 'glass'}
-        p-5
+        p-7
         ${hover ? 'transition-all duration-300 hover:border-accent-muted hover:shadow-[var(--shadow-gold)]' : ''}
         ${className}
       `}

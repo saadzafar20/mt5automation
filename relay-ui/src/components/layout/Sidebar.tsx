@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import {
-  Link2, LayoutDashboard, TrendingUp, BookOpen, Settings,
+  Link2, LayoutDashboard, TrendingUp, BookOpen, Settings, Send,
 } from 'lucide-react';
 import { useAppStore, type Tab } from '../../store/appStore';
 import { APP_VERSION } from '../../lib/constants';
@@ -9,6 +9,7 @@ const navItems: { tab: Tab; icon: typeof Link2; label: string }[] = [
   { tab: 'connect', icon: Link2, label: 'Connect' },
   { tab: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { tab: 'tradingview', icon: TrendingUp, label: 'TradingView' },
+  { tab: 'telegram', icon: Send, label: 'Telegram' },
   { tab: 'guide', icon: BookOpen, label: 'Guide' },
   { tab: 'settings', icon: Settings, label: 'Settings' },
 ];

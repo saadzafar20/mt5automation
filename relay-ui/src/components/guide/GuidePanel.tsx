@@ -65,7 +65,7 @@ const steps = [
 
 export function GuidePanel() {
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-8">
       <ScrollReveal variant="fade-up">
         <h1 className="text-xl font-bold text-fg mb-1">Setup Guide</h1>
         <p className="text-sm text-fg-muted">Get trading in 5 minutes</p>

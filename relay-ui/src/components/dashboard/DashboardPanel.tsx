@@ -42,7 +42,7 @@ export function DashboardPanel() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <ScrollReveal variant="fade-up">
         <div className="flex items-center justify-between">
           <div>
@@ -73,7 +73,7 @@ export function DashboardPanel() {
         </Card>
       </ScrollReveal>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-7">
         {/* Webhook URL */}
         <ScrollReveal variant="slide-left" delay={0.15}>
           <Card gold>

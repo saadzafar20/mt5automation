@@ -6,6 +6,7 @@ import { Particles } from './Particles';
 import { ConnectPanel } from '../connect/ConnectPanel';
 import { DashboardPanel } from '../dashboard/DashboardPanel';
 import { TradingViewPanel } from '../tradingview/TradingViewPanel';
+import { TelegramPanel } from '../telegram/TelegramPanel';
 import { GuidePanel } from '../guide/GuidePanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 
@@ -13,6 +14,7 @@ const panels = {
   connect: ConnectPanel,
   dashboard: DashboardPanel,
   tradingview: TradingViewPanel,
+  telegram: TelegramPanel,
   guide: GuidePanel,
   settings: SettingsPanel,
 };
@@ -27,7 +29,7 @@ export function AppShell() {
       <Header />
       <div className="flex flex-1 min-h-0 relative z-10">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-8 lg:p-10">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

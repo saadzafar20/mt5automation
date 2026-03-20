@@ -95,7 +95,7 @@ export function SignInCard() {
       </h2>
 
       {/* OAuth buttons */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-3 mb-5">
         <motion.button
           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted"
           onClick={() => handleOAuth('google')}
@@ -118,14 +118,14 @@ export function SignInCard() {
         </motion.button>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-5">
         <div className="flex-1 h-px bg-border" />
         <span className="text-[0.625rem] text-fg-faint font-medium uppercase tracking-wider">or</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
       {/* Email/Password */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Input
           label="Email"
           type="email"
