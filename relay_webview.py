@@ -29,9 +29,15 @@ logger = logging.getLogger("relay_webview")
 
 BRIDGE_URL = os.getenv("BRIDGE_URL", "https://app.platalgo.com")
 LOCAL_PORT = 5199
-SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Support PyInstaller bundled mode
+if getattr(sys, "frozen", False):
+    SCRIPT_DIR = Path(sys._MEIPASS)
+else:
+    SCRIPT_DIR = Path(__file__).resolve().parent
+
 DIST_DIR = SCRIPT_DIR / "relay-ui" / "dist"
-LAST_USER_FILE = SCRIPT_DIR / "relay_last_user.json"
+LAST_USER_FILE = Path(__file__).resolve().parent / "relay_last_user.json"
 
 # ── Flask App ────────────────────────────────────────────────────────────────
 
@@ -358,11 +364,32 @@ def main():
         )
         webview.start()
     except Exception:
-        # Fallback: open in browser if pywebview isn't available
-        import webbrowser
-        logger.warning("pywebview not available — opening in browser")
-        webbrowser.open(url)
+        logger.warning("pywebview not available — trying app mode")
+        # Fallback: Edge/Chrome in app mode (looks like a native window)
+        if not _open_app_mode(url):
+            import webbrowser
+            logger.warning("No app-mode browser found — opening in default browser")
+            webbrowser.open(url)
         flask_thread.join()
+
+
+def _open_app_mode(url: str) -> bool:
+    """Launch Edge or Chrome in --app mode (frameless window, no browser chrome)."""
+    import shutil
+    import subprocess
+
+    for browser in [
+        shutil.which("msedge"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        shutil.which("chrome"),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]:
+        if browser and Path(browser).exists():
+            subprocess.Popen([browser, f"--app={url}"])
+            return True
+    return False
 
 
 if __name__ == "__main__":

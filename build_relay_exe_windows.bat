@@ -17,7 +17,16 @@ if exist "venv\Scripts\activate.bat" (
 
 echo Installing/updating build dependencies...
 pip install --quiet --upgrade pip
-pip install --quiet pyinstaller customtkinter pillow pystray keyring requests
+pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
+
+REM Build React UI if dist doesn't exist
+if not exist "relay-ui\dist\index.html" (
+    echo Building React UI...
+    cd relay-ui
+    call npm ci
+    call npm run build
+    cd ..
+)
 
 REM Write PE version info file
 echo Writing version info...
@@ -61,12 +70,15 @@ pyinstaller --noconfirm --onefile --windowed ^
   --name PlatAlgoRelay ^
   --version-file version_info.txt ^
   --add-data "config.json;." ^
-  --hidden-import customtkinter ^
-  --hidden-import PIL._tkinter_finder ^
-  --hidden-import pystray ^
+  --add-data "relay_webview.py;." ^
+  --add-data "relay-ui\dist;relay-ui\dist" ^
+  --hidden-import flask ^
+  --hidden-import flask_cors ^
+  --hidden-import webview ^
   --hidden-import keyring.backends.Windows ^
   --hidden-import keyring.backends.fail ^
-  --collect-all customtkinter ^
+  --collect-all flask ^
+  --collect-all flask_cors ^
   relay_gui.py
 
 del version_info.txt 2>nul

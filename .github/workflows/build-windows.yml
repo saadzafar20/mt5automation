@@ -19,6 +19,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Compute version and stamp
         shell: bash
         run: |
@@ -28,23 +33,31 @@ jobs:
           echo "APP_VERSION = \"$VERSION\"" > _version.py
           echo "Stamped version: $VERSION"
 
+      - name: Build React UI
+        run: |
+          cd relay-ui
+          npm ci
+          npm run build
+
       - name: Build .exe
         run: |
           pip install --quiet --upgrade pip
-          pip install --quiet pyinstaller PyQt6 pillow keyring requests
+          pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
           if (-not (Test-Path "config.json")) { '{}' | Out-File -Encoding utf8 config.json }
           pyinstaller --noconfirm --onefile --windowed `
             --name PlatAlgoRelay `
             --icon icon.ico `
             --add-data "config.json;." `
             --add-data "_version.py;." `
-            --hidden-import PyQt6 `
-            --hidden-import PyQt6.QtCore `
-            --hidden-import PyQt6.QtGui `
-            --hidden-import PyQt6.QtWidgets `
+            --add-data "relay_webview.py;." `
+            --add-data "relay-ui\dist;relay-ui\dist" `
+            --hidden-import flask `
+            --hidden-import flask_cors `
+            --hidden-import webview `
             --hidden-import keyring.backends.Windows `
             --hidden-import keyring.backends.fail `
-            --collect-all PyQt6 `
+            --collect-all flask `
+            --collect-all flask_cors `
             relay_gui.py
         shell: pwsh
 

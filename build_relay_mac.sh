@@ -41,7 +41,18 @@ source venv/bin/activate
 
 echo "Installing/updating dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet pyinstaller PyQt6 pillow keyring requests
+pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
+
+# Build React UI if dist doesn't exist
+if [ ! -f "relay-ui/dist/index.html" ]; then
+    echo "Building React UI..."
+    if command -v npm &>/dev/null; then
+        cd relay-ui && npm ci && npm run build && cd ..
+    else
+        echo "Error: npm not found. Install Node.js to build the UI."
+        exit 1
+    fi
+fi
 
 # Ensure config.json exists
 [ -f config.json ] || echo '{}' > config.json
@@ -54,13 +65,15 @@ pyinstaller --noconfirm --windowed \
   --icon icon.png \
   --add-data "config.json:." \
   --add-data "_version.py:." \
-  --hidden-import PyQt6 \
-  --hidden-import PyQt6.QtCore \
-  --hidden-import PyQt6.QtGui \
-  --hidden-import PyQt6.QtWidgets \
+  --add-data "relay_webview.py:." \
+  --add-data "relay-ui/dist:relay-ui/dist" \
+  --hidden-import flask \
+  --hidden-import flask_cors \
+  --hidden-import webview \
   --hidden-import keyring.backends.macOS \
   --hidden-import keyring.backends.fail \
-  --collect-all PyQt6 \
+  --collect-all flask \
+  --collect-all flask_cors \
   --osx-bundle-identifier "$BUNDLE_ID" \
   relay_gui.py
 
