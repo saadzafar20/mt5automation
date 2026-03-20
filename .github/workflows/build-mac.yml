@@ -39,7 +39,12 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build .dmg
+      - name: Install Python deps
+        run: |
+          pip install --quiet --upgrade pip
+          pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
+
+      - name: Build .app/.dmg
         run: |
           chmod +x build_relay_mac.sh
           ./build_relay_mac.sh

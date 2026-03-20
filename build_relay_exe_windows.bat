@@ -79,7 +79,7 @@ pyinstaller --noconfirm --onefile --windowed ^
   --hidden-import keyring.backends.fail ^
   --collect-all flask ^
   --collect-all flask_cors ^
-  relay_gui.py
+  run_relay.py
 
 del version_info.txt 2>nul
 

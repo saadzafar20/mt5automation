@@ -58,7 +58,7 @@ jobs:
             --hidden-import keyring.backends.fail `
             --collect-all flask `
             --collect-all flask_cors `
-            relay_gui.py
+            run_relay.py
         shell: pwsh
 
       - name: Upload .exe to Cloudflare R2

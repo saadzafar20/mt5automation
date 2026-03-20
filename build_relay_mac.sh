@@ -75,7 +75,7 @@ pyinstaller --noconfirm --windowed \
   --collect-all flask \
   --collect-all flask_cors \
   --osx-bundle-identifier "$BUNDLE_ID" \
-  relay_gui.py
+  run_relay.py
 
 if [ ! -d "dist/$APP_NAME.app" ]; then
     echo ""
