@@ -296,6 +296,10 @@
     .btn-sm-danger { background: hsla(0, 72%, 50%, 0.15); border: 1px solid hsla(0, 72%, 50%, 0.3); color: hsl(0, 80%, 75%); }
     .btn-sm-danger:hover { background: hsla(0, 72%, 50%, 0.25); }
 
+    .btn-tiny { background: var(--secondary); color: var(--fg-muted); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.688rem; cursor: pointer; font-family: inherit; }
+    .btn-tiny:hover { color: var(--fg); border-color: var(--primary); }
+    .btn-tiny-danger:hover { color: hsl(0, 80%, 75%); border-color: hsla(0, 72%, 50%, 0.3); }
+
     /* Status message */
     #settings-status { font-size: 0.75rem; margin-top: 8px; min-height: 18px; }
 
@@ -352,6 +356,10 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
           TradingView
         </button>
+        <button class="nav-btn" onclick="scrollToSection('telegram-section')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Telegram
+        </button>
         <button class="nav-btn" onclick="scrollToSection('settings-section')">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
           Settings
@@ -386,6 +394,10 @@
     <button class="mobile-nav-btn" onclick="scrollToSection('tradingview-section');toggleMobileMenu()">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
       TradingView
+    </button>
+    <button class="mobile-nav-btn" onclick="scrollToSection('telegram-section');toggleMobileMenu()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Telegram
     </button>
     <button class="mobile-nav-btn" onclick="scrollToSection('settings-section');toggleMobileMenu()">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -775,6 +787,93 @@
     </div>
   </div>
 
+  <!-- Telegram Signal Channels -->
+  <div class="glass section-card" id="telegram-section">
+    <div class="section-head">
+      <h2 class="section-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Telegram Signals
+      </h2>
+    </div>
+    <div class="section-body">
+
+      <!-- Bot status -->
+      <div id="tg-bot-status" style="margin-bottom:16px;padding:12px 16px;border-radius:var(--radius);background:var(--secondary);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="status-dot" id="tg-bot-dot" style="width:10px;height:10px;border-radius:50%;background:var(--fg-muted);display:inline-block;"></span>
+        <span id="tg-bot-label" style="font-size:0.875rem;color:var(--fg-muted);">Checking bot status...</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <span class="status-dot" id="tg-llm-dot" style="width:8px;height:8px;border-radius:50%;background:var(--fg-muted);display:inline-block;"></span>
+          <span id="tg-llm-label" style="font-size:0.75rem;color:var(--fg-muted);">LLM: checking...</span>
+        </span>
+      </div>
+
+      <!-- Setup instructions -->
+      <div id="tg-setup-info" style="margin-bottom:20px;padding:16px;border-radius:var(--radius);border:1px solid var(--border);background:hsla(155,30%,8%,0.5);">
+        <p style="font-size:0.875rem;color:var(--fg);margin-bottom:8px;font-weight:600;">How to connect a signal channel:</p>
+        <ol style="font-size:0.813rem;color:var(--fg-muted);padding-left:20px;line-height:1.8;">
+          <li>Open your private signal channel in Telegram</li>
+          <li>Go to <strong>Channel Settings</strong> &rarr; <strong>Administrators</strong> &rarr; <strong>Add Admin</strong></li>
+          <li>Search for <strong id="tg-bot-username-display">@PlatalgoSignalBot</strong> and add it</li>
+          <li>Grant <strong>Read Messages</strong> permission</li>
+          <li>Get your channel's Chat ID (forward a message to <strong>@userinfobot</strong>)</li>
+          <li>Enter the Chat ID below and click <strong>Add Channel</strong></li>
+        </ol>
+      </div>
+
+      <!-- Add channel form -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:20px;">
+        <div class="field" style="min-width:160px;">
+          <label>Chat ID</label>
+          <input id="tg-chat-id" placeholder="-100..." style="width:100%;" />
+        </div>
+        <div class="field" style="min-width:100px;">
+          <label>Risk %</label>
+          <input id="tg-risk-pct" type="number" min="0.1" max="100" step="0.1" value="1.0" style="width:100%;" />
+        </div>
+        <div class="field" style="min-width:80px;">
+          <label>Max Trades/Day</label>
+          <input id="tg-max-trades" type="number" min="1" max="100" step="1" value="10" style="width:100%;" />
+        </div>
+        <div class="field" style="min-width:150px;">
+          <label>Allowed Symbols</label>
+          <input id="tg-allowed-symbols" placeholder="All (or EURUSD,XAUUSD)" style="width:100%;" />
+        </div>
+        <button class="btn btn-sm-gold" onclick="addTelegramChannel()" style="height:38px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+          Add Channel
+        </button>
+      </div>
+
+      <!-- Channel list -->
+      <div id="tg-channels-list" style="margin-bottom:24px;">
+        <p style="font-size:0.813rem;color:var(--fg-muted);">Loading channels...</p>
+      </div>
+
+      <!-- Signal log -->
+      <details style="margin-bottom:16px;">
+        <summary style="cursor:pointer;font-size:0.875rem;font-weight:600;color:var(--fg);padding:8px 0;">Recent Signal Log</summary>
+        <div id="tg-signal-log" style="margin-top:8px;">
+          <p style="font-size:0.813rem;color:var(--fg-muted);">Loading...</p>
+        </div>
+      </details>
+
+      <!-- Test parser -->
+      <details>
+        <summary style="cursor:pointer;font-size:0.875rem;font-weight:600;color:var(--fg);padding:8px 0;">Test Signal Parser</summary>
+        <div style="margin-top:8px;">
+          <textarea id="tg-test-input" rows="3" placeholder="Paste a sample signal message here..." style="width:100%;background:var(--secondary);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-family:monospace;font-size:0.813rem;resize:vertical;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-sm-gold" onclick="testParseSignal(false)">Regex Parse</button>
+            <button class="btn btn-sm-gold" id="tg-llm-parse-btn" onclick="testParseSignal(true)" style="display:none;">LLM Parse</button>
+            <div id="tg-test-result" style="font-size:0.813rem;color:var(--fg-muted);flex:1;min-width:200px;"></div>
+          </div>
+        </div>
+      </details>
+
+      <div id="tg-status-msg"></div>
+    </div>
+  </div>
+
   <!-- Scripts & Trade Signals (detailed) -->
   <div class="glass section-card" id="signals-section">
     <div class="section-head">
@@ -922,6 +1021,222 @@ async function panicCloseAll() {
 document.getElementById('pg-sltp-source').addEventListener('change', updateSltpFields);
 updateSltpFields();
 renderPayload();
+
+// ==================== Telegram Signal Channels ====================
+
+async function loadTelegramChannels() {
+  try {
+    const res = await fetch('/api/telegram/channels');
+    const data = await res.json();
+    const container = document.getElementById('tg-channels-list');
+    const dotEl = document.getElementById('tg-bot-dot');
+    const labelEl = document.getElementById('tg-bot-label');
+    const usernameEl = document.getElementById('tg-bot-username-display');
+    const llmDot = document.getElementById('tg-llm-dot');
+    const llmLabel = document.getElementById('tg-llm-label');
+    const llmBtn = document.getElementById('tg-llm-parse-btn');
+
+    // Update bot status
+    if (data.bot_running) {
+      dotEl.style.background = 'hsl(155, 65%, 50%)';
+      labelEl.textContent = 'Signal bot online' + (data.bot_username ? ' — @' + data.bot_username : '');
+      labelEl.style.color = 'hsl(155, 65%, 60%)';
+      if (data.bot_username) usernameEl.textContent = '@' + data.bot_username;
+    } else {
+      dotEl.style.background = 'hsl(0, 72%, 50%)';
+      labelEl.textContent = 'Signal bot offline — set TELEGRAM_SIGNAL_BOT_TOKEN on server';
+      labelEl.style.color = 'hsl(0, 72%, 70%)';
+    }
+
+    // Update LLM status
+    if (data.llm_configured) {
+      if (data.llm_running) {
+        llmDot.style.background = 'hsl(210, 70%, 55%)';
+        const stats = data.llm_stats || {};
+        llmLabel.textContent = 'LLM: active (queued:' + (stats.queued||0) + ' exec:' + (stats.executed||0) + ')';
+        llmLabel.style.color = 'hsl(210, 70%, 65%)';
+      } else {
+        llmDot.style.background = 'hsl(43, 85%, 55%)';
+        llmLabel.textContent = 'LLM: configured (idle)';
+        llmLabel.style.color = 'hsl(43, 85%, 65%)';
+      }
+      llmBtn.style.display = '';
+    } else {
+      llmDot.style.background = 'var(--fg-muted)';
+      llmLabel.textContent = 'LLM: not configured';
+      llmLabel.style.color = 'var(--fg-muted)';
+      llmBtn.style.display = 'none';
+    }
+
+    const channels = data.channels || [];
+    if (channels.length === 0) {
+      container.innerHTML = '<p style="font-size:0.813rem;color:var(--fg-muted);">No channels connected yet. Add one above.</p>';
+      return;
+    }
+
+    let html = '<table style="width:100%;font-size:0.813rem;border-collapse:collapse;">';
+    html += '<thead><tr style="text-align:left;color:var(--fg-muted);border-bottom:1px solid var(--border);">';
+    html += '<th style="padding:8px 6px;">Channel</th><th style="padding:8px 6px;">Chat ID</th>';
+    html += '<th style="padding:8px 6px;">Risk %</th><th style="padding:8px 6px;">Max/Day</th>';
+    html += '<th style="padding:8px 6px;">Symbols</th><th style="padding:8px 6px;">Status</th>';
+    html += '<th style="padding:8px 6px;">Actions</th></tr></thead><tbody>';
+
+    for (const ch of channels) {
+      const symbols = ch.allowed_symbols ? JSON.parse(ch.allowed_symbols).join(', ') : 'All';
+      const enabledColor = ch.enabled ? 'hsl(155, 65%, 50%)' : 'hsl(0, 72%, 50%)';
+      const enabledText = ch.enabled ? 'ON' : 'OFF';
+      html += '<tr style="border-bottom:1px solid var(--border);">';
+      html += '<td style="padding:8px 6px;color:var(--fg);">' + (ch.chat_title || 'Unknown') + '</td>';
+      html += '<td style="padding:8px 6px;color:var(--fg-muted);font-family:monospace;">' + ch.chat_id + '</td>';
+      html += '<td style="padding:8px 6px;">' + ch.risk_pct + '%</td>';
+      html += '<td style="padding:8px 6px;">' + ch.max_trades_per_day + '</td>';
+      html += '<td style="padding:8px 6px;color:var(--fg-muted);">' + symbols + '</td>';
+      html += '<td style="padding:8px 6px;"><span style="color:' + enabledColor + ';font-weight:600;">' + enabledText + '</span></td>';
+      html += '<td style="padding:8px 6px;display:flex;gap:6px;">';
+      html += '<button class="btn-tiny" onclick="toggleTelegramChannel(\'' + ch.channel_id + '\')" title="Toggle">' + (ch.enabled ? 'Pause' : 'Resume') + '</button>';
+      html += '<button class="btn-tiny btn-tiny-danger" onclick="deleteTelegramChannel(\'' + ch.channel_id + '\')" title="Remove">Remove</button>';
+      html += '</td></tr>';
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (e) {
+    document.getElementById('tg-channels-list').innerHTML = '<p style="font-size:0.813rem;color:hsl(0,72%,70%);">Failed to load channels.</p>';
+  }
+}
+
+async function addTelegramChannel() {
+  const chatId = document.getElementById('tg-chat-id').value.trim();
+  if (!chatId) { alert('Enter a Chat ID'); return; }
+  const riskPct = parseFloat(document.getElementById('tg-risk-pct').value) || 1.0;
+  const maxTrades = parseInt(document.getElementById('tg-max-trades').value) || 10;
+  const symbolsRaw = document.getElementById('tg-allowed-symbols').value.trim();
+  const allowedSymbols = symbolsRaw ? JSON.stringify(symbolsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)) : null;
+
+  const statusEl = document.getElementById('tg-status-msg');
+  statusEl.textContent = 'Connecting...';
+  statusEl.style.color = 'var(--fg-muted)';
+
+  try {
+    const res = await fetch('/api/telegram/channels', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ chat_id: chatId, risk_pct: riskPct, max_trades_per_day: maxTrades, allowed_symbols: allowedSymbols })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      statusEl.textContent = 'Channel connected: ' + (data.chat_title || chatId);
+      statusEl.style.color = 'hsl(155, 65%, 60%)';
+      document.getElementById('tg-chat-id').value = '';
+      loadTelegramChannels();
+    } else {
+      statusEl.textContent = data.error || 'Failed to connect';
+      statusEl.style.color = 'hsl(0, 72%, 70%)';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Network error';
+    statusEl.style.color = 'hsl(0, 72%, 70%)';
+  }
+}
+
+async function toggleTelegramChannel(channelId) {
+  await fetch('/api/telegram/channels/' + channelId + '/toggle', { method: 'POST' });
+  loadTelegramChannels();
+}
+
+async function deleteTelegramChannel(channelId) {
+  if (!confirm('Remove this channel?')) return;
+  await fetch('/api/telegram/channels/' + channelId, { method: 'DELETE' });
+  loadTelegramChannels();
+}
+
+async function loadTelegramSignalLog() {
+  try {
+    const res = await fetch('/api/telegram/signals?limit=30');
+    const data = await res.json();
+    const container = document.getElementById('tg-signal-log');
+    const logs = data.signals || [];
+    if (logs.length === 0) {
+      container.innerHTML = '<p style="font-size:0.813rem;color:var(--fg-muted);">No signals yet.</p>';
+      return;
+    }
+
+    let html = '<table style="width:100%;font-size:0.75rem;border-collapse:collapse;">';
+    html += '<thead><tr style="text-align:left;color:var(--fg-muted);border-bottom:1px solid var(--border);">';
+    html += '<th style="padding:6px;">Time</th><th style="padding:6px;">Parsed</th>';
+    html += '<th style="padding:6px;">Status</th><th style="padding:6px;">Detail</th>';
+    html += '<th style="padding:6px;">Raw Text</th></tr></thead><tbody>';
+
+    for (const log of logs) {
+      const time = new Date(log.created_at * 1000).toLocaleString();
+      const parsed = log.parsed_action && log.parsed_symbol ? log.parsed_action + ' ' + log.parsed_symbol : '-';
+      const statusColor = log.execution_status === 'executed' ? 'hsl(155,65%,50%)' :
+                          log.execution_status === 'failed' ? 'hsl(0,72%,50%)' : 'var(--fg-muted)';
+      const rawTrunc = (log.raw_text || '').substring(0, 50) + ((log.raw_text || '').length > 50 ? '...' : '');
+      const detailTrunc = (log.execution_detail || '').substring(0, 40);
+      const isLlm = (log.execution_detail || '').includes('LLM');
+      html += '<tr style="border-bottom:1px solid var(--border);">';
+      html += '<td style="padding:6px;color:var(--fg-muted);white-space:nowrap;">' + time + '</td>';
+      html += '<td style="padding:6px;font-weight:600;">' + parsed + (isLlm ? ' <span style="color:hsl(210,70%,65%);font-size:0.625rem;">AI</span>' : '') + '</td>';
+      html += '<td style="padding:6px;color:' + statusColor + ';">' + (log.execution_status || '-') + '</td>';
+      html += '<td style="padding:6px;color:var(--fg-muted);" title="' + (log.execution_detail || '').replace(/"/g, '&quot;') + '">' + detailTrunc + '</td>';
+      html += '<td style="padding:6px;color:var(--fg-muted);font-family:monospace;" title="' + (log.raw_text || '').replace(/"/g, '&quot;') + '">' + rawTrunc + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (e) {
+    document.getElementById('tg-signal-log').innerHTML = '<p style="font-size:0.813rem;color:hsl(0,72%,70%);">Failed to load signal log.</p>';
+  }
+}
+
+async function testParseSignal(useLlm = false) {
+  const text = document.getElementById('tg-test-input').value.trim();
+  if (!text) return;
+  const resultEl = document.getElementById('tg-test-result');
+  resultEl.textContent = useLlm ? 'Parsing with LLM...' : 'Parsing...';
+  try {
+    const res = await fetch('/api/telegram/test-parse', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text, use_llm: useLlm })
+    });
+    const data = await res.json();
+
+    function formatResult(d, label) {
+      if (d.skip_reason) {
+        return '<span style="color:hsl(43,85%,55%);">' + label + ' Skipped:</span> ' + d.skip_reason;
+      } else if (d.action && d.symbol) {
+        let info = '<span style="color:hsl(155,65%,60%);font-weight:600;">' + label + d.action + ' ' + d.symbol + '</span>';
+        if (d.entry) info += ' @ ' + d.entry;
+        if (d.sl) info += ' | SL: ' + d.sl;
+        if (d.tp_list && d.tp_list.length) info += ' | TP: ' + d.tp_list.join(', ');
+        info += ' | Confidence: ' + (d.confidence * 100).toFixed(0) + '%';
+        if (d.reasoning) info += '<br><span style="color:var(--fg-muted);font-size:0.75rem;">LLM: ' + d.reasoning + '</span>';
+        return info;
+      } else if (d.error) {
+        return '<span style="color:hsl(0,72%,70%);">' + label + 'Error:</span> ' + d.error;
+      }
+      return label + JSON.stringify(d);
+    }
+
+    let html = formatResult(data, data.parser === 'regex' ? 'Regex: ' : '');
+    if (data.llm_result) {
+      html += '<br>' + formatResult(data.llm_result, 'LLM: ');
+    }
+    resultEl.innerHTML = html;
+  } catch (e) {
+    resultEl.textContent = 'Error parsing';
+  }
+}
+
+// Load telegram data on page load
+loadTelegramChannels();
+loadTelegramSignalLog();
+
+// Auto-refresh signal log when details opened
+document.querySelector('#telegram-section details')?.addEventListener('toggle', function() {
+  if (this.open) loadTelegramSignalLog();
+});
 </script>
 </body>
 </html>

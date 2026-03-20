@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "stitch": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "stitch-mcp"],
+      "env": {}
+    },
+    "21st-dev": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "@21st-dev/magic@latest"],
+      "env": {}
+    }
+  }
+}

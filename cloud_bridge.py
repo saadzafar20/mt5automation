@@ -492,6 +492,49 @@ class BridgeStore:
                     expires_at REAL NOT NULL,
                     FOREIGN KEY (user_id) REFERENCES users(user_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS telegram_channels (
+                    channel_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    chat_id TEXT NOT NULL,
+                    chat_title TEXT,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    risk_pct REAL NOT NULL DEFAULT 1.0,
+                    max_trades_per_day INTEGER NOT NULL DEFAULT 10,
+                    allowed_symbols TEXT,
+                    script_name TEXT NOT NULL DEFAULT 'Telegram',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    UNIQUE(user_id, chat_id),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS telegram_signal_log (
+                    log_id TEXT PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    telegram_message_id INTEGER,
+                    raw_text TEXT NOT NULL,
+                    parsed_action TEXT,
+                    parsed_symbol TEXT,
+                    parsed_entry REAL,
+                    parsed_sl REAL,
+                    parsed_tp TEXT,
+                    parse_confidence REAL,
+                    execution_status TEXT,
+                    execution_detail TEXT,
+                    command_id TEXT,
+                    created_at REAL NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_tg_channels_chat
+                    ON telegram_channels(chat_id);
+                CREATE INDEX IF NOT EXISTS idx_tg_channels_user
+                    ON telegram_channels(user_id);
+                CREATE INDEX IF NOT EXISTS idx_tg_signal_log_channel
+                    ON telegram_signal_log(channel_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_tg_signal_log_user
+                    ON telegram_signal_log(user_id, created_at);
                 """
             )
 
@@ -1217,6 +1260,149 @@ class BridgeStore:
             )
         return cursor.rowcount > 0
 
+    # ── Telegram channel subscriptions ───────────────────────────────────
+
+    def add_telegram_channel(self, channel_id: str, user_id: str, chat_id: str,
+                             chat_title: str = None, risk_pct: float = 1.0,
+                             max_trades_per_day: int = 10, allowed_symbols: str = None,
+                             script_name: str = "Telegram") -> None:
+        now = time.time()
+        with self.lock, self.conn:
+            self.conn.execute(
+                """INSERT INTO telegram_channels
+                   (channel_id, user_id, chat_id, chat_title, enabled, risk_pct,
+                    max_trades_per_day, allowed_symbols, script_name, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
+                (channel_id, user_id, chat_id, chat_title, risk_pct,
+                 max_trades_per_day, allowed_symbols, script_name, now, now),
+            )
+
+    def get_telegram_channel(self, channel_id: str) -> dict | None:
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT * FROM telegram_channels WHERE channel_id = ?", (channel_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_telegram_channels(self, user_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT * FROM telegram_channels WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_subscriptions_for_chat(self, chat_id: str) -> list[dict]:
+        """Get all enabled subscriptions for a given Telegram chat_id (fan-out)."""
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT * FROM telegram_channels WHERE chat_id = ? AND enabled = 1",
+                (chat_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_telegram_channel(self, channel_id: str, updates: dict) -> bool:
+        allowed = {"chat_title", "enabled", "risk_pct", "max_trades_per_day",
+                   "allowed_symbols", "script_name"}
+        filtered = {k: v for k, v in updates.items() if k in allowed}
+        if not filtered:
+            return False
+        filtered["updated_at"] = time.time()
+        set_clause = ", ".join(f"{k} = ?" for k in filtered)
+        values = list(filtered.values()) + [channel_id]
+        with self.lock, self.conn:
+            cursor = self.conn.execute(
+                f"UPDATE telegram_channels SET {set_clause} WHERE channel_id = ?",
+                values,
+            )
+        return cursor.rowcount > 0
+
+    def delete_telegram_channel(self, channel_id: str) -> bool:
+        with self.lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM telegram_channels WHERE channel_id = ?", (channel_id,)
+            )
+        return cursor.rowcount > 0
+
+    def count_channel_trades_today(self, channel_id: str) -> int:
+        """Count executed signals for a channel in the last 24 hours."""
+        cutoff = time.time() - 86400
+        with self.lock:
+            row = self.conn.execute(
+                """SELECT COUNT(*) FROM telegram_signal_log
+                   WHERE channel_id = ? AND execution_status = 'executed'
+                   AND created_at >= ?""",
+                (channel_id, cutoff),
+            ).fetchone()
+        return row[0] if row else 0
+
+    # ── Telegram signal log ──────────────────────────────────────────────
+
+    def add_telegram_signal_log(self, entry: dict) -> None:
+        with self.lock, self.conn:
+            self.conn.execute(
+                """INSERT INTO telegram_signal_log
+                   (log_id, channel_id, user_id, telegram_message_id, raw_text,
+                    parsed_action, parsed_symbol, parsed_entry, parsed_sl, parsed_tp,
+                    parse_confidence, execution_status, execution_detail, command_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entry["log_id"], entry["channel_id"], entry["user_id"],
+                 entry.get("telegram_message_id"), entry["raw_text"],
+                 entry.get("parsed_action"), entry.get("parsed_symbol"),
+                 entry.get("parsed_entry"), entry.get("parsed_sl"),
+                 entry.get("parsed_tp"), entry.get("parse_confidence"),
+                 entry.get("execution_status"), entry.get("execution_detail"),
+                 entry.get("command_id"), entry["created_at"]),
+            )
+
+    def list_telegram_signal_log(self, user_id: str = None, channel_id: str = None,
+                                  limit: int = 50) -> list[dict]:
+        conditions = []
+        params: list = []
+        if user_id:
+            conditions.append("user_id = ?")
+            params.append(user_id)
+        if channel_id:
+            conditions.append("channel_id = ?")
+            params.append(channel_id)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        params.append(limit)
+        with self.lock:
+            rows = self.conn.execute(
+                f"SELECT * FROM telegram_signal_log {where} ORDER BY created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_channel_open_symbols(self, user_id: str, channel_id: str) -> list[str]:
+        """
+        Get symbols of positions opened by a specific channel (for channel-scoped close).
+        Looks at executed BUY/SELL signals from this channel that don't have a corresponding close.
+        """
+        with self.lock:
+            rows = self.conn.execute(
+                """SELECT DISTINCT parsed_symbol FROM telegram_signal_log
+                   WHERE user_id = ? AND channel_id = ? AND execution_status = 'executed'
+                   AND parsed_action IN ('BUY', 'SELL')
+                   AND created_at >= ?
+                   ORDER BY created_at DESC""",
+                (user_id, channel_id, time.time() - 86400 * 7),  # last 7 days
+            ).fetchall()
+        return [r["parsed_symbol"] for r in rows if r["parsed_symbol"]]
+
+    def get_channel_command_ids(self, user_id: str, channel_id: str) -> list[str]:
+        """Get command IDs of executed trades from a specific channel."""
+        with self.lock:
+            rows = self.conn.execute(
+                """SELECT command_id FROM telegram_signal_log
+                   WHERE user_id = ? AND channel_id = ? AND execution_status = 'executed'
+                   AND parsed_action IN ('BUY', 'SELL') AND command_id IS NOT NULL
+                   AND created_at >= ?
+                   ORDER BY created_at DESC""",
+                (user_id, channel_id, time.time() - 86400 * 7),
+            ).fetchall()
+        return [r["command_id"] for r in rows if r["command_id"]]
+
 # Global store
 store = BridgeStore(DB_PATH)
 PENDING_DESKTOP_STATES = {}
@@ -1226,6 +1412,89 @@ _pending_state_lock = RLock()
 session_manager = SessionManager()
 session_manager.load_from_store(store, decrypt_secret)
 LAST_OFFLINE_NOTIFY = {}
+
+
+def _process_signal_for_telegram(user_id: str, signal_data: dict) -> dict:
+    """Process a parsed Telegram signal. Called from the bot manager background thread."""
+    with app.test_request_context():
+        response, status_code = _process_signal_for_user(user_id, signal_data)
+        result = response.get_json()
+        result["status_code"] = status_code
+        return result
+
+
+def _close_channel_positions(user_id: str, channel_id: str) -> dict:
+    """
+    Channel-scoped close: close only positions opened by signals from this channel.
+    Finds symbols from the signal log and sends CLOSE commands for each.
+    """
+    symbols = store.get_channel_open_symbols(user_id, channel_id)
+    if not symbols:
+        return {"closed_count": 0, "detail": "no open positions from this channel"}
+
+    closed_count = 0
+    errors = []
+    for symbol in symbols:
+        try:
+            with app.test_request_context():
+                managed_mode = store.is_managed_enabled(user_id)
+                target_relay = f"{MANAGED_RELAY_PREFIX}{user_id}" if managed_mode else None
+
+                if not managed_mode:
+                    relays = store.list_relays(user_id)
+                    if relays:
+                        target_relay = next(iter(relays.keys()))
+
+                if not target_relay:
+                    errors.append(f"no relay for {symbol}")
+                    continue
+
+                cmd = Command(user_id, target_relay, "CLOSE", symbol, 0.0,
+                              script_name="Telegram-close")
+                store.enqueue(cmd)
+
+                if managed_mode:
+                    cmd_dict = {"action": "CLOSE", "symbol": symbol, "size": 0.0}
+                    result = session_manager.execute(user_id, cmd_dict)
+                    status = (CommandStatus.EXECUTED if result.get("status") == "executed"
+                              else CommandStatus.FAILED)
+                    store.update_result(user_id, target_relay, cmd.id, status, result)
+                    if status == CommandStatus.EXECUTED:
+                        closed_count += 1
+                    else:
+                        errors.append(f"{symbol}: {result.get('error', 'failed')}")
+                else:
+                    closed_count += 1  # queued for relay
+        except Exception as exc:
+            errors.append(f"{symbol}: {exc}")
+
+    notify_user(user_id, f"⚠️ Channel close: {closed_count} symbol(s) closed/queued")
+    return {"closed_count": closed_count, "symbols": symbols, "errors": errors}
+
+
+# Telegram signal bot — shared bot for all users
+_tg_bot_token = os.getenv("TELEGRAM_SIGNAL_BOT_TOKEN", "").strip()
+_openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+
+# Initialize LLM fallback if OpenAI key is configured
+_llm_processor = None
+if _openai_api_key:
+    from telegram_llm_fallback import LLMFallback, LLMFallbackProcessor  # noqa: E402
+    _llm = LLMFallback(api_key=_openai_api_key)
+    _llm_processor = LLMFallbackProcessor(
+        llm=_llm,
+        execute_callback=_process_signal_for_telegram,
+        confidence_threshold=0.5,
+    )
+    logger.info("LLM fallback configured (GPT-4o-mini)")
+
+from telegram_bot_manager import TelegramBotManager  # noqa: E402
+telegram_manager = TelegramBotManager(
+    store, app, _process_signal_for_telegram, _tg_bot_token,
+    close_callback=_close_channel_positions,
+    llm_processor=_llm_processor,
+)
+telegram_manager.start()
 
 
 def _send_notifications(user_id: str, message: str):
@@ -2296,6 +2565,140 @@ def user_settings_api():
 
     store.update_user_settings(user_id, updates)
     return jsonify(store.get_user_settings(user_id))
+
+
+# ==================== Telegram Signal Channel API ====================
+
+@app.route("/api/telegram/channels", methods=["GET", "POST"])
+@login_required
+def telegram_channels_api():
+    user_id = session["dashboard_user"]
+    if request.method == "GET":
+        channels = store.list_telegram_channels(user_id)
+        return jsonify({
+            "channels": channels,
+            "bot_username": telegram_manager.bot_username,
+            "bot_running": telegram_manager.is_running,
+            "llm_configured": _llm_processor is not None,
+            "llm_running": _llm_processor.is_running if _llm_processor else False,
+            "llm_stats": _llm_processor.stats if _llm_processor else None,
+        })
+
+    # POST — add a new channel
+    data = request.get_json(silent=True) or {}
+    chat_id = str(data.get("chat_id", "")).strip()
+    if not chat_id:
+        return jsonify({"error": "chat_id is required"}), 400
+
+    # Verify bot access to the channel
+    if telegram_manager.is_running:
+        try:
+            chat_info = telegram_manager.verify_channel_access(chat_id)
+            chat_title = chat_info.get("title", "")
+        except Exception as exc:
+            return jsonify({"error": f"Bot cannot access this channel: {exc}"}), 400
+    else:
+        chat_title = data.get("chat_title", "")
+
+    channel_id = str(uuid.uuid4())
+    try:
+        store.add_telegram_channel(
+            channel_id=channel_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            chat_title=chat_title,
+            risk_pct=float(data.get("risk_pct", 1.0)),
+            max_trades_per_day=int(data.get("max_trades_per_day", 10)),
+            allowed_symbols=data.get("allowed_symbols"),  # JSON string or None
+            script_name=data.get("script_name", "Telegram"),
+        )
+    except Exception as exc:
+        if "UNIQUE constraint" in str(exc):
+            return jsonify({"error": "Channel already connected"}), 409
+        raise
+    return jsonify({"channel_id": channel_id, "chat_title": chat_title}), 201
+
+
+@app.route("/api/telegram/channels/<channel_id>", methods=["PUT", "DELETE"])
+@login_required
+def telegram_channel_manage_api(channel_id):
+    user_id = session["dashboard_user"]
+    channel = store.get_telegram_channel(channel_id)
+    if not channel or channel["user_id"] != user_id:
+        return jsonify({"error": "not found"}), 404
+
+    if request.method == "DELETE":
+        store.delete_telegram_channel(channel_id)
+        return jsonify({"deleted": True})
+
+    # PUT — update config
+    data = request.get_json(silent=True) or {}
+    store.update_telegram_channel(channel_id, data)
+    return jsonify(store.get_telegram_channel(channel_id))
+
+
+@app.route("/api/telegram/channels/<channel_id>/toggle", methods=["POST"])
+@login_required
+def telegram_channel_toggle_api(channel_id):
+    user_id = session["dashboard_user"]
+    channel = store.get_telegram_channel(channel_id)
+    if not channel or channel["user_id"] != user_id:
+        return jsonify({"error": "not found"}), 404
+    new_enabled = 0 if channel["enabled"] else 1
+    store.update_telegram_channel(channel_id, {"enabled": new_enabled})
+    return jsonify({"enabled": bool(new_enabled)})
+
+
+@app.route("/api/telegram/signals", methods=["GET"])
+@login_required
+def telegram_signals_api():
+    user_id = session["dashboard_user"]
+    channel_id = request.args.get("channel_id")
+    limit = min(int(request.args.get("limit", 50)), 200)
+    logs = store.list_telegram_signal_log(user_id=user_id, channel_id=channel_id, limit=limit)
+    return jsonify({"signals": logs})
+
+
+@app.route("/api/telegram/test-parse", methods=["POST"])
+@login_required
+def telegram_test_parse_api():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    use_llm = data.get("use_llm", False)
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    from telegram_signal_parser import parse_telegram_message
+    result = parse_telegram_message(text)
+    response = {
+        "action": result.action,
+        "symbol": result.symbol,
+        "entry": result.entry,
+        "sl": result.sl,
+        "tp_list": result.tp_list,
+        "confidence": result.confidence,
+        "skip_reason": result.skip_reason,
+        "management_type": result.management_type,
+        "parser": "regex",
+    }
+
+    # If regex parser failed or low confidence, and LLM requested, try LLM
+    if use_llm and _llm_processor and _llm_processor._llm.is_configured:
+        if result.skip_reason or result.confidence < 0.7:
+            llm_result = _llm_processor._llm.parse_signal_text(text)
+            response["llm_result"] = {
+                "action": llm_result.action,
+                "symbol": llm_result.symbol,
+                "entry": llm_result.entry,
+                "sl": llm_result.sl,
+                "tp_list": llm_result.tp_list,
+                "confidence": llm_result.confidence,
+                "reasoning": llm_result.reasoning,
+                "error": llm_result.error,
+                "parser": "gpt-4o-mini",
+            }
+
+    return jsonify(response)
 
 
 @app.route("/dashboard/summary/login", methods=["POST"])
