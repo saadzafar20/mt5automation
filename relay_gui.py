@@ -2688,6 +2688,13 @@ class RelayGuiApp(QMainWindow):
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 def main():
+    # Launch the new React UI served via Flask
+    from relay_webview import main as webview_main
+    webview_main()
+
+
+def main_legacy():
+    """Original PyQt6 GUI — kept for fallback."""
     app = QApplication(sys.argv)
     app.setApplicationName("PlatAlgo Relay")
     app.setStyleSheet(QSS)

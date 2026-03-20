@@ -1,63 +1,96 @@
-/* pywebview JS bridge wrapper */
+/* Native bridge — REST calls to Flask backend on localhost:5199 */
 
-interface JsBridgeApi {
-  get_keyring_password(service: string, userId: string): Promise<string>;
-  set_keyring_password(service: string, userId: string, pw: string): Promise<void>;
-  browse_file(title: string, startDir: string, filter: string): Promise<string>;
-  detect_mt5_path(): Promise<string>;
-  is_startup_enabled(): Promise<boolean>;
-  enable_startup(): Promise<void>;
-  disable_startup(): Promise<void>;
-  set_clipboard(text: string): Promise<void>;
-  get_last_user(): Promise<string>;
-  save_last_user(dataJson: string): Promise<void>;
-  open_external(url: string): Promise<void>;
-}
+const LOCAL_API = 'http://127.0.0.1:5199';
 
-declare global {
-  interface Window {
-    pywebview?: { api: JsBridgeApi };
+async function post<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+  try {
+    const res = await fetch(`${LOCAL_API}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return await res.json();
+  } catch {
+    console.warn(`Bridge call ${path} failed`);
+    return undefined as T;
   }
 }
 
-let ready = false;
-
-function waitForBridge(): Promise<JsBridgeApi> {
-  if (ready && window.pywebview) return Promise.resolve(window.pywebview.api);
-  return new Promise((resolve) => {
-    if (window.pywebview) {
-      ready = true;
-      resolve(window.pywebview.api);
-    } else {
-      window.addEventListener('pywebviewready', () => {
-        ready = true;
-        resolve(window.pywebview!.api);
-      }, { once: true });
-    }
-  });
-}
-
-async function call<T>(method: keyof JsBridgeApi, ...args: unknown[]): Promise<T> {
+async function get<T>(path: string): Promise<T> {
   try {
-    const api = await waitForBridge();
-    return (api[method] as (...a: unknown[]) => Promise<T>)(...args);
+    const res = await fetch(`${LOCAL_API}${path}`);
+    return await res.json();
   } catch {
-    console.warn(`Bridge call ${method} failed — running outside pywebview?`);
+    console.warn(`Bridge call ${path} failed`);
     return undefined as T;
   }
 }
 
 export const bridge = {
-  getKeyringPassword: (svc: string, uid: string) => call<string>('get_keyring_password', svc, uid),
-  setKeyringPassword: (svc: string, uid: string, pw: string) => call<void>('set_keyring_password', svc, uid, pw),
-  browseFile: (title: string, startDir: string, filter: string) => call<string>('browse_file', title, startDir, filter),
-  detectMt5Path: () => call<string>('detect_mt5_path'),
-  isStartupEnabled: () => call<boolean>('is_startup_enabled'),
-  enableStartup: () => call<void>('enable_startup'),
-  disableStartup: () => call<void>('disable_startup'),
-  setClipboard: (text: string) => call<void>('set_clipboard', text),
-  getLastUser: () => call<string>('get_last_user'),
-  saveLastUser: (data: string) => call<void>('save_last_user', data),
-  openExternal: (url: string) => call<void>('open_external', url),
-  isAvailable: () => !!window.pywebview,
+  getKeyringPassword: async (service: string, userId: string): Promise<string> => {
+    const data = await post<{ password: string }>('/api/bridge/keyring/get', { service, user_id: userId });
+    return data?.password ?? '';
+  },
+
+  setKeyringPassword: async (service: string, userId: string, password: string): Promise<void> => {
+    await post('/api/bridge/keyring/set', { service, user_id: userId, password });
+  },
+
+  detectMt5Path: async (): Promise<string> => {
+    const data = await get<{ path: string }>('/api/bridge/detect-mt5');
+    return data?.path ?? '';
+  },
+
+  isStartupEnabled: async (): Promise<boolean> => {
+    const data = await get<{ enabled: boolean }>('/api/bridge/startup');
+    return data?.enabled ?? false;
+  },
+
+  enableStartup: async (): Promise<void> => {
+    await post('/api/bridge/startup');
+  },
+
+  disableStartup: async (): Promise<void> => {
+    await fetch(`${LOCAL_API}/api/bridge/startup`, { method: 'DELETE' });
+  },
+
+  setClipboard: async (text: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Fallback for non-secure contexts
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  },
+
+  getLastUser: async (): Promise<string> => {
+    const data = await get<Record<string, unknown>>('/api/bridge/last-user');
+    return data ? JSON.stringify(data) : '';
+  },
+
+  saveLastUser: async (dataJson: string): Promise<void> => {
+    await fetch(`${LOCAL_API}/api/bridge/last-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: dataJson,
+    });
+  },
+
+  openExternal: (url: string): void => {
+    window.open(url, '_blank');
+  },
+
+  browseFile: async (_title: string, _startDir: string, _filter: string): Promise<string> => {
+    // File browsing not available in browser mode — user must type path manually
+    return '';
+  },
+
+  isAvailable: () => true,
 };

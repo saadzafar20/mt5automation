@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-PlatAlgo Relay — pywebview + React frontend
-Serves the React UI in a native window and provides a local Flask API
-for relay lifecycle management + a JS bridge for native OS operations.
+PlatAlgo Relay — React UI served via Flask
+Serves the React build on localhost and opens it in the user's browser.
+Also provides a local API for relay lifecycle management.
 """
 
 import json
@@ -12,11 +12,9 @@ import platform
 import sys
 import threading
 import time
-import uuid
 from pathlib import Path
 
-import webview
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -35,14 +33,14 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DIST_DIR = SCRIPT_DIR / "relay-ui" / "dist"
 LAST_USER_FILE = SCRIPT_DIR / "relay_last_user.json"
 
-# ── Flask API ────────────────────────────────────────────────────────────────
+# ── Flask App ────────────────────────────────────────────────────────────────
 
-api = Flask(__name__)
-CORS(api)
+app = Flask(__name__, static_folder=str(DIST_DIR), static_url_path="")
+CORS(app)
 
 # Shared state
-_relay = None          # Relay instance
-_relay_thread = None   # Thread running relay.start()
+_relay = None
+_relay_thread = None
 _state = {
     "status": "Idle",
     "bridge_online": False,
@@ -52,7 +50,7 @@ _state = {
 }
 _log_buffer: list[str] = []
 _log_lock = threading.Lock()
-_log_cursor = 0  # tracks what the client has already received
+_log_cursor = 0
 
 
 def _add_log(line: str):
@@ -77,7 +75,22 @@ def _on_state(state_dict: dict):
         _state["broker_online"] = state_dict["broker_connected"]
 
 
-@api.route("/api/relay/state")
+# ── Serve React App ──────────────────────────────────────────────────────────
+
+@app.route("/")
+def serve_index():
+    return send_from_directory(str(DIST_DIR), "index.html")
+
+
+@app.errorhandler(404)
+def fallback(_e):
+    """SPA fallback — serve index.html for client-side routing."""
+    return send_from_directory(str(DIST_DIR), "index.html")
+
+
+# ── Relay API ────────────────────────────────────────────────────────────────
+
+@app.route("/api/relay/state")
 def get_relay_state():
     global _log_cursor
     with _log_lock:
@@ -86,7 +99,7 @@ def get_relay_state():
     return jsonify({**_state, "logs": new_logs})
 
 
-@api.route("/api/relay/start", methods=["POST"])
+@app.route("/api/relay/start", methods=["POST"])
 def start_relay():
     global _relay, _relay_thread
     if _relay and _relay.running:
@@ -131,7 +144,7 @@ def start_relay():
         return jsonify({"error": str(e)}), 500
 
 
-@api.route("/api/relay/stop", methods=["POST"])
+@app.route("/api/relay/stop", methods=["POST"])
 def stop_relay():
     global _relay
     if _relay and _relay.running:
@@ -141,7 +154,7 @@ def stop_relay():
     return jsonify({"status": "not_running"})
 
 
-@api.route("/api/relay/logs/clear", methods=["POST"])
+@app.route("/api/relay/logs/clear", methods=["POST"])
 def clear_logs():
     global _log_buffer, _log_cursor
     with _log_lock:
@@ -150,7 +163,7 @@ def clear_logs():
     return jsonify({"status": "cleared"})
 
 
-@api.route("/api/managed/enable", methods=["POST"])
+@app.route("/api/managed/enable", methods=["POST"])
 def managed_enable():
     import requests as req
     data = request.get_json(force=True)
@@ -177,7 +190,7 @@ def managed_enable():
     return jsonify(resp.json()), resp.status_code
 
 
-@api.route("/api/managed/disable", methods=["POST"])
+@app.route("/api/managed/disable", methods=["POST"])
 def managed_disable():
     import requests as req
     data = request.get_json(force=True)
@@ -193,76 +206,73 @@ def managed_disable():
     return jsonify(resp.json()), resp.status_code
 
 
-# ── JS Bridge ────────────────────────────────────────────────────────────────
+# ── Native Bridge API (called from React via fetch) ─────────────────────────
 
-class JsBridge:
-    """Exposed to React via window.pywebview.api"""
+@app.route("/api/bridge/keyring/get", methods=["POST"])
+def bridge_keyring_get():
+    try:
+        import keyring
+        data = request.get_json(force=True)
+        pw = keyring.get_password(data["service"], data["user_id"]) or ""
+        return jsonify({"password": pw})
+    except Exception:
+        return jsonify({"password": ""})
 
-    def get_keyring_password(self, service: str, user_id: str) -> str:
-        try:
-            import keyring
-            return keyring.get_password(service, user_id) or ""
-        except Exception:
-            return ""
 
-    def set_keyring_password(self, service: str, user_id: str, password: str):
-        try:
-            import keyring
-            keyring.set_password(service, user_id, password)
-        except Exception:
-            pass
+@app.route("/api/bridge/keyring/set", methods=["POST"])
+def bridge_keyring_set():
+    try:
+        import keyring
+        data = request.get_json(force=True)
+        keyring.set_password(data["service"], data["user_id"], data["password"])
+        return jsonify({"ok": True})
+    except Exception:
+        return jsonify({"ok": False})
 
-    def browse_file(self, title: str, start_dir: str, filter_str: str) -> str:
-        try:
-            result = _window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                directory=start_dir,
-                allow_multiple=False,
-                file_types=(filter_str,),
-            )
-            return result[0] if result else ""
-        except Exception:
-            return ""
 
-    def detect_mt5_path(self) -> str:
-        if platform.system() != "Windows":
-            return ""
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            )
-            for i in range(winreg.QueryInfoKey(key)[0]):
-                try:
-                    subkey_name = winreg.EnumKey(key, i)
-                    subkey = winreg.OpenKey(key, subkey_name)
-                    name, _ = winreg.QueryValueEx(subkey, "DisplayName")
-                    if "MetaTrader 5" in str(name):
-                        loc, _ = winreg.QueryValueEx(subkey, "InstallLocation")
-                        terminal = Path(loc) / "terminal64.exe"
-                        if terminal.exists():
-                            return str(terminal)
-                except (FileNotFoundError, OSError):
-                    continue
-        except Exception:
-            pass
-        return ""
+@app.route("/api/bridge/detect-mt5")
+def bridge_detect_mt5():
+    if platform.system() != "Windows":
+        return jsonify({"path": ""})
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        )
+        for i in range(winreg.QueryInfoKey(key)[0]):
+            try:
+                subkey_name = winreg.EnumKey(key, i)
+                subkey = winreg.OpenKey(key, subkey_name)
+                name, _ = winreg.QueryValueEx(subkey, "DisplayName")
+                if "MetaTrader 5" in str(name):
+                    loc, _ = winreg.QueryValueEx(subkey, "InstallLocation")
+                    terminal = Path(loc) / "terminal64.exe"
+                    if terminal.exists():
+                        return jsonify({"path": str(terminal)})
+            except (FileNotFoundError, OSError):
+                continue
+    except Exception:
+        pass
+    return jsonify({"path": ""})
 
-    def is_startup_enabled(self) -> bool:
+
+@app.route("/api/bridge/startup", methods=["GET", "POST", "DELETE"])
+def bridge_startup():
+    if request.method == "GET":
         if platform.system() == "Windows":
             import subprocess
             result = subprocess.run(
                 ["schtasks", "/query", "/tn", "PlatAlgoRelay"],
                 capture_output=True, text=True,
             )
-            return result.returncode == 0
+            return jsonify({"enabled": result.returncode == 0})
         elif platform.system() == "Darwin":
             plist = Path.home() / "Library" / "LaunchAgents" / "com.platalgo.relay.plist"
-            return plist.exists()
-        return False
+            return jsonify({"enabled": plist.exists()})
+        return jsonify({"enabled": False})
 
-    def enable_startup(self):
+    elif request.method == "POST":
         if platform.system() == "Windows":
             import subprocess
             exe = sys.executable
@@ -283,79 +293,53 @@ class JsBridge:
   <key>RunAtLoad</key><true/>
 </dict>
 </plist>""")
+        return jsonify({"ok": True})
 
-    def disable_startup(self):
+    elif request.method == "DELETE":
         if platform.system() == "Windows":
             import subprocess
             subprocess.run(["schtasks", "/delete", "/tn", "PlatAlgoRelay", "/f"], capture_output=True)
         elif platform.system() == "Darwin":
             plist = Path.home() / "Library" / "LaunchAgents" / "com.platalgo.relay.plist"
             plist.unlink(missing_ok=True)
+        return jsonify({"ok": True})
 
-    def set_clipboard(self, text: str):
+    return jsonify({"error": "invalid method"}), 405
+
+
+@app.route("/api/bridge/last-user", methods=["GET", "POST"])
+def bridge_last_user():
+    if request.method == "GET":
         try:
-            _window.evaluate_js(f"navigator.clipboard.writeText({json.dumps(text)})")
+            return jsonify(json.loads(LAST_USER_FILE.read_text(encoding="utf-8")))
         except Exception:
-            pass
-
-    def get_last_user(self) -> str:
-        try:
-            return LAST_USER_FILE.read_text(encoding="utf-8")
-        except Exception:
-            return ""
-
-    def save_last_user(self, data_json: str):
-        try:
-            LAST_USER_FILE.write_text(data_json, encoding="utf-8")
-        except Exception:
-            pass
-
-    def open_external(self, url: str):
-        import webbrowser
-        webbrowser.open(url)
+            return jsonify({})
+    else:
+        data = request.get_json(force=True)
+        LAST_USER_FILE.write_text(json.dumps(data), encoding="utf-8")
+        return jsonify({"ok": True})
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-_window = None
-
-
 def main():
-    global _window
+    import webbrowser
 
-    # Start Flask API in background
-    flask_thread = threading.Thread(
-        target=lambda: api.run(host="127.0.0.1", port=LOCAL_PORT, debug=False, use_reloader=False),
-        daemon=True,
-    )
-    flask_thread.start()
-    logger.info(f"Local API on http://127.0.0.1:{LOCAL_PORT}")
+    if not DIST_DIR.exists() or not (DIST_DIR / "index.html").exists():
+        logger.error(f"React build not found at {DIST_DIR}. Run 'npm run build' in relay-ui/")
+        sys.exit(1)
 
-    js_bridge = JsBridge()
-    is_dev = "--dev" in sys.argv
+    url = f"http://127.0.0.1:{LOCAL_PORT}"
+    logger.info(f"PlatAlgo Relay starting on {url}")
 
-    if is_dev:
-        url = "http://localhost:5173"
-        logger.info(f"Dev mode: loading {url}")
-    else:
-        index = DIST_DIR / "index.html"
-        if not index.exists():
-            logger.error(f"Build not found: {index}. Run 'npm run build' in relay-ui/")
-            sys.exit(1)
-        url = str(index)
-        logger.info(f"Production mode: loading {url}")
+    # Open browser after a short delay (let Flask start first)
+    def open_browser():
+        time.sleep(1)
+        webbrowser.open(url)
 
-    _window = webview.create_window(
-        "PlatAlgo Relay",
-        url=url,
-        js_api=js_bridge,
-        width=1300,
-        height=860,
-        min_size=(1100, 720),
-        background_color="#0A1210",
-    )
+    threading.Thread(target=open_browser, daemon=True).start()
 
-    webview.start(debug=is_dev)
+    app.run(host="127.0.0.1", port=LOCAL_PORT, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
