@@ -323,8 +323,6 @@ def bridge_last_user():
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    import webbrowser
-
     if not DIST_DIR.exists() or not (DIST_DIR / "index.html").exists():
         logger.error(f"React build not found at {DIST_DIR}. Run 'npm run build' in relay-ui/")
         sys.exit(1)
@@ -332,14 +330,39 @@ def main():
     url = f"http://127.0.0.1:{LOCAL_PORT}"
     logger.info(f"PlatAlgo Relay starting on {url}")
 
-    # Open browser after a short delay (let Flask start first)
-    def open_browser():
-        time.sleep(1)
+    # Start Flask in background thread
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host="127.0.0.1", port=LOCAL_PORT, debug=False, use_reloader=False),
+        daemon=True,
+    )
+    flask_thread.start()
+
+    # Wait for Flask to be ready
+    import urllib.request
+    for _ in range(30):
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            break
+        except Exception:
+            time.sleep(0.2)
+
+    # Open native app window via pywebview
+    try:
+        import webview
+        webview.create_window(
+            "PlatAlgo Relay",
+            url,
+            width=1200,
+            height=800,
+            min_size=(900, 600),
+        )
+        webview.start()
+    except Exception:
+        # Fallback: open in browser if pywebview isn't available
+        import webbrowser
+        logger.warning("pywebview not available — opening in browser")
         webbrowser.open(url)
-
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    app.run(host="127.0.0.1", port=LOCAL_PORT, debug=False, use_reloader=False)
+        flask_thread.join()
 
 
 if __name__ == "__main__":
