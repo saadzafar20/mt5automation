@@ -55,6 +55,7 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "artifactName": "PlatAlgoRelay-${version}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.finance",
       "target": [

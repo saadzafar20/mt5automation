@@ -11,8 +11,8 @@ export function Header() {
   const isOnline = relayStatus !== 'Idle' && relayStatus !== 'Offline';
 
   return (
-    <header className="h-14 flex items-center justify-between px-5 border-b border-border bg-bg-sidebar/80 backdrop-blur-xl z-30 shrink-0">
-      {/* Logo */}
+    <header className="h-14 flex items-center justify-between pr-5 border-b border-border bg-bg-sidebar/80 backdrop-blur-xl z-30 shrink-0 pl-[84px]">
+      {/* Logo — pushed right to avoid macOS traffic lights */}
       <div className="flex items-center gap-3 shrink-0 mr-4">
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
           <span className="text-accent">Plat</span>

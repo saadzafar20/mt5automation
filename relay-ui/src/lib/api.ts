@@ -1,4 +1,4 @@
-import { BRIDGE_URL, LOCAL_API } from './constants';
+import { BRIDGE_URL } from './constants';
 
 /* ── Cloud Bridge API ── */
 
@@ -32,34 +32,7 @@ export async function checkVersion() {
   return res.json();
 }
 
-/* ── Local Flask API ── */
-
-export async function relayStart(params: {
-  user_id: string;
-  password?: string;
-  api_key?: string;
-  relay_type?: string;
-  mt5_login?: string;
-  mt5_password?: string;
-  mt5_server?: string;
-}) {
-  const res = await fetch(`${LOCAL_API}/api/relay/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  return res.json();
-}
-
-export async function relayStop() {
-  const res = await fetch(`${LOCAL_API}/api/relay/stop`, { method: 'POST' });
-  return res.json();
-}
-
-export async function relayState() {
-  const res = await fetch(`${LOCAL_API}/api/relay/state`);
-  return res.json();
-}
+/* ── Managed/Cloud MT5 API (calls cloud bridge directly) ── */
 
 export async function managedEnable(params: {
   user_id: string;
@@ -69,24 +42,49 @@ export async function managedEnable(params: {
   mt5_password: string;
   mt5_server: string;
 }) {
-  const res = await fetch(`${LOCAL_API}/api/managed/enable`, {
+  const body: Record<string, string> = {
+    mt5_login: params.mt5_login,
+    mt5_password: params.mt5_password,
+    mt5_server: params.mt5_server,
+  };
+
+  let url: string;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  if (params.password) {
+    // Login-based auth
+    body.user_id = params.user_id;
+    body.password = params.password;
+    url = `${BRIDGE_URL}/managed/setup/login`;
+  } else {
+    // API key auth
+    headers['X-User-ID'] = params.user_id;
+    if (params.api_key) headers['X-API-Key'] = params.api_key;
+    url = `${BRIDGE_URL}/managed/setup`;
+  }
+
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    headers,
+    body: JSON.stringify(body),
   });
   return res.json();
 }
 
-export async function managedDisable(userId: string) {
-  const res = await fetch(`${LOCAL_API}/api/managed/disable`, {
+export async function managedDisable(userId: string, apiKey?: string) {
+  const res = await fetch(`${BRIDGE_URL}/relay/managed/disable`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-ID': userId,
+      ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+    },
     body: JSON.stringify({ user_id: userId }),
   });
   return res.json();
 }
 
 export async function clearLogs() {
-  const res = await fetch(`${LOCAL_API}/api/relay/logs/clear`, { method: 'POST' });
-  return res.json();
+  // No-op in Electron mode (no local Flask)
+  return { status: 'cleared' };
 }

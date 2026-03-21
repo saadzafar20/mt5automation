@@ -73,8 +73,8 @@ jobs:
               --no-progress
           fi
           # Upload ZIP files (needed for auto-update on Mac)
-          find dist-electron -name "*.zip" -print0 | while IFS= read -r -d '' f; do
-            aws s3 cp "$f" "s3://platalgo/$(basename "$f" | tr ' ' '-')" \
+          for f in dist-electron/*.zip; do
+            [ -f "$f" ] && aws s3 cp "$f" "s3://platalgo/$(basename "$f")" \
               --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
               --no-progress
           done

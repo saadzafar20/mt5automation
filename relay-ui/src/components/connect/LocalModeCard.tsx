@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { Monitor, Check, X } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { OutlineButton } from '../ui/OutlineButton';
-import { useAppStore } from '../../store/appStore';
-import { relayStart, relayStop } from '../../lib/api';
+import { bridge } from '../../lib/bridge';
 
 const features = [
   { text: 'Full control over MT5', ok: true },
@@ -13,30 +11,6 @@ const features = [
 ];
 
 export function LocalModeCard() {
-  const auth = useAppStore((s) => s.auth);
-  const relayStatus = useAppStore((s) => s.relayStatus);
-  const [loading, setLoading] = useState(false);
-  const isRunning = relayStatus !== 'Idle' && relayStatus !== 'Offline';
-
-  const handleStart = async () => {
-    if (!auth.userId) return;
-    setLoading(true);
-    try {
-      await relayStart({ user_id: auth.userId, api_key: auth.apiKey || undefined, relay_type: 'self-hosted' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStop = async () => {
-    setLoading(true);
-    try {
-      await relayStop();
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <Card>
       <div className="flex items-center gap-3 mb-5">
@@ -60,15 +34,9 @@ export function LocalModeCard() {
         ))}
       </div>
 
-      {isRunning ? (
-        <OutlineButton danger fullWidth onClick={handleStop} disabled={loading}>
-          Stop
-        </OutlineButton>
-      ) : (
-        <OutlineButton fullWidth onClick={handleStart} disabled={loading || !auth.userId}>
-          {loading ? 'Starting...' : 'Select Local Mode'}
-        </OutlineButton>
-      )}
+      <OutlineButton fullWidth onClick={() => bridge.openExternal('https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev/PlatAlgoRelay.exe')} className="mt-4">
+        Download Windows Relay
+      </OutlineButton>
     </Card>
   );
 }

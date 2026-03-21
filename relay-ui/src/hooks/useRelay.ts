@@ -1,35 +1,68 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
-import { relayState } from '../lib/api';
+import { BRIDGE_URL } from '../lib/constants';
 
-export function useRelayPolling(intervalMs = 2000) {
+export function useRelayPolling(intervalMs = 5000) {
+  const auth = useAppStore((s) => s.auth);
   const setRelayStatus = useAppStore((s) => s.setRelayStatus);
   const setRelayDots = useAppStore((s) => s.setRelayDots);
   const setVpsActive = useAppStore((s) => s.setVpsActive);
-  const addLog = useAppStore((s) => s.addLog);
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
     async function poll() {
+      if (!auth.userId || !auth.apiKey) {
+        setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
+        setRelayStatus('Idle');
+        return;
+      }
+
       try {
-        const data = await relayState();
-        setRelayStatus(data.status || 'Idle');
-        setRelayDots({
-          bridge: data.bridge_online ? 'online' : 'offline',
-          mt5: data.mt5_online ? 'online' : 'offline',
-          broker: data.broker_online ? 'online' : 'offline',
+        const res = await fetch(`${BRIDGE_URL}/dashboard/summary/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: auth.userId, api_key: auth.apiKey }),
         });
-        setVpsActive(data.vps_active || false);
-        if (data.logs) {
-          for (const line of data.logs) addLog(line);
+
+        if (!res.ok) {
+          setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
+          setRelayStatus('Idle');
+          return;
         }
-      } catch (_e) {
-        // local API not running
+
+        const data = await res.json();
+        const dashboard = data.dashboard || {};
+        const relays = dashboard.relays || {};
+        const relayIds = Object.keys(relays);
+
+        // Bridge is online if we can reach the cloud
+        setRelayDots({ bridge: 'online' });
+
+        if (relayIds.length > 0) {
+          const relay = relays[relayIds[0]];
+          const isOnline = relay?.status === 'online';
+          setRelayDots({
+            bridge: 'online',
+            mt5: isOnline ? 'online' : 'offline',
+            broker: isOnline ? 'online' : 'offline',
+          });
+          setRelayStatus(isOnline ? 'Connected' : 'Idle');
+        } else {
+          setRelayDots({ bridge: 'online', mt5: 'offline', broker: 'offline' });
+          setRelayStatus('Idle');
+        }
+
+        // Check VPS/managed mode
+        const managed = data.settings?.managed_enabled;
+        setVpsActive(!!managed);
+      } catch {
+        setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
+        setRelayStatus('Offline');
       }
     }
 
     poll();
     intervalRef.current = setInterval(poll, intervalMs);
     return () => clearInterval(intervalRef.current);
-  }, [intervalMs, setRelayStatus, setRelayDots, setVpsActive, addLog]);
+  }, [intervalMs, auth.userId, auth.apiKey, setRelayStatus, setRelayDots, setVpsActive]);
 }

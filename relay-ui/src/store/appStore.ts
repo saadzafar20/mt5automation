@@ -84,7 +84,7 @@ export const useAppStore = create<AppState>((set) => ({
   clearAuth: () => set({ auth: { userId: null, apiKey: null, oauthProvider: null, avatar: null } }),
 
   relayStatus: 'Idle',
-  relayDots: { bridge: 'unknown', mt5: 'unknown', broker: 'unknown' },
+  relayDots: { bridge: 'offline', mt5: 'offline', broker: 'offline' },
   vpsActive: false,
   logs: [],
   setRelayStatus: (relayStatus) => set({ relayStatus }),
