@@ -83,8 +83,9 @@ export const bridge = {
     });
   },
 
-  openExternal: (url: string): void => {
-    window.open(url, '_blank');
+  openExternal: async (url: string): Promise<void> => {
+    // Use Flask backend to open in system browser (window.open doesn't work in pywebview)
+    await post('/api/bridge/open-external', { url });
   },
 
   browseFile: async (_title: string, _startDir: string, _filter: string): Promise<string> => {

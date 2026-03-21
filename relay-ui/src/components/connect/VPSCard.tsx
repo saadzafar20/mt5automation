@@ -17,9 +17,9 @@ export function VPSCard() {
 
   return (
     <Card gold>
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-sm font-semibold text-fg flex items-center gap-2">
-          <Cloud size={16} className="text-accent" />
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-base font-semibold text-fg flex items-center gap-2">
+          <Cloud size={18} className="text-accent" />
           Cloud Execution
         </h2>
         <span className="text-[0.5rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">
@@ -34,7 +34,7 @@ export function VPSCard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         {features.map(({ icon: Icon, text }, i) => (
           <motion.div
             key={i}
@@ -49,7 +49,7 @@ export function VPSCard() {
         ))}
       </div>
 
-      <p className="text-xs text-fg-muted mt-5 leading-relaxed">
+      <p className="text-sm text-fg-muted mt-6 leading-relaxed">
         Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 on Cloud"</span> to enable 24/7 automated execution without keeping your PC on.
       </p>
     </Card>

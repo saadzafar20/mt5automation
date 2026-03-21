@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PlatAlgo Relay — React UI served via Flask
-Serves the React build on localhost and opens it in the user's browser.
+Serves the React build on localhost and opens it as a native app window.
 Also provides a local API for relay lifecycle management.
 """
 
@@ -14,7 +14,7 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -32,16 +32,22 @@ LOCAL_PORT = 5199
 
 # Support PyInstaller bundled mode
 if getattr(sys, "frozen", False):
-    SCRIPT_DIR = Path(sys._MEIPASS)
+    BUNDLE_DIR = Path(sys._MEIPASS)
+    APP_DIR = Path(sys.executable).resolve().parent
 else:
-    SCRIPT_DIR = Path(__file__).resolve().parent
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    APP_DIR = BUNDLE_DIR
 
-DIST_DIR = SCRIPT_DIR / "relay-ui" / "dist"
-LAST_USER_FILE = Path(__file__).resolve().parent / "relay_last_user.json"
+DIST_DIR = BUNDLE_DIR / "relay-ui" / "dist"
+LAST_USER_FILE = APP_DIR / "relay_last_user.json"
+
+logger.info(f"BUNDLE_DIR={BUNDLE_DIR}")
+logger.info(f"DIST_DIR={DIST_DIR} exists={DIST_DIR.exists()}")
 
 # ── Flask App ────────────────────────────────────────────────────────────────
 
-app = Flask(__name__, static_folder=str(DIST_DIR), static_url_path="")
+# Don't use Flask's static_folder — we serve everything explicitly
+app = Flask(__name__, static_folder=None)
 CORS(app)
 
 # Shared state
@@ -88,10 +94,32 @@ def serve_index():
     return send_from_directory(str(DIST_DIR), "index.html")
 
 
-@app.errorhandler(404)
-def fallback(_e):
-    """SPA fallback — serve index.html for client-side routing."""
+@app.route("/<path:filepath>")
+def serve_static(filepath):
+    """Serve any file from the dist directory, fallback to index.html for SPA."""
+    full_path = DIST_DIR / filepath
+    if full_path.is_file():
+        return send_from_directory(str(DIST_DIR), filepath)
+    # SPA fallback
     return send_from_directory(str(DIST_DIR), "index.html")
+
+
+@app.route("/api/debug")
+def debug_info():
+    """Debug endpoint to check dist directory."""
+    files = []
+    if DIST_DIR.exists():
+        for f in DIST_DIR.rglob("*"):
+            if f.is_file():
+                files.append(str(f.relative_to(DIST_DIR)))
+    return jsonify({
+        "bundle_dir": str(BUNDLE_DIR),
+        "dist_dir": str(DIST_DIR),
+        "dist_exists": DIST_DIR.exists(),
+        "index_exists": (DIST_DIR / "index.html").exists(),
+        "files": files,
+        "frozen": getattr(sys, "frozen", False),
+    })
 
 
 # ── Relay API ────────────────────────────────────────────────────────────────
@@ -279,12 +307,12 @@ def bridge_startup():
         return jsonify({"enabled": False})
 
     elif request.method == "POST":
+        exe = sys.executable
         if platform.system() == "Windows":
             import subprocess
-            exe = sys.executable
             subprocess.run([
                 "schtasks", "/create", "/tn", "PlatAlgoRelay",
-                "/tr", f'"{exe}" "{__file__}"',
+                "/tr", f'"{exe}"',
                 "/sc", "onlogon", "/rl", "highest", "/f",
             ], capture_output=True)
         elif platform.system() == "Darwin":
@@ -295,7 +323,7 @@ def bridge_startup():
 <dict>
   <key>Label</key><string>com.platalgo.relay</string>
   <key>ProgramArguments</key>
-  <array><string>{sys.executable}</string><string>{__file__}</string></array>
+  <array><string>{exe}</string></array>
   <key>RunAtLoad</key><true/>
 </dict>
 </plist>""")
@@ -311,6 +339,18 @@ def bridge_startup():
         return jsonify({"ok": True})
 
     return jsonify({"error": "invalid method"}), 405
+
+
+@app.route("/api/bridge/open-external", methods=["POST"])
+def bridge_open_external():
+    """Open a URL in the system's default browser (needed for pywebview OAuth)."""
+    import webbrowser
+    data = request.get_json(force=True)
+    url = data.get("url", "")
+    if url and url.startswith("http"):
+        webbrowser.open(url)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "invalid url"}), 400
 
 
 @app.route("/api/bridge/last-user", methods=["GET", "POST"])
@@ -330,11 +370,14 @@ def bridge_last_user():
 
 def main():
     if not DIST_DIR.exists() or not (DIST_DIR / "index.html").exists():
-        logger.error(f"React build not found at {DIST_DIR}. Run 'npm run build' in relay-ui/")
-        sys.exit(1)
+        # Show an error page instead of silently failing
+        logger.error(f"React build not found at {DIST_DIR}")
+        _serve_error_page()
+        return
 
     url = f"http://127.0.0.1:{LOCAL_PORT}"
     logger.info(f"PlatAlgo Relay starting on {url}")
+    logger.info(f"Serving from {DIST_DIR}")
 
     # Start Flask in background thread
     flask_thread = threading.Thread(
@@ -345,14 +388,45 @@ def main():
 
     # Wait for Flask to be ready
     import urllib.request
-    for _ in range(30):
+    for _ in range(50):
         try:
             urllib.request.urlopen(url, timeout=1)
             break
         except Exception:
-            time.sleep(0.2)
+            time.sleep(0.1)
 
-    # Open native app window via pywebview
+    _open_window(url, flask_thread)
+
+
+def _serve_error_page():
+    """If dist isn't found, serve a simple error page."""
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def error_page(path):
+        return Response(
+            f"<html><body style='font-family:sans-serif;padding:40px;background:#111;color:#eee'>"
+            f"<h1>PlatAlgo Relay</h1>"
+            f"<p>React build not found.</p>"
+            f"<p>Expected at: <code>{DIST_DIR}</code></p>"
+            f"<p>Bundle dir: <code>{BUNDLE_DIR}</code></p>"
+            f"<p>Frozen: <code>{getattr(sys, 'frozen', False)}</code></p>"
+            f"</body></html>",
+            content_type="text/html",
+        )
+
+    url = f"http://127.0.0.1:{LOCAL_PORT}"
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host="127.0.0.1", port=LOCAL_PORT, debug=False, use_reloader=False),
+        daemon=True,
+    )
+    flask_thread.start()
+    time.sleep(0.5)
+    _open_window(url, flask_thread)
+
+
+def _open_window(url: str, flask_thread: threading.Thread):
+    """Open native window or browser fallback."""
+    # Try pywebview first (native app window)
     try:
         import webview
         webview.create_window(
@@ -363,14 +437,20 @@ def main():
             min_size=(900, 600),
         )
         webview.start()
-    except Exception:
-        logger.warning("pywebview not available — trying app mode")
-        # Fallback: Edge/Chrome in app mode (looks like a native window)
-        if not _open_app_mode(url):
-            import webbrowser
-            logger.warning("No app-mode browser found — opening in default browser")
-            webbrowser.open(url)
+        return
+    except Exception as e:
+        logger.warning(f"pywebview not available: {e}")
+
+    # Fallback: Edge/Chrome in app mode
+    if _open_app_mode(url):
         flask_thread.join()
+        return
+
+    # Last resort: default browser
+    import webbrowser
+    logger.warning("Opening in default browser")
+    webbrowser.open(url)
+    flask_thread.join()
 
 
 def _open_app_mode(url: str) -> bool:
@@ -378,14 +458,24 @@ def _open_app_mode(url: str) -> bool:
     import shutil
     import subprocess
 
-    for browser in [
-        shutil.which("msedge"),
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        shutil.which("chrome"),
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    ]:
+    candidates = []
+    if platform.system() == "Darwin":
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    elif platform.system() == "Windows":
+        candidates = [
+            shutil.which("msedge"),
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            shutil.which("chrome"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ]
+
+    for browser in candidates:
         if browser and Path(browser).exists():
             subprocess.Popen([browser, f"--app={url}"])
             return True

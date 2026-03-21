@@ -14,38 +14,6 @@ export function Particles() {
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      {/* Ambient orbs */}
-      <div
-        className="absolute w-[600px] h-[600px] rounded-full"
-        style={{
-          background: 'var(--color-primary-glow)',
-          filter: 'blur(200px)',
-          top: '10%',
-          left: '5%',
-          animation: 'float-orb 20s ease-in-out infinite',
-        }}
-      />
-      <div
-        className="absolute w-[500px] h-[500px] rounded-full"
-        style={{
-          background: 'var(--color-accent-glow)',
-          filter: 'blur(180px)',
-          bottom: '10%',
-          right: '5%',
-          animation: 'float-orb 25s ease-in-out infinite reverse',
-        }}
-      />
-      <div
-        className="absolute w-[300px] h-[300px] rounded-full"
-        style={{
-          background: 'var(--color-primary-glow)',
-          filter: 'blur(120px)',
-          top: '60%',
-          left: '40%',
-          animation: 'float-orb 18s ease-in-out infinite 5s',
-        }}
-      />
-
       {/* Small floating particles */}
       {particles.map((p) => (
         <div

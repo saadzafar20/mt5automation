@@ -43,13 +43,13 @@ export function MT5LoginCard() {
 
   return (
     <Card>
-      <div className="flex items-center gap-2 mb-5">
-        <Lock size={16} className="text-danger" />
-        <h2 className="text-sm font-semibold text-fg">MT5 Broker Login</h2>
+      <div className="flex items-center gap-2 mb-6">
+        <Lock size={18} className="text-danger" />
+        <h2 className="text-base font-semibold text-fg">MT5 Broker Login</h2>
         <span className="text-[0.5rem] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">OPTIONAL</span>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Input
           label="Account Number"
           value={mt5Login}
