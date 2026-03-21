@@ -65,15 +65,18 @@ pyinstaller --noconfirm --windowed \
   --icon icon.png \
   --add-data "config.json:." \
   --add-data "_version.py:." \
-  --add-data "relay_webview.py:." \
   --add-data "relay-ui/dist:relay-ui/dist" \
+  --hidden-import relay_webview \
+  --hidden-import relay \
   --hidden-import flask \
+  --hidden-import flask.json \
   --hidden-import flask_cors \
   --hidden-import webview \
   --hidden-import keyring.backends.macOS \
   --hidden-import keyring.backends.fail \
   --collect-all flask \
   --collect-all flask_cors \
+  --collect-all webview \
   --osx-bundle-identifier "$BUNDLE_ID" \
   run_relay.py
 

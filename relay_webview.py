@@ -94,9 +94,13 @@ def serve_index():
     return send_from_directory(str(DIST_DIR), "index.html")
 
 
-@app.route("/<path:filepath>")
-def serve_static(filepath):
-    """Serve any file from the dist directory, fallback to index.html for SPA."""
+@app.errorhandler(404)
+def serve_static_or_spa(_e):
+    """Serve static files from dist, or fall back to index.html for SPA routing."""
+    filepath = request.path.lstrip("/")
+    # Don't intercept API routes
+    if filepath.startswith("api/"):
+        return jsonify({"error": "not found"}), 404
     full_path = DIST_DIR / filepath
     if full_path.is_file():
         return send_from_directory(str(DIST_DIR), filepath)

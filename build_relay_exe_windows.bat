@@ -70,15 +70,18 @@ pyinstaller --noconfirm --onefile --windowed ^
   --name PlatAlgoRelay ^
   --version-file version_info.txt ^
   --add-data "config.json;." ^
-  --add-data "relay_webview.py;." ^
   --add-data "relay-ui\dist;relay-ui\dist" ^
+  --hidden-import relay_webview ^
+  --hidden-import relay ^
   --hidden-import flask ^
+  --hidden-import flask.json ^
   --hidden-import flask_cors ^
   --hidden-import webview ^
   --hidden-import keyring.backends.Windows ^
   --hidden-import keyring.backends.fail ^
   --collect-all flask ^
   --collect-all flask_cors ^
+  --collect-all webview ^
   run_relay.py
 
 del version_info.txt 2>nul
