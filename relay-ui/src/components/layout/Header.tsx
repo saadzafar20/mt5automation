@@ -11,9 +11,12 @@ export function Header() {
   const isOnline = relayStatus !== 'Idle' && relayStatus !== 'Offline';
 
   return (
-    <header className="h-14 flex items-center justify-between pr-5 border-b border-border bg-bg-sidebar/80 backdrop-blur-xl z-30 shrink-0 pl-[84px]">
-      {/* Logo — pushed right to avoid macOS traffic lights */}
-      <div className="flex items-center gap-3 shrink-0 mr-4">
+    <header
+      className="h-14 flex items-center justify-between pr-5 border-b border-border bg-bg-sidebar/80 backdrop-blur-xl z-30 shrink-0"
+      style={{ paddingLeft: 90, WebkitAppRegion: 'drag' } as React.CSSProperties}
+    >
+      {/* Logo — offset right to clear macOS traffic lights */}
+      <div className="flex items-center gap-3 shrink-0 mr-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
           <span className="text-accent">Plat</span>
           <span className="text-fg">Algo</span>
@@ -22,7 +25,7 @@ export function Header() {
       </div>
 
       {/* Status pills */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <StatusPill label="Bridge" status={dots.bridge} />
         <StatusPill label="MT5" status={dots.mt5} />
         <StatusPill label="Broker" status={dots.broker} />
@@ -39,7 +42,7 @@ export function Header() {
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <ThemeToggle />
         {auth.userId && (
           <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center">

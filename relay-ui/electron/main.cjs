@@ -50,6 +50,14 @@ autoUpdater.on('update-downloaded', (info) => {
     });
 });
 
+autoUpdater.on('update-not-available', () => {
+  console.log('Auto-update: already on latest version');
+});
+
+autoUpdater.on('checking-for-update', () => {
+  console.log('Auto-update: checking for updates...');
+});
+
 autoUpdater.on('error', (err) => {
   console.log('Auto-update error:', err.message);
 });
@@ -63,7 +71,8 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'PlatAlgo Relay',
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 15, y: 15 },
     backgroundColor: '#081410',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

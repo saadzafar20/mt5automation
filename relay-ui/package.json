@@ -1,7 +1,7 @@
 {
   "name": "platalgo-relay",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "PlatAlgo Relay — MT5 Trading Automation",
   "author": "PlatAlgo",
   "main": "electron/main.cjs",
