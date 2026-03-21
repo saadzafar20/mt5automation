@@ -42,7 +42,7 @@ jobs:
       - name: Install Python deps
         run: |
           pip install --quiet --upgrade pip
-          pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
+          pip install --quiet pyinstaller pillow keyring requests flask flask-cors
 
       - name: Build .app/.dmg
         run: |

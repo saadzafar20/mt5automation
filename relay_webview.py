@@ -458,22 +458,25 @@ def _serve_error_page():
 
 def _open_window(url: str, flask_thread: threading.Thread):
     """Open native window or browser fallback."""
-    # Try pywebview first (native app window)
-    try:
-        import webview
-        webview.create_window(
-            "PlatAlgo Relay",
-            url,
-            width=1200,
-            height=800,
-            min_size=(900, 600),
-        )
-        webview.start()
-        return
-    except Exception as e:
-        logger.warning(f"pywebview not available: {e}")
+    system = platform.system()
 
-    # Fallback: Edge/Chrome in app mode
+    # On Windows, try pywebview (EdgeChromium/WebView2 works great)
+    if system == "Windows":
+        try:
+            import webview
+            webview.create_window(
+                "PlatAlgo Relay",
+                url,
+                width=1200,
+                height=800,
+                min_size=(900, 600),
+            )
+            webview.start()
+            return
+        except Exception as e:
+            logger.warning(f"pywebview not available: {e}")
+
+    # On Mac (or Windows fallback): Chrome/Edge app mode or default browser
     if _open_app_mode(url):
         flask_thread.join()
         return
@@ -487,17 +490,22 @@ def _open_window(url: str, flask_thread: threading.Thread):
 
 def _open_app_mode(url: str) -> bool:
     """Launch Edge or Chrome in --app mode (frameless window, no browser chrome)."""
-    import shutil
     import subprocess
 
-    candidates = []
-    if platform.system() == "Darwin":
-        candidates = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    system = platform.system()
+    if system == "Darwin":
+        # Try Chrome app mode on Mac (clean window, no tabs/address bar)
+        chrome_paths = [
+            "/Applications/Google Chrome.app",
+            "/Applications/Microsoft Edge.app",
+            "/Applications/Chromium.app",
         ]
-    elif platform.system() == "Windows":
+        for app_path in chrome_paths:
+            if Path(app_path).exists():
+                subprocess.Popen(["open", "-a", app_path, "--args", f"--app={url}"])
+                return True
+    elif system == "Windows":
+        import shutil
         candidates = [
             shutil.which("msedge"),
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -506,11 +514,10 @@ def _open_app_mode(url: str) -> bool:
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         ]
-
-    for browser in candidates:
-        if browser and Path(browser).exists():
-            subprocess.Popen([browser, f"--app={url}"])
-            return True
+        for browser in candidates:
+            if browser and Path(browser).exists():
+                subprocess.Popen([browser, f"--app={url}"])
+                return True
     return False
 
 

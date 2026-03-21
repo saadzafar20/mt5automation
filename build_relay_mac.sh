@@ -41,7 +41,7 @@ source venv/bin/activate
 
 echo "Installing/updating dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
+pip install --quiet pyinstaller pillow keyring requests flask flask-cors
 
 # Build React UI if dist doesn't exist
 if [ ! -f "relay-ui/dist/index.html" ]; then
@@ -71,12 +71,10 @@ pyinstaller --noconfirm --windowed \
   --hidden-import flask \
   --hidden-import flask.json \
   --hidden-import flask_cors \
-  --hidden-import webview \
   --hidden-import keyring.backends.macOS \
   --hidden-import keyring.backends.fail \
   --collect-all flask \
   --collect-all flask_cors \
-  --collect-all webview \
   --osx-bundle-identifier "$BUNDLE_ID" \
   run_relay.py
 
