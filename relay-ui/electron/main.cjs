@@ -1,7 +1,60 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
 let mainWindow = null;
+
+// ── Auto-updater setup ──
+
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'available',
+      version: info.version,
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'downloading',
+      percent: Math.round(progress.percent),
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'ready',
+      version: info.version,
+    });
+  }
+  // Prompt user to restart
+  dialog
+    .showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Update Ready',
+      message: `Version ${info.version} has been downloaded. Restart now to update?`,
+      buttons: ['Restart', 'Later'],
+      defaultId: 0,
+    })
+    .then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+});
+
+autoUpdater.on('error', (err) => {
+  console.log('Auto-update error:', err.message);
+});
+
+// ── Window ──
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -10,7 +63,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'PlatAlgo Relay',
-    titleBarStyle: 'hiddenInset', // sleek title bar on Mac
+    titleBarStyle: 'hiddenInset',
     backgroundColor: '#081410',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -19,11 +72,9 @@ function createWindow() {
     },
   });
 
-  // In dev mode, load from Vite dev server
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    // Production: load built files
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
@@ -32,7 +83,13 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  // Check for updates after launch (not in dev mode)
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+  }
+});
 
 app.on('window-all-closed', () => {
   app.quit();
@@ -42,7 +99,7 @@ app.on('activate', () => {
   if (mainWindow === null) createWindow();
 });
 
-// ── IPC Handlers (native bridge) ──
+// ── IPC Handlers ──
 
 ipcMain.handle('open-external', async (_event, url) => {
   if (url && url.startsWith('http')) {
@@ -105,4 +162,12 @@ ipcMain.handle('last-user-set', async (_event, data) => {
   const filePath = path.join(app.getPath('userData'), 'last_user.json');
   fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
   return true;
+});
+
+ipcMain.handle('check-for-updates', () => {
+  autoUpdater.checkForUpdates();
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
 });

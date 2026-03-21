@@ -11,4 +11,9 @@ contextBridge.exposeInMainWorld('electronBridge', {
   setStartup: (enabled) => ipcRenderer.invoke('set-startup', enabled),
   lastUserGet: () => ipcRenderer.invoke('last-user-get'),
   lastUserSet: (data) => ipcRenderer.invoke('last-user-set', data),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update-status', (_event, data) => callback(data));
+  },
 });

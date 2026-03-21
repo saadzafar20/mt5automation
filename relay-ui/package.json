@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
+    "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
@@ -59,10 +60,11 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "arch": ["arm64", "x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64", "x64"]
         }
       ],
       "icon": "../icon.png"
@@ -82,6 +84,10 @@
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev"
     }
   }
 }

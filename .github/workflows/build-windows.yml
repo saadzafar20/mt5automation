@@ -47,12 +47,20 @@ jobs:
             --no-progress
         shell: pwsh
 
-      - name: Upload version manifest
+      - name: Upload auto-update manifest
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          # Upload latest.yml for electron-updater auto-updates
+          YML_FILE=$(find dist-electron -name "latest.yml" | head -1)
+          if [ -n "$YML_FILE" ]; then
+            aws s3 cp "$YML_FILE" s3://platalgo/latest.yml \
+              --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+              --no-progress
+          fi
+          # Version manifest
           echo "{\"version\":\"$VERSION\",\"windows_url\":\"https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev/PlatAlgoRelay.exe\",\"mac_url\":\"https://pub-c30cd5bbe12144caac83d4bd06bfbc6b.r2.dev/PlatAlgoRelay.dmg\"}" > manifest.json
           aws s3 cp manifest.json s3://platalgo/manifest.json \
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
