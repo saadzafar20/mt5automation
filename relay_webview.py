@@ -30,24 +30,58 @@ logger = logging.getLogger("relay_webview")
 BRIDGE_URL = os.getenv("BRIDGE_URL", "https://app.platalgo.com")
 LOCAL_PORT = 5199
 
-# Support PyInstaller bundled mode
+# Support PyInstaller bundled mode — search multiple paths for dist
 if getattr(sys, "frozen", False):
-    BUNDLE_DIR = Path(sys._MEIPASS)
-    APP_DIR = Path(sys.executable).resolve().parent
+    _meipass = Path(sys._MEIPASS)
+    _exe_dir = Path(sys.executable).resolve().parent
+    # Mac .app: exe is in Contents/MacOS, _MEIPASS may be Contents/Frameworks
+    _mac_resources = _exe_dir.parent / "Resources"
+    APP_DIR = _exe_dir
 else:
-    BUNDLE_DIR = Path(__file__).resolve().parent
-    APP_DIR = BUNDLE_DIR
+    _meipass = Path(__file__).resolve().parent
+    _exe_dir = _meipass
+    _mac_resources = _meipass
+    APP_DIR = _meipass
 
-DIST_DIR = BUNDLE_DIR / "relay-ui" / "dist"
+# Try every possible location PyInstaller might put the data
+DIST_DIR = None
+_candidates = [
+    _meipass / "relay-ui" / "dist",
+    _exe_dir / "relay-ui" / "dist",
+    _exe_dir / "_internal" / "relay-ui" / "dist",
+    _mac_resources / "relay-ui" / "dist",
+    _meipass.parent / "Resources" / "relay-ui" / "dist",
+    Path(__file__).resolve().parent / "relay-ui" / "dist" if not getattr(sys, "frozen", False) else _meipass,
+]
+for _c in _candidates:
+    logger.info(f"  checking {_c} -> exists={_c.exists()}")
+    if (_c / "index.html").is_file():
+        DIST_DIR = _c
+        break
+
+if DIST_DIR is None:
+    # Last resort: walk up from executable looking for it
+    for _p in [_meipass, _exe_dir]:
+        for _root, _dirs, _files in os.walk(_p):
+            if "index.html" in _files and "assets" in _dirs:
+                DIST_DIR = Path(_root)
+                logger.info(f"  found dist via walk: {DIST_DIR}")
+                break
+        if DIST_DIR:
+            break
+
+if DIST_DIR is None:
+    DIST_DIR = _meipass / "relay-ui" / "dist"  # fallback for error messages
+
 LAST_USER_FILE = APP_DIR / "relay_last_user.json"
 
-logger.info(f"BUNDLE_DIR={BUNDLE_DIR}")
 logger.info(f"DIST_DIR={DIST_DIR} exists={DIST_DIR.exists()}")
+logger.info(f"frozen={getattr(sys, 'frozen', False)} _MEIPASS={getattr(sys, '_MEIPASS', 'N/A')}")
+logger.info(f"exe={sys.executable}")
 
 # ── Flask App ────────────────────────────────────────────────────────────────
 
-# Don't use Flask's static_folder — we serve everything explicitly
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__, static_folder=str(DIST_DIR), static_url_path="")
 CORS(app)
 
 # Shared state
@@ -95,16 +129,10 @@ def serve_index():
 
 
 @app.errorhandler(404)
-def serve_static_or_spa(_e):
-    """Serve static files from dist, or fall back to index.html for SPA routing."""
-    filepath = request.path.lstrip("/")
-    # Don't intercept API routes
-    if filepath.startswith("api/"):
+def spa_fallback(_e):
+    """SPA fallback — serve index.html for client-side routing (not API routes)."""
+    if request.path.startswith("/api/"):
         return jsonify({"error": "not found"}), 404
-    full_path = DIST_DIR / filepath
-    if full_path.is_file():
-        return send_from_directory(str(DIST_DIR), filepath)
-    # SPA fallback
     return send_from_directory(str(DIST_DIR), "index.html")
 
 
