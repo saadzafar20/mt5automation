@@ -38,15 +38,26 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: cd relay-ui && npm run electron:build:mac
 
-      - name: Upload .dmg to Cloudflare R2
+      - name: Upload .dmg files to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          DMG_FILE=$(find dist-electron -name "*.dmg" | head -1)
-          aws s3 cp "$DMG_FILE" s3://platalgo/PlatAlgoRelay.dmg \
-            --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
-            --no-progress
+          ARM_DMG=$(find dist-electron -name "*arm64*.dmg" | head -1)
+          X64_DMG=$(find dist-electron -name "*x64*.dmg" | head -1)
+          if [ -n "$ARM_DMG" ]; then
+            aws s3 cp "$ARM_DMG" s3://platalgo/PlatAlgoRelay.dmg \
+              --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+              --no-progress
+            aws s3 cp "$ARM_DMG" s3://platalgo/PlatAlgoRelay-arm64.dmg \
+              --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+              --no-progress
+          fi
+          if [ -n "$X64_DMG" ]; then
+            aws s3 cp "$X64_DMG" s3://platalgo/PlatAlgoRelay-x64.dmg \
+              --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+              --no-progress
+          fi
 
       - name: Upload version manifest
         shell: bash
