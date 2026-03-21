@@ -7,7 +7,7 @@ export function useRelayPolling(intervalMs = 5000) {
 
   useEffect(() => {
     async function poll() {
-      const { auth, setRelayDots, setRelayStatus, setVpsActive } = useAppStore.getState();
+      const { auth, setRelayDots, setRelayStatus, setVpsActive, setDashboardData } = useAppStore.getState();
 
       if (!auth.userId || !auth.apiKey) {
         setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
@@ -33,21 +33,41 @@ export function useRelayPolling(intervalMs = 5000) {
         const relays = dashboard.relays || {};
         const relayIds = Object.keys(relays);
 
+        // Update dashboard data so DashboardPanel stays in sync
+        setDashboardData({
+          webhookUrl: data.webhook_url || '',
+          apiKey: data.api_key || auth.apiKey || '',
+          relayOnline: dashboard.relay_online || 0,
+          relayTotal: dashboard.relay_total || 0,
+          scripts: dashboard.scripts || [],
+        });
+
         // Bridge is online if we reached the cloud
         setRelayDots({ bridge: 'online' });
 
         if (relayIds.length > 0) {
-          // Check any relay — state is "active" when online
-          const anyOnline = relayIds.some((id) => {
+          // Check relay state AND metadata for MT5/broker connection
+          let mt5Connected = false;
+          let brokerConnected = false;
+          let anyRelayOnline = false;
+
+          for (const id of relayIds) {
             const r = relays[id];
-            return r?.state === 'active' || r?.state === 'online';
-          });
+            if (r?.state === 'online') {
+              anyRelayOnline = true;
+              // Relay metadata contains actual MT5/broker connection status
+              const meta = r.metadata || {};
+              if (meta.mt5_connected) mt5Connected = true;
+              if (meta.broker_connected) brokerConnected = true;
+            }
+          }
+
           setRelayDots({
             bridge: 'online',
-            mt5: anyOnline ? 'online' : 'offline',
-            broker: anyOnline ? 'online' : 'offline',
+            mt5: mt5Connected ? 'online' : 'offline',
+            broker: brokerConnected ? 'online' : 'offline',
           });
-          setRelayStatus(anyOnline ? 'Connected' : 'Idle');
+          setRelayStatus(anyRelayOnline ? 'Connected' : 'Idle');
         } else {
           setRelayDots({ bridge: 'online', mt5: 'offline', broker: 'offline' });
           setRelayStatus('Idle');

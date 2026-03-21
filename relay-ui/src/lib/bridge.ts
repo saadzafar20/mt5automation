@@ -11,6 +11,9 @@ interface ElectronBridge {
   setStartup: (enabled: boolean) => Promise<boolean>;
   lastUserGet: () => Promise<Record<string, unknown>>;
   lastUserSet: (data: Record<string, unknown>) => Promise<boolean>;
+  checkForUpdates: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  onUpdateStatus: (callback: (data: { status: string; version?: string; percent?: number }) => void) => void;
 }
 
 declare global {

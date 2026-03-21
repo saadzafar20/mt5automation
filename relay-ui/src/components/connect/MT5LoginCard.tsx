@@ -16,6 +16,7 @@ export function MT5LoginCard() {
   const auth = useAppStore((s) => s.auth);
   const setVpsActive = useAppStore((s) => s.setVpsActive);
   const vpsActive = useAppStore((s) => s.vpsActive);
+  const dots = useAppStore((s) => s.relayDots);
 
   const handleCloudLogin = async () => {
     if (!mt5Login || !mt5Password || !mt5Server || !auth.userId) return;
@@ -81,9 +82,31 @@ export function MT5LoginCard() {
         {error && <div className="text-xs text-danger bg-danger-bg px-3 py-2 rounded-lg">{error}</div>}
 
         {vpsActive ? (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--radius)] bg-success-bg border border-success/20 text-sm text-success font-medium">
-            <Cloud size={16} />
-            Connected to Cloud — 24/7 Execution Active
+          <div className="space-y-2">
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--radius)] border text-sm font-medium ${
+              dots.mt5 === 'online'
+                ? 'bg-success-bg border-success/20 text-success'
+                : 'bg-accent/10 border-accent/20 text-accent'
+            }`}>
+              <Cloud size={16} />
+              {dots.mt5 === 'online'
+                ? 'Connected to Cloud — 24/7 Execution Active'
+                : 'Cloud Relay Active — MT5 Connecting...'}
+            </div>
+            <div className="flex gap-3 text-xs text-fg-muted px-1">
+              <span className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${dots.bridge === 'online' ? 'bg-success' : 'bg-danger'}`} />
+                Bridge
+              </span>
+              <span className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${dots.mt5 === 'online' ? 'bg-success' : 'bg-danger'}`} />
+                MT5
+              </span>
+              <span className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${dots.broker === 'online' ? 'bg-success' : 'bg-danger'}`} />
+                Broker
+              </span>
+            </div>
           </div>
         ) : (
           <GoldButton
