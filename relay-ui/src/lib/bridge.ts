@@ -1,64 +1,62 @@
-/* Native bridge — REST calls to Flask backend on localhost:5199 */
+/* Native bridge — uses Electron IPC when available, falls back to REST */
 
-const LOCAL_API = 'http://127.0.0.1:5199';
+interface ElectronBridge {
+  openExternal: (url: string) => Promise<boolean>;
+  getPlatform: () => Promise<string>;
+  getVersion: () => Promise<string>;
+  keyringGet: (service: string, userId: string) => Promise<string>;
+  keyringSet: (service: string, userId: string, password: string) => Promise<boolean>;
+  clipboardWrite: (text: string) => Promise<boolean>;
+  isStartupEnabled: () => Promise<boolean>;
+  setStartup: (enabled: boolean) => Promise<boolean>;
+  lastUserGet: () => Promise<Record<string, unknown>>;
+  lastUserSet: (data: Record<string, unknown>) => Promise<boolean>;
+}
 
-async function post<T>(path: string, body?: Record<string, unknown>): Promise<T> {
-  try {
-    const res = await fetch(`${LOCAL_API}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return await res.json();
-  } catch {
-    console.warn(`Bridge call ${path} failed`);
-    return undefined as T;
+declare global {
+  interface Window {
+    electronBridge?: ElectronBridge;
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  try {
-    const res = await fetch(`${LOCAL_API}${path}`);
-    return await res.json();
-  } catch {
-    console.warn(`Bridge call ${path} failed`);
-    return undefined as T;
-  }
-}
+const eb = () => window.electronBridge;
 
 export const bridge = {
   getKeyringPassword: async (service: string, userId: string): Promise<string> => {
-    const data = await post<{ password: string }>('/api/bridge/keyring/get', { service, user_id: userId });
-    return data?.password ?? '';
+    if (eb()) return (await eb()!.keyringGet(service, userId)) || '';
+    return '';
   },
 
   setKeyringPassword: async (service: string, userId: string, password: string): Promise<void> => {
-    await post('/api/bridge/keyring/set', { service, user_id: userId, password });
+    if (eb()) await eb()!.keyringSet(service, userId, password);
   },
 
   detectMt5Path: async (): Promise<string> => {
-    const data = await get<{ path: string }>('/api/bridge/detect-mt5');
-    return data?.path ?? '';
+    // MT5 detection only relevant on Windows VPS, not in desktop app
+    return '';
   },
 
   isStartupEnabled: async (): Promise<boolean> => {
-    const data = await get<{ enabled: boolean }>('/api/bridge/startup');
-    return data?.enabled ?? false;
+    if (eb()) return await eb()!.isStartupEnabled();
+    return false;
   },
 
   enableStartup: async (): Promise<void> => {
-    await post('/api/bridge/startup');
+    if (eb()) await eb()!.setStartup(true);
   },
 
   disableStartup: async (): Promise<void> => {
-    await fetch(`${LOCAL_API}/api/bridge/startup`, { method: 'DELETE' });
+    if (eb()) await eb()!.setStartup(false);
   },
 
   setClipboard: async (text: string): Promise<void> => {
+    if (eb()) {
+      await eb()!.clipboardWrite(text);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // Fallback for non-secure contexts
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
@@ -71,27 +69,30 @@ export const bridge = {
   },
 
   getLastUser: async (): Promise<string> => {
-    const data = await get<Record<string, unknown>>('/api/bridge/last-user');
-    return data ? JSON.stringify(data) : '';
-  },
-
-  saveLastUser: async (dataJson: string): Promise<void> => {
-    await fetch(`${LOCAL_API}/api/bridge/last-user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: dataJson,
-    });
-  },
-
-  openExternal: async (url: string): Promise<void> => {
-    // Use Flask backend to open in system browser (window.open doesn't work in pywebview)
-    await post('/api/bridge/open-external', { url });
-  },
-
-  browseFile: async (_title: string, _startDir: string, _filter: string): Promise<string> => {
-    // File browsing not available in browser mode — user must type path manually
+    if (eb()) {
+      const data = await eb()!.lastUserGet();
+      return data && Object.keys(data).length ? JSON.stringify(data) : '';
+    }
     return '';
   },
 
-  isAvailable: () => true,
+  saveLastUser: async (dataJson: string): Promise<void> => {
+    if (eb()) {
+      await eb()!.lastUserSet(JSON.parse(dataJson));
+    }
+  },
+
+  openExternal: async (url: string): Promise<void> => {
+    if (eb()) {
+      await eb()!.openExternal(url);
+      return;
+    }
+    window.open(url, '_blank');
+  },
+
+  browseFile: async (_title: string, _startDir: string, _filter: string): Promise<string> => {
+    return '';
+  },
+
+  isAvailable: () => !!eb(),
 };

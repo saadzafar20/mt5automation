@@ -14,47 +14,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: relay-ui/package-lock.json
 
-      - name: Compute version and stamp
+      - name: Compute version
         shell: bash
         run: |
           COUNT=$(git rev-list --count HEAD)
-          VERSION="1.0.$COUNT"
+          VERSION="2.0.$COUNT"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "APP_VERSION = \"$VERSION\"" > _version.py
-          echo "Stamped version: $VERSION"
-
-      - name: Build React UI
-        run: |
           cd relay-ui
-          npm ci
-          npm run build
+          npm version $VERSION --no-git-tag-version --allow-same-version
 
-      - name: Install Python deps
-        run: |
-          pip install --quiet --upgrade pip
-          pip install --quiet pyinstaller pillow keyring requests flask flask-cors
+      - name: Install deps
+        run: cd relay-ui && npm ci
 
-      - name: Build .app/.dmg
-        run: |
-          chmod +x build_relay_mac.sh
-          ./build_relay_mac.sh
+      - name: Build Electron app (.dmg)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: cd relay-ui && npm run electron:build:mac
 
       - name: Upload .dmg to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          aws s3 cp dist/PlatAlgoRelay.dmg s3://platalgo/PlatAlgoRelay.dmg \
+          DMG_FILE=$(find dist-electron -name "*.dmg" | head -1)
+          aws s3 cp "$DMG_FILE" s3://platalgo/PlatAlgoRelay.dmg \
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
             --no-progress
 

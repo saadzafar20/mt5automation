@@ -14,62 +14,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: relay-ui/package-lock.json
 
-      - name: Compute version and stamp
+      - name: Compute version
         shell: bash
         run: |
           COUNT=$(git rev-list --count HEAD)
-          VERSION="1.0.$COUNT"
+          VERSION="2.0.$COUNT"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "APP_VERSION = \"$VERSION\"" > _version.py
-          echo "Stamped version: $VERSION"
-
-      - name: Build React UI
-        run: |
           cd relay-ui
-          npm ci
-          npm run build
+          npm version $VERSION --no-git-tag-version --allow-same-version
 
-      - name: Build .exe
-        run: |
-          pip install --quiet --upgrade pip
-          pip install --quiet pyinstaller pillow keyring requests flask flask-cors pywebview
-          if (-not (Test-Path "config.json")) { '{}' | Out-File -Encoding utf8 config.json }
-          pyinstaller --noconfirm --onefile --windowed `
-            --name PlatAlgoRelay `
-            --icon icon.ico `
-            --add-data "config.json;." `
-            --add-data "_version.py;." `
-            --add-data "relay-ui\dist;relay-ui\dist" `
-            --hidden-import relay_webview `
-            --hidden-import relay `
-            --hidden-import flask `
-            --hidden-import flask.json `
-            --hidden-import flask_cors `
-            --hidden-import webview `
-            --hidden-import keyring.backends.Windows `
-            --hidden-import keyring.backends.fail `
-            --collect-all flask `
-            --collect-all flask_cors `
-            --collect-all webview `
-            run_relay.py
-        shell: pwsh
+      - name: Install deps
+        run: cd relay-ui && npm ci
+
+      - name: Build Electron app (.exe)
+        run: cd relay-ui && npm run electron:build:win
 
       - name: Upload .exe to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          aws s3 cp dist\PlatAlgoRelay.exe s3://platalgo/PlatAlgoRelay.exe `
+          $EXE_FILE = Get-ChildItem -Path dist-electron -Filter "*.exe" -Recurse | Select-Object -First 1
+          aws s3 cp $EXE_FILE.FullName s3://platalgo/PlatAlgoRelay.exe `
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com `
             --no-progress
         shell: pwsh
