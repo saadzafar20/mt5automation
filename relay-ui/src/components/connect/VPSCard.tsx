@@ -17,12 +17,10 @@ export function VPSCard() {
 
   return (
     <Card gold>
-      <div className="flex items-center justify-between mb-6 gap-2">
-        <h2 className="text-base font-semibold text-fg flex items-center gap-2">
-          <Cloud size={18} className="text-accent" />
-          Cloud Execution
-        </h2>
-        <span className="text-[0.5rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0">
+      <div className="flex items-center gap-3 mb-6">
+        <Cloud size={18} className="text-accent shrink-0" />
+        <h2 className="text-base font-semibold text-fg flex-1">Cloud Execution</h2>
+        <span className="text-[0.6rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
           Recommended
         </span>
       </div>
@@ -34,11 +32,11 @@ export function VPSCard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 flex-1">
         {features.map(({ icon: Icon, text }, i) => (
           <motion.div
             key={i}
-            className="flex items-center gap-2.5 text-xs text-fg-muted py-1"
+            className="flex items-center gap-3 text-sm text-fg-muted"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}
@@ -49,7 +47,7 @@ export function VPSCard() {
         ))}
       </div>
 
-      <p className="text-sm text-fg-muted mt-6 leading-relaxed">
+      <p className="text-sm text-fg-muted mt-auto pt-6 leading-relaxed">
         Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 on Cloud"</span> to enable 24/7 automated execution without keeping your PC on.
       </p>
     </Card>

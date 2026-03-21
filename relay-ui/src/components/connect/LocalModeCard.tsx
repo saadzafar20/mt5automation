@@ -39,19 +39,17 @@ export function LocalModeCard() {
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-5 gap-2">
-        <h2 className="text-base font-semibold text-fg flex items-center gap-2">
-          <Monitor size={18} className="text-fg-soft" />
-          Local Mode
-        </h2>
-        <span className="text-[0.5rem] font-bold text-fg-muted bg-bg-hover px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+      <div className="flex items-center gap-3 mb-5">
+        <Monitor size={18} className="text-fg-soft shrink-0" />
+        <h2 className="text-base font-semibold text-fg flex-1">Local Mode</h2>
+        <span className="text-[0.6rem] font-bold text-fg-muted bg-bg-hover px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
           Windows
         </span>
       </div>
 
-      <div className="space-y-3 mb-6">
+      <div className="space-y-4 mb-auto flex-1">
         {features.map(({ text, ok }, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-fg-muted">
+          <div key={i} className="flex items-center gap-3 text-sm text-fg-muted">
             {ok ? (
               <Check size={14} className="text-success transition-all duration-300 hover:scale-125" />
             ) : (

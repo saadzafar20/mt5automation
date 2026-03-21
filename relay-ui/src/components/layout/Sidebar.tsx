@@ -20,8 +20,8 @@ export function Sidebar() {
   const vpsActive = useAppStore((s) => s.vpsActive);
 
   return (
-    <aside className="w-[220px] shrink-0 bg-bg-sidebar border-r border-border flex flex-col justify-between py-6 z-20">
-      <nav className="flex flex-col gap-2 px-4">
+    <aside className="w-[240px] shrink-0 bg-bg-sidebar border-r border-border flex flex-col justify-between py-8 z-20">
+      <nav className="flex flex-col gap-3 px-5">
         {navItems.map(({ tab, icon: Icon, label }) => {
           const isActive = activeTab === tab;
           return (
@@ -29,7 +29,7 @@ export function Sidebar() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`
-                flex items-center gap-4 px-4 py-3.5 rounded-lg text-[0.95rem] font-medium
+                flex items-center gap-4 px-4 py-4 rounded-lg text-base font-medium
                 cursor-pointer transition-all duration-200 border-none bg-transparent w-full text-left
                 ${isActive
                   ? 'bg-primary/10 text-fg border-l-2 border-l-accent'
