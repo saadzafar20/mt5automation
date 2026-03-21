@@ -13,8 +13,9 @@ export function Card({ children, gold, className = '', hover = true }: CardProps
     <motion.div
       className={`
         ${gold ? 'glass-gold' : 'glass'}
-        p-8
-        ${hover ? 'transition-all duration-300 hover:border-accent-muted hover:shadow-[var(--shadow-gold)]' : ''}
+        p-6
+        h-full
+        ${hover ? 'transition-all duration-300' : ''}
         ${className}
       `}
       whileHover={hover ? { y: -2 } : undefined}

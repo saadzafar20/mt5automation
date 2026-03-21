@@ -89,13 +89,13 @@ export function SignInCard() {
 
   return (
     <Card>
-      <h2 className="text-base font-semibold text-fg mb-5 flex items-center gap-2">
+      <h2 className="text-base font-semibold text-fg mb-4 flex items-center gap-2">
         <Mail size={18} className="text-accent" />
         Sign In
       </h2>
 
       {/* OAuth buttons */}
-      <div className="flex gap-3 mb-5">
+      <div className="flex gap-3 mb-4">
         <motion.button
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted"
           onClick={() => handleOAuth('google')}
@@ -123,14 +123,14 @@ export function SignInCard() {
         </motion.button>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px bg-border" />
         <span className="text-[0.625rem] text-fg-faint font-medium uppercase tracking-wider">or</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
       {/* Email/Password */}
-      <div className="space-y-5">
+      <div className="space-y-4">
         <Input
           label="Email"
           type="email"

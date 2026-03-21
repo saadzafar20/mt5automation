@@ -39,12 +39,12 @@ export function LocalModeCard() {
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-2">
         <h2 className="text-base font-semibold text-fg flex items-center gap-2">
           <Monitor size={18} className="text-fg-soft" />
           Local Mode
         </h2>
-        <span className="text-[0.5rem] font-bold text-fg-muted bg-bg-hover px-2 py-0.5 rounded-full uppercase tracking-wider">
+        <span className="text-[0.5rem] font-bold text-fg-muted bg-bg-hover px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
           Windows
         </span>
       </div>

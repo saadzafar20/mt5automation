@@ -17,12 +17,12 @@ export function VPSCard() {
 
   return (
     <Card gold>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-2">
         <h2 className="text-base font-semibold text-fg flex items-center gap-2">
           <Cloud size={18} className="text-accent" />
           Cloud Execution
         </h2>
-        <span className="text-[0.5rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">
+        <span className="text-[0.5rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0">
           Recommended
         </span>
       </div>

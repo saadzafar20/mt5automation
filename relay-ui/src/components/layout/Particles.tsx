@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 export function Particles() {
   const particles = useMemo(() => {
-    return Array.from({ length: 20 }, (_, i) => ({
+    return Array.from({ length: 60 }, (_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       size: 2 + Math.random() * 3,

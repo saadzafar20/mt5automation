@@ -92,7 +92,7 @@ export function MT5LoginCard() {
             disabled={loading || !auth.userId || !mt5Login || !mt5Password || !mt5Server}
           >
             <Cloud size={14} className="mr-2 inline" />
-            {loading ? 'Connecting...' : 'Login to MT5 on Cloud →'}
+            {loading ? 'Connecting...' : 'Login to MT5 on Cloud'}
           </GoldButton>
         )}
       </div>

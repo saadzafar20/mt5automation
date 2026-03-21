@@ -100,3 +100,27 @@ html, body, #root {
   0%, 100% { box-shadow: 0 0 0 0 var(--color-primary-glow); }
   50% { box-shadow: 0 0 0 8px transparent; }
 }
+
+/* Glassmorphism card styles */
+.glass {
+  background: var(--color-bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-glass);
+}
+.glass:hover {
+  box-shadow: 0 0 24px -4px hsla(155, 65%, 36%, 0.25), var(--shadow-glass);
+}
+.glass-gold {
+  background: var(--color-bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--color-accent-muted);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-gold);
+}
+.glass-gold:hover {
+  box-shadow: 0 0 28px -4px hsla(43, 85%, 55%, 0.3), var(--shadow-gold);
+}
