@@ -83,8 +83,9 @@ def _write_autotrading_config(data_dir: str):
 
 def _is_connected(mt5) -> bool:
     try:
-        term = mt5.terminal_info()
-        return term is not None and bool(getattr(term, "connected", False))
+        # account_info() is more reliable than terminal_info().connected
+        # in headless/portable mode — it actually round-trips to the broker.
+        return mt5.account_info() is not None
     except Exception:
         return False
 

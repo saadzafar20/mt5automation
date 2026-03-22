@@ -80,6 +80,12 @@ class MT5UserSession:
 
             result = self._read_json_timeout(TRADE_TIMEOUT_SECS)
 
+            # Subprocess reconnected internally and sent a stale "ready" message
+            # before processing our command — read one more response.
+            if result.get("status") == "ready":
+                logger.info(f"[{self.user_id}] Consumed stale 'ready' — reading trade result")
+                result = self._read_json_timeout(TRADE_TIMEOUT_SECS)
+
         # If we timed out the subprocess may be in an inconsistent state — kill it
         if result.get("_timed_out"):
             logger.warning(f"[{self.user_id}] Trade timed out — restarting subprocess")
