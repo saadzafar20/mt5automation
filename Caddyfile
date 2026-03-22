@@ -1,4 +1,12 @@
 app.platalgo.com {
+    # Serve built .exe and manifest from the downloads folder
+    handle /downloads/* {
+        root * C:/trading
+        file_server
+        header Content-Disposition "attachment"
+    }
+
+    # Everything else goes to the Python bridge
     reverse_proxy localhost:8080
 
     # Security headers
