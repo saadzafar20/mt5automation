@@ -192,9 +192,20 @@ def main():
                         cfg.write(f)
 
                     _autotrading_patched = True
-                    _log(f"[{user_id}] Patched {config_path} — restarting terminal")
+                    _log(f"[{user_id}] Patched {config_path} — killing terminal process to force config reload")
+
+                    # mt5.shutdown() only disconnects — terminal process keeps running
+                    # and won't re-read common.ini. Must kill the process by path so
+                    # the next mt5.initialize() starts a fresh terminal with new config.
                     mt5.shutdown()
-                    time.sleep(2)
+                    if terminal_exe and os.path.exists(terminal_exe):
+                        import subprocess as sp
+                        sp.run(
+                            ['powershell', '-Command',
+                             f'Get-Process | Where-Object {{ $_.Path -eq "{terminal_exe}" }} | Stop-Process -Force'],
+                            capture_output=True, timeout=10,
+                        )
+                    time.sleep(3)
                     ok = mt5.initialize(**init_kwargs)
                     if not ok:
                         _log(f"[{user_id}] Re-init after patch failed: {mt5.last_error()}")
