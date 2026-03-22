@@ -161,6 +161,46 @@ def main():
             time.sleep(RECONNECT_DELAY)
             continue
 
+        # ── Ensure AutoTrading is enabled ─────────────────────────────────────
+        # Check the actual data_path the terminal is using (may differ from
+        # data_dir if portable mode resolved to AppData) and patch common.ini
+        # with the correct UTF-16 encoding that MT5 expects.
+        term = mt5.terminal_info()
+        if term is not None and not getattr(term, "trade_allowed", True):
+            actual_data_path = getattr(term, "data_path", None)
+            if actual_data_path:
+                try:
+                    import configparser
+                    config_path = os.path.join(actual_data_path, "config", "common.ini")
+                    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+                    # Detect existing encoding (MT5 uses UTF-16 LE with BOM)
+                    cfg = configparser.RawConfigParser()
+                    try:
+                        with open(config_path, "rb") as f:
+                            raw = f.read()
+                        enc = "utf-16" if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else "utf-8-sig"
+                        cfg.read(config_path, encoding=enc)
+                    except Exception:
+                        enc = "utf-16"
+
+                    if not cfg.has_section("Common"):
+                        cfg.add_section("Common")
+                    cfg.set("Common", "ExpertAdvisorsEnabled", "1")
+                    with open(config_path, "w", encoding="utf-16") as f:
+                        cfg.write(f)
+
+                    _log(f"[{user_id}] Patched {config_path} — restarting terminal")
+                    mt5.shutdown()
+                    time.sleep(2)
+                    ok = mt5.initialize(**init_kwargs)
+                    if not ok:
+                        _log(f"[{user_id}] Re-init after patch failed: {mt5.last_error()}")
+                        time.sleep(RECONNECT_DELAY)
+                        continue
+                except Exception as e:
+                    _log(f"[{user_id}] Could not patch common.ini: {e}")
+
         info = mt5.account_info()
         account_str = f"{info.login} on {info.server}" if info else "unknown"
         _log(f"[{user_id}] Connected: {account_str}")
