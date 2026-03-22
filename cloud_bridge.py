@@ -2329,10 +2329,12 @@ def managed_status():
         return auth_err
 
     account = store.get_managed_account(user_id)
+    session = session_manager.session_status(user_id)
     return jsonify({
         "user_id": user_id,
         "managed_execution": bool(account and account.get("enabled") == 1),
         "configured": bool(account),
+        "connected": session.get("connected", False),
         "updated_at": account.get("updated_at") if account else None,
     })
 

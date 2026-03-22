@@ -1,27 +1,103 @@
-import { useState } from 'react';
-import { Lock, Eye, EyeOff, Cloud, ExternalLink, LogIn } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Lock, Eye, EyeOff, Cloud, ExternalLink, LogIn, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card } from '../ui/Card';
 import { GoldButton } from '../ui/GoldButton';
 import { Input } from '../ui/Input';
 import { OutlineButton } from '../ui/OutlineButton';
 import { useAppStore } from '../../store/appStore';
-import { managedEnable } from '../../lib/api';
+import { managedEnable, managedStatus } from '../../lib/api';
 import { bridge } from '../../lib/bridge';
 
-export function MT5LoginCard() {
-  const [mt5Login, setMt5Login] = useState('');
-  const [mt5Password, setMt5Password] = useState('');
-  const [mt5Server, setMt5Server] = useState('');
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [validationError, setValidationError] = useState('');
-  const [editing, setEditing] = useState(false);
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS  = 60000; // 60 s max
 
-  const auth = useAppStore((s) => s.auth);
+const CONNECT_STEPS = [
+  'Saving credentials securely…',
+  'Launching dedicated MT5 session…',
+  'Authenticating with broker…',
+  'Enabling AutoTrading…',
+];
+
+type Phase = 'form' | 'connecting' | 'connected' | 'failed';
+
+export function MT5LoginCard() {
+  const [mt5Login, setMt5Login]       = useState('');
+  const [mt5Password, setMt5Password] = useState('');
+  const [mt5Server, setMt5Server]     = useState('');
+  const [showPw, setShowPw]           = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [editing, setEditing]         = useState(false);
+
+  // Connecting phase state
+  const [phase, setPhase]       = useState<Phase>('form');
+  const [stepIdx, setStepIdx]   = useState(0);
+  const [elapsed, setElapsed]   = useState(0);
+  const [failReason, setFailReason] = useState('');
+
+  const pollRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAt  = useRef<number>(0);
+
+  const auth        = useAppStore((s) => s.auth);
   const setVpsActive = useAppStore((s) => s.setVpsActive);
-  const vpsActive = useAppStore((s) => s.vpsActive);
-  const dots = useAppStore((s) => s.relayDots);
+  const vpsActive   = useAppStore((s) => s.vpsActive);
+  const dots        = useAppStore((s) => s.relayDots);
+
+  // Advance step label every ~4 s while connecting
+  useEffect(() => {
+    if (phase !== 'connecting') return;
+    const id = setInterval(() => {
+      setStepIdx((i) => Math.min(i + 1, CONNECT_STEPS.length - 1));
+    }, 4000);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // Elapsed-seconds ticker
+  useEffect(() => {
+    if (phase !== 'connecting') { setElapsed(0); return; }
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    timerRef.current = id;
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // Clean up on unmount
+  useEffect(() => () => {
+    if (pollRef.current) clearTimeout(pollRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, []);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
+  };
+
+  const startPolling = (userId: string, apiKey?: string) => {
+    startedAt.current = Date.now();
+
+    const tick = async () => {
+      const elapsed = Date.now() - startedAt.current;
+      if (elapsed >= POLL_TIMEOUT_MS) {
+        setPhase('failed');
+        setFailReason('MT5 session timed out — check your credentials and try again');
+        return;
+      }
+      try {
+        const status = await managedStatus(userId, apiKey);
+        if (status.connected) {
+          stopPolling();
+          setPhase('connected');
+          setVpsActive(true);
+          toast.success('MT5 connected — 24/7 VPS Mode active');
+          return;
+        }
+      } catch {
+        // network hiccup — keep polling
+      }
+      pollRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+    };
+
+    pollRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+  };
 
   const validate = () => {
     if (!mt5Login.trim()) return 'Account number is required';
@@ -35,8 +111,11 @@ export function MT5LoginCard() {
     if (!auth.userId) return;
     const err = validate();
     if (err) { setValidationError(err); return; }
-    setLoading(true);
+
     setValidationError('');
+    setStepIdx(0);
+    setPhase('connecting');
+
     try {
       const result = await managedEnable({
         user_id: auth.userId,
@@ -45,27 +124,33 @@ export function MT5LoginCard() {
         mt5_password: mt5Password,
         mt5_server: mt5Server.trim(),
       });
+
       if (result.error) {
         const lower: string = result.error.toLowerCase();
-        const friendly = (lower.includes('password') || lower.includes('credentials') || lower.includes('invalid') || lower.includes('auth'))
-          ? 'Incorrect credentials — please check your MT5 login and password'
+        const msg = (lower.includes('password') || lower.includes('credentials') || lower.includes('invalid') || lower.includes('auth'))
+          ? 'Incorrect credentials — check your MT5 login and password'
           : result.error;
-        toast.error(friendly);
-      } else {
-        setVpsActive(true);
-        setEditing(false);
-        toast.success('MT5 connected — 24/7 VPS Mode active');
+        setPhase('failed');
+        setFailReason(msg);
+        return;
       }
+
+      // Server accepted — now poll for actual MT5 connection
+      startPolling(auth.userId, auth.apiKey || undefined);
     } catch {
-      toast.error('Connection failed — check your internet connection');
-    } finally {
-      setLoading(false);
+      setPhase('failed');
+      setFailReason('Connection failed — check your internet connection');
     }
   };
 
-  const showForm = !vpsActive || editing;
+  const handleRetry = () => {
+    stopPolling();
+    setPhase('form');
+    setFailReason('');
+  };
 
-  // Prompt to sign in first
+  const showForm = (!vpsActive && phase === 'form') || editing;
+
   if (!auth.userId && !vpsActive) {
     return (
       <Card>
@@ -90,9 +175,48 @@ export function MT5LoginCard() {
         <span className="text-[0.5rem] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">OPTIONAL</span>
       </div>
 
-      {showForm ? (
+      {/* ── CONNECTING PHASE ─────────────────────────────── */}
+      {phase === 'connecting' && (
+        <div className="flex flex-col items-center gap-5 py-4">
+          <div className="relative">
+            <div className="w-14 h-14 rounded-full border-2 border-accent/20 flex items-center justify-center">
+              <Cloud size={22} className="text-accent" />
+            </div>
+            <Loader2 size={58} className="absolute -inset-0.5 text-accent animate-spin opacity-60" strokeWidth={1} />
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-fg">{CONNECT_STEPS[stepIdx]}</p>
+            <p className="text-xs text-fg-faint">{elapsed}s elapsed</p>
+          </div>
+          <div className="w-full bg-bg-input rounded-full h-1 overflow-hidden">
+            <div
+              className="h-full bg-accent transition-all duration-1000 rounded-full"
+              style={{ width: `${Math.min((elapsed / (POLL_TIMEOUT_MS / 1000)) * 100, 95)}%` }}
+            />
+          </div>
+          <p className="text-xs text-fg-muted text-center">
+            MT5 terminals take up to 60s on first launch — hang tight
+          </p>
+        </div>
+      )}
+
+      {/* ── FAILED PHASE ─────────────────────────────────── */}
+      {phase === 'failed' && (
+        <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-14 h-14 rounded-full bg-danger/10 border border-danger/20 flex items-center justify-center">
+            <XCircle size={24} className="text-danger" />
+          </div>
+          <div className="text-center space-y-1.5">
+            <p className="text-sm font-semibold text-danger">Connection failed</p>
+            <p className="text-xs text-fg-muted max-w-[220px]">{failReason}</p>
+          </div>
+          <GoldButton onClick={handleRetry}>Try again</GoldButton>
+        </div>
+      )}
+
+      {/* ── FORM ─────────────────────────────────────────── */}
+      {showForm && phase !== 'connecting' && phase !== 'failed' && (
         <div className="space-y-6">
-          {/* Account number */}
           <div className="space-y-2">
             <Input
               label="Account Number"
@@ -107,13 +231,11 @@ export function MT5LoginCard() {
                 className="text-accent underline cursor-pointer bg-transparent border-none p-0 text-xs"
                 onClick={() => bridge.openExternal('https://www.metatrader5.com/en/download')}
               >
-                Download
-                <ExternalLink size={10} className="inline ml-0.5 mb-0.5" />
+                Download<ExternalLink size={10} className="inline ml-0.5 mb-0.5" />
               </button>
             </p>
           </div>
 
-          {/* Password */}
           <div className="space-y-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-fg-muted">MT5 Password</label>
@@ -136,7 +258,6 @@ export function MT5LoginCard() {
             </div>
           </div>
 
-          {/* Broker server */}
           <div className="space-y-2">
             <Input
               label="Broker Server"
@@ -150,8 +271,7 @@ export function MT5LoginCard() {
                 className="text-accent underline cursor-pointer bg-transparent border-none p-0 text-xs"
                 onClick={() => bridge.openExternal('https://exness.com')}
               >
-                Get one
-                <ExternalLink size={10} className="inline ml-0.5 mb-0.5" />
+                Get one<ExternalLink size={10} className="inline ml-0.5 mb-0.5" />
               </button>
             </p>
           </div>
@@ -163,32 +283,33 @@ export function MT5LoginCard() {
           )}
 
           <div className="flex gap-3">
-            <GoldButton
-              fullWidth
-              onClick={handleCloudLogin}
-              disabled={loading || !auth.userId}
-            >
+            <GoldButton fullWidth onClick={handleCloudLogin} disabled={!auth.userId}>
               <Cloud size={14} className="mr-2 inline" />
-              {loading ? 'Connecting...' : 'Login to MT5 for 24/7 VPS Mode'}
+              Login to MT5 for 24/7 VPS Mode
             </GoldButton>
             {editing && (
-              <OutlineButton onClick={() => { setEditing(false); setValidationError(''); }}>
+              <OutlineButton onClick={() => { setEditing(false); setValidationError(''); setPhase('connected'); }}>
                 Cancel
               </OutlineButton>
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* ── ACTIVE / CONNECTED ───────────────────────────── */}
+      {(vpsActive || phase === 'connected') && !editing && phase !== 'connecting' && phase !== 'failed' && (
         <div className="space-y-4">
           <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--radius)] border text-sm font-medium ${
             dots.mt5 === 'online'
               ? 'bg-success-bg border-success/20 text-success'
               : 'bg-accent/10 border-accent/20 text-accent'
           }`}>
-            <Cloud size={16} />
+            {dots.mt5 === 'online'
+              ? <CheckCircle2 size={16} />
+              : <Loader2 size={16} className="animate-spin" />}
             {dots.mt5 === 'online'
               ? 'Connected to Cloud — 24/7 Execution Active'
-              : 'Cloud Relay Active — MT5 Connecting...'}
+              : 'Cloud Relay Active — MT5 Connecting…'}
           </div>
 
           <div className="flex gap-4 text-xs text-fg-muted px-1">
@@ -206,7 +327,7 @@ export function MT5LoginCard() {
             </span>
           </div>
 
-          <OutlineButton size="sm" onClick={() => setEditing(true)}>
+          <OutlineButton size="sm" onClick={() => { setEditing(true); setPhase('form'); }}>
             Change Credentials
           </OutlineButton>
         </div>

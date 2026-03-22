@@ -81,7 +81,7 @@ export const bridge = {
 
   saveLastUser: async (dataJson: string): Promise<void> => {
     if (eb()) {
-      await eb()!.lastUserSet(JSON.parse(dataJson));
+      try { await eb()!.lastUserSet(JSON.parse(dataJson)); } catch { /* ignore */ }
     }
   },
 

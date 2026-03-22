@@ -18,6 +18,7 @@ export async function startOAuth(provider: 'google' | 'facebook') {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider }),
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<{ auth_url: string; state: string }>;
 }
 
@@ -68,7 +69,24 @@ export async function managedEnable(params: {
   }
 
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    let err = `HTTP ${res.status}`;
+    try { const j = await res.json(); err = j.error || err; } catch { /* non-JSON error */ }
+    return { error: err };
+  }
   return res.json();
+}
+
+export async function managedStatus(userId: string, apiKey?: string) {
+  const headers: Record<string, string> = { 'X-User-ID': userId };
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  const res = await fetch(`${BRIDGE_URL}/managed/status`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<{
+    configured: boolean;
+    connected: boolean;
+    managed_execution: boolean;
+  }>;
 }
 
 /* ── Telegram API (authenticated with API key headers) ── */

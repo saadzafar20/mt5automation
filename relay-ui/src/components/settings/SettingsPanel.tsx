@@ -61,12 +61,13 @@ export function SettingsPanel() {
   }, [logs]);
 
   const toggleStartup = async () => {
-    if (startup) {
-      await bridge.disableStartup();
-    } else {
-      await bridge.enableStartup();
+    try {
+      if (startup) await bridge.disableStartup();
+      else await bridge.enableStartup();
+      setStartup(!startup);
+    } catch {
+      // Bridge not available (web mode) — ignore
     }
-    setStartup(!startup);
   };
 
   return (

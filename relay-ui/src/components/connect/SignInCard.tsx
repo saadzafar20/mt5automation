@@ -72,7 +72,12 @@ export function SignInCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: email, password }),
       });
-      const data = await res.json();
+      let data: Record<string, string> = {};
+      try { data = await res.json(); } catch { /* ignore parse error */ }
+      if (!res.ok) {
+        toast.error(data.error || 'Login failed — please check your credentials');
+        return;
+      }
       if (data.status === 'ok' || data.token) {
         setAuth({ userId: email, apiKey: data.api_key || null });
         if (remember) {
