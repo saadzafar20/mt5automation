@@ -130,6 +130,7 @@ def main():
         sys.path.insert(0, project_dir)
 
     # ── Connect + command loop ────────────────────────────────────────────────
+    _autotrading_patched = False  # patch once on first successful connect
     while True:
         # Pre-write autotrading config before every connect attempt
         try:
@@ -162,12 +163,12 @@ def main():
             continue
 
         # ── Ensure AutoTrading is enabled ─────────────────────────────────────
-        # Check the actual data_path the terminal is using (may differ from
-        # data_dir if portable mode resolved to AppData) and patch common.ini
-        # with the correct UTF-16 encoding that MT5 expects.
-        term = mt5.terminal_info()
-        if term is not None and not getattr(term, "trade_allowed", True):
-            actual_data_path = getattr(term, "data_path", None)
+        # Always patch common.ini on first connect — trade_allowed may report
+        # True in headless mode even when AutoTrading is actually disabled.
+        # We only do this once per session startup (not on reconnects).
+        if not _autotrading_patched:
+            term = mt5.terminal_info()
+            actual_data_path = getattr(term, "data_path", None) if term else None
             if actual_data_path:
                 try:
                     import configparser
@@ -190,6 +191,7 @@ def main():
                     with open(config_path, "w", encoding="utf-16") as f:
                         cfg.write(f)
 
+                    _autotrading_patched = True
                     _log(f"[{user_id}] Patched {config_path} — restarting terminal")
                     mt5.shutdown()
                     time.sleep(2)
@@ -200,6 +202,7 @@ def main():
                         continue
                 except Exception as e:
                     _log(f"[{user_id}] Could not patch common.ini: {e}")
+                    _autotrading_patched = True  # don't retry patch on failure
 
         info = mt5.account_info()
         account_str = f"{info.login} on {info.server}" if info else "unknown"
