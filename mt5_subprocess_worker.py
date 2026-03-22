@@ -167,25 +167,13 @@ def main():
             actual_data_path = getattr(term, "data_path", None) if term else None
             if actual_data_path:
                 try:
-                    import configparser
                     config_path = os.path.join(actual_data_path, "config", "common.ini")
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
 
-                    # Detect existing encoding (MT5 uses UTF-16 LE with BOM)
-                    cfg = configparser.RawConfigParser()
-                    try:
-                        with open(config_path, "rb") as f:
-                            raw = f.read()
-                        enc = "utf-16" if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else "utf-8-sig"
-                        cfg.read(config_path, encoding=enc)
-                    except Exception:
-                        enc = "utf-16"
-
-                    if not cfg.has_section("Common"):
-                        cfg.add_section("Common")
-                    cfg.set("Common", "ExpertAdvisorsEnabled", "1")
+                    # Write directly — configparser lowercases keys and adds spaces around
+                    # '=' which MT5 does not recognise. Must match MT5's exact format.
                     with open(config_path, "w", encoding="utf-16") as f:
-                        cfg.write(f)
+                        f.write("[Common]\nExpertAdvisorsEnabled=1\n")
 
                     _autotrading_patched = True
                     _log(f"[{user_id}] Patched {config_path} — killing terminal process to force config reload")
