@@ -20,6 +20,4 @@ jobs:
           script: |
             cd C:\trading
             git pull origin main
-            wmic process where "commandline like '%%cloud_bridge.py%%'" delete
-            timeout /t 3 /nobreak >nul
-            start /B cmd /c "cd /d C:\trading && call start_cloud_bridge_windows.bat > C:\trading\bridge.log 2>&1"
+            nssm restart PlatAlgoBridge
