@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Link2, LayoutDashboard, TrendingUp, BookOpen, Settings, Send,
@@ -18,6 +19,11 @@ export function Sidebar() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const vpsActive = useAppStore((s) => s.vpsActive);
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
+
+  useEffect(() => {
+    window.electronBridge?.getVersion().then((v) => { if (v) setAppVersion(v); });
+  }, []);
 
   return (
     <aside className="w-[240px] shrink-0 bg-bg-sidebar border-r border-border flex flex-col py-8 z-20">
@@ -42,7 +48,7 @@ export function Sidebar() {
                 size={22}
                 className={`transition-all duration-300 ${isActive
                   ? 'text-accent drop-shadow-[0_0_6px_var(--color-accent-glow)]'
-                  : 'group-hover:text-accent'}`}
+                  : ''}`}
               />
               {label}
             </motion.button>
@@ -57,7 +63,7 @@ export function Sidebar() {
             VPS Active — 24/7
           </div>
         )}
-        <div className="text-[0.625rem] text-fg-faint px-3">v{APP_VERSION}</div>
+        <div className="text-[0.625rem] text-fg-faint px-3">v{appVersion}</div>
       </div>
     </aside>
   );

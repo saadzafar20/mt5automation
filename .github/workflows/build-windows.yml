@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           COUNT=$(git rev-list --count HEAD)
-          VERSION="2.0.$COUNT"
+          VERSION="2.1.$COUNT"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           cd relay-ui
           npm version $VERSION --no-git-tag-version --allow-same-version
@@ -43,7 +43,12 @@ jobs:
         shell: bash
         run: |
           EXE_FILE=$(find dist-electron -name "*.exe" -not -name "*uninstaller*" | head -1)
+          # Upload with generic name for website download link
           aws s3 cp "$EXE_FILE" s3://platalgo/PlatAlgoRelay.exe \
+            --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
+            --no-progress
+          # Also upload with versioned name so latest.yml can reference it for auto-update
+          aws s3 cp "$EXE_FILE" "s3://platalgo/$(basename "$EXE_FILE")" \
             --endpoint-url https://a386c836005eda80b1b2f34221189103.r2.cloudflarestorage.com \
             --no-progress
 

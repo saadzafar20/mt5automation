@@ -1,27 +1,57 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Power, FolderOpen, Bell, Volume2, Info, Trash2 } from 'lucide-react';
+import { Power, Bell, Volume2, Info, Trash2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { OutlineButton } from '../ui/OutlineButton';
 import { ScrollReveal } from '../ui/ScrollReveal';
 import { useAppStore } from '../../store/appStore';
 import { bridge } from '../../lib/bridge';
-import { clearLogs } from '../../lib/api';
 import { APP_VERSION, BRIDGE_URL } from '../../lib/constants';
+
+function usePersistentToggle(key: string, defaultValue = true) {
+  const [value, setValue] = useState(() => {
+    const stored = localStorage.getItem(key);
+    return stored !== null ? stored === 'true' : defaultValue;
+  });
+  const toggle = () => {
+    setValue((prev) => {
+      const next = !prev;
+      localStorage.setItem(key, String(next));
+      return next;
+    });
+  };
+  return [value, toggle] as const;
+}
+
+function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <motion.button
+      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 border-none shrink-0 ${enabled ? 'bg-success' : 'bg-bg-input border border-border'}`}
+      onClick={onToggle}
+      whileTap={{ scale: 0.95 }}
+    >
+      <motion.div
+        className="w-4 h-4 rounded-full bg-white absolute top-0.5"
+        animate={{ left: enabled ? 22 : 2 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      />
+    </motion.button>
+  );
+}
 
 export function SettingsPanel() {
   const [startup, setStartup] = useState(false);
-  const [tray, setTray] = useState(true);
-  const [sound, setSound] = useState(true);
-  const [desktop, setDesktop] = useState(true);
-  const [mt5Path, setMt5Path] = useState('');
+  const [sound, toggleSound] = usePersistentToggle('setting-sound', true);
+  const [desktop, toggleDesktop] = usePersistentToggle('setting-desktop', true);
+  const [tray, toggleTray] = usePersistentToggle('setting-tray', true);
   const logs = useAppStore((s) => s.logs);
   const storeClearLogs = useAppStore((s) => s.clearLogs);
   const logRef = useRef<HTMLDivElement>(null);
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
 
   useEffect(() => {
     bridge.isStartupEnabled().then((v) => v !== undefined && setStartup(v));
-    bridge.detectMt5Path().then((v) => v && setMt5Path(v));
+    window.electronBridge?.getVersion().then((v) => { if (v) setAppVersion(v); });
   }, []);
 
   useEffect(() => {
@@ -39,134 +69,65 @@ export function SettingsPanel() {
     setStartup(!startup);
   };
 
-  const browseMt5 = async () => {
-    const path = await bridge.browseFile('Select MT5 Terminal', 'C:\\Program Files', '*.exe');
-    if (path) setMt5Path(path);
-  };
-
-  const handleClearLogs = async () => {
-    storeClearLogs();
-    await clearLogs();
-  };
-
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <ScrollReveal variant="fade-up">
-        <h1 className="text-xl font-bold text-fg mb-1">Settings</h1>
+        <h1 className="text-2xl font-bold text-fg mb-2">Settings</h1>
         <p className="text-sm text-fg-muted">Configure your relay preferences</p>
       </ScrollReveal>
 
       {/* General */}
       <ScrollReveal variant="fade-up" delay={0.05}>
         <Card>
-          <h3 className="text-sm font-semibold text-fg mb-4 flex items-center gap-2">
-            <Power size={16} className="text-accent transition-all duration-300 hover:scale-125 hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
+          <h3 className="text-sm font-semibold text-fg mb-5 flex items-center gap-2">
+            <Power size={16} className="text-accent" />
             General
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs text-fg-muted">Launch on startup</span>
-              <motion.button
-                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 border-none ${startup ? 'bg-success' : 'bg-bg-input border border-border'}`}
-                onClick={toggleStartup}
-                whileTap={{ scale: 0.95 }}
-              >
-                <motion.div
-                  className="w-4 h-4 rounded-full bg-white absolute top-0.5"
-                  animate={{ left: startup ? 22 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              </motion.button>
+              <span className="text-sm text-fg-muted">Launch on startup</span>
+              <Toggle enabled={startup} onToggle={toggleStartup} />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs text-fg-muted">Minimize to system tray on close</span>
-              <motion.button
-                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 border-none ${tray ? 'bg-success' : 'bg-bg-input border border-border'}`}
-                onClick={() => setTray(!tray)}
-                whileTap={{ scale: 0.95 }}
-              >
-                <motion.div
-                  className="w-4 h-4 rounded-full bg-white absolute top-0.5"
-                  animate={{ left: tray ? 22 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              </motion.button>
+              <span className="text-sm text-fg-muted">Minimize to system tray on close</span>
+              <Toggle enabled={tray} onToggle={toggleTray} />
             </label>
-          </div>
-        </Card>
-      </ScrollReveal>
-
-      {/* MT5 Path */}
-      <ScrollReveal variant="fade-up" delay={0.1}>
-        <Card>
-          <h3 className="text-sm font-semibold text-fg mb-4 flex items-center gap-2">
-            <FolderOpen size={16} className="text-accent transition-all duration-300 hover:scale-125 hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
-            MT5 Terminal
-            <span className="text-[0.5rem] font-bold text-fg-muted bg-bg-hover px-1.5 py-0.5 rounded">WINDOWS ONLY</span>
-          </h3>
-          <div className="flex gap-2">
-            <input
-              readOnly
-              value={mt5Path || 'Auto-detected or browse...'}
-              className="flex-1 bg-bg-input border border-border text-fg text-xs px-3 py-2 rounded-[var(--radius)] outline-none font-mono"
-            />
-            <OutlineButton size="sm" onClick={browseMt5}>Browse</OutlineButton>
           </div>
         </Card>
       </ScrollReveal>
 
       {/* Notifications */}
-      <ScrollReveal variant="fade-up" delay={0.15}>
+      <ScrollReveal variant="fade-up" delay={0.1}>
         <Card>
-          <h3 className="text-sm font-semibold text-fg mb-4 flex items-center gap-2">
-            <Bell size={16} className="text-accent transition-all duration-300 hover:scale-125 hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
+          <h3 className="text-sm font-semibold text-fg mb-5 flex items-center gap-2">
+            <Bell size={16} className="text-accent" />
             Notifications
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs text-fg-muted flex items-center gap-2">
+              <span className="text-sm text-fg-muted flex items-center gap-2">
                 <Volume2 size={14} />
                 Play sound on trade execution
               </span>
-              <motion.button
-                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 border-none ${sound ? 'bg-success' : 'bg-bg-input border border-border'}`}
-                onClick={() => setSound(!sound)}
-                whileTap={{ scale: 0.95 }}
-              >
-                <motion.div
-                  className="w-4 h-4 rounded-full bg-white absolute top-0.5"
-                  animate={{ left: sound ? 22 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              </motion.button>
+              <Toggle enabled={sound} onToggle={toggleSound} />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs text-fg-muted flex items-center gap-2">
+              <span className="text-sm text-fg-muted flex items-center gap-2">
                 <Bell size={14} />
                 Show desktop notifications
               </span>
-              <motion.button
-                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 border-none ${desktop ? 'bg-success' : 'bg-bg-input border border-border'}`}
-                onClick={() => setDesktop(!desktop)}
-                whileTap={{ scale: 0.95 }}
-              >
-                <motion.div
-                  className="w-4 h-4 rounded-full bg-white absolute top-0.5"
-                  animate={{ left: desktop ? 22 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              </motion.button>
+              <Toggle enabled={desktop} onToggle={toggleDesktop} />
             </label>
           </div>
         </Card>
       </ScrollReveal>
 
       {/* Relay Log */}
-      <ScrollReveal variant="fade-up" delay={0.2}>
+      <ScrollReveal variant="fade-up" delay={0.15}>
         <Card>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-fg">Relay Log</h3>
-            <OutlineButton size="sm" onClick={handleClearLogs}>
+            <OutlineButton size="sm" onClick={storeClearLogs}>
               <Trash2 size={12} className="mr-1" />
               Clear
             </OutlineButton>
@@ -185,14 +146,14 @@ export function SettingsPanel() {
       </ScrollReveal>
 
       {/* About */}
-      <ScrollReveal variant="fade-up" delay={0.25}>
+      <ScrollReveal variant="fade-up" delay={0.2}>
         <Card>
-          <h3 className="text-sm font-semibold text-fg mb-3 flex items-center gap-2">
-            <Info size={16} className="text-accent transition-all duration-300 hover:scale-125 hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
+          <h3 className="text-sm font-semibold text-fg mb-4 flex items-center gap-2">
+            <Info size={16} className="text-accent" />
             About
           </h3>
-          <div className="text-xs text-fg-muted space-y-1.5">
-            <div>Version: <span className="text-fg font-mono">{APP_VERSION}</span></div>
+          <div className="text-sm text-fg-muted space-y-2">
+            <div>Version: <span className="text-fg font-mono">{appVersion}</span></div>
             <div>Bridge: <span className="text-fg font-mono">{BRIDGE_URL}</span></div>
             <div className="pt-2 text-fg-faint">
               <span className="text-accent font-semibold">Plat</span>

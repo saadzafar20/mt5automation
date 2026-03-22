@@ -2,16 +2,24 @@ import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { BRIDGE_URL } from '../lib/constants';
 
-export function useRelayPolling(intervalMs = 5000) {
-  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+export function useRelayPolling(intervalMs = 10000) {
+  const isPolling = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function poll() {
-      const { auth, setRelayDots, setRelayStatus, setVpsActive, setDashboardData } = useAppStore.getState();
+      // Prevent concurrent polls on slow connections
+      if (isPolling.current) return;
+      isPolling.current = true;
+
+      const { auth, setRelayDots, setRelayStatus, setVpsActive, setDashboardData } =
+        useAppStore.getState();
 
       if (!auth.userId || !auth.apiKey) {
         setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
         setRelayStatus('Idle');
+        isPolling.current = false;
         return;
       }
 
@@ -25,6 +33,7 @@ export function useRelayPolling(intervalMs = 5000) {
         if (!res.ok) {
           setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
           setRelayStatus('Idle');
+          isPolling.current = false;
           return;
         }
 
@@ -33,7 +42,6 @@ export function useRelayPolling(intervalMs = 5000) {
         const relays = dashboard.relays || {};
         const relayIds = Object.keys(relays);
 
-        // Update dashboard data so DashboardPanel stays in sync
         setDashboardData({
           webhookUrl: data.webhook_url || '',
           apiKey: data.api_key || auth.apiKey || '',
@@ -42,11 +50,9 @@ export function useRelayPolling(intervalMs = 5000) {
           scripts: dashboard.scripts || [],
         });
 
-        // Bridge is online if we reached the cloud
         setRelayDots({ bridge: 'online' });
 
         if (relayIds.length > 0) {
-          // Check relay state AND metadata for MT5/broker connection
           let mt5Connected = false;
           let brokerConnected = false;
           let anyRelayOnline = false;
@@ -55,7 +61,6 @@ export function useRelayPolling(intervalMs = 5000) {
             const r = relays[id];
             if (r?.state === 'online') {
               anyRelayOnline = true;
-              // Relay metadata contains actual MT5/broker connection status
               const meta = r.metadata || {};
               if (meta.mt5_connected) mt5Connected = true;
               if (meta.broker_connected) brokerConnected = true;
@@ -73,17 +78,30 @@ export function useRelayPolling(intervalMs = 5000) {
           setRelayStatus('Idle');
         }
 
-        // Check if any managed relay exists (prefix "managed-")
         const hasManagedRelay = relayIds.some((id) => id.startsWith('managed-'));
         setVpsActive(hasManagedRelay);
       } catch {
         setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
         setRelayStatus('Offline');
+      } finally {
+        isPolling.current = false;
       }
     }
 
-    poll();
-    intervalRef.current = setInterval(poll, intervalMs);
-    return () => clearInterval(intervalRef.current);
+    // Short initial delay to let auth restoration from bridge.getLastUser() complete
+    // before the first poll (avoids a brief "offline" flash on startup)
+    const initialTimer = setTimeout(() => {
+      if (!cancelled) poll();
+    }, 400);
+
+    const interval = setInterval(() => {
+      if (!cancelled) poll();
+    }, intervalMs);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, [intervalMs]);
 }

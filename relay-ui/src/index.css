@@ -84,18 +84,7 @@ html, body, #root {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-@keyframes float-orb {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(10px, -15px) scale(1.05); }
-  50% { transform: translate(-5px, -25px) scale(0.95); }
-  75% { transform: translate(-15px, -10px) scale(1.02); }
-}
-@keyframes drift-particle {
-  0% { transform: translateY(0) translateX(0); opacity: 0; }
-  10% { opacity: 0.5; }
-  90% { opacity: 0.5; }
-  100% { transform: translateY(-100vh) translateX(30px); opacity: 0; }
-}
+
 @keyframes ring-pulse {
   0%, 100% { box-shadow: 0 0 0 0 var(--color-primary-glow); }
   50% { box-shadow: 0 0 0 8px transparent; }
@@ -123,4 +112,25 @@ html, body, #root {
 }
 .glass-gold:hover {
   box-shadow: 0 0 28px -4px hsla(43, 85%, 55%, 0.3), var(--shadow-gold);
+}
+
+/* Gold button */
+.btn-gold {
+  background: var(--gradient-gold);
+  color: hsl(40, 30%, 10%);
+  border: 1px solid var(--color-accent-muted);
+  box-shadow: var(--shadow-gold);
+  cursor: pointer;
+  transition: box-shadow 0.2s, opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-gold:hover {
+  box-shadow: 0 0 28px -4px hsla(43, 85%, 55%, 0.5), var(--shadow-gold);
+}
+.btn-gold:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }

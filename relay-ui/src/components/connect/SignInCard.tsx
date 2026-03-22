@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Facebook, Mail, Eye, EyeOff } from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { Facebook, Mail, Eye, EyeOff, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card } from '../ui/Card';
 import { GoldButton } from '../ui/GoldButton';
 import { Input } from '../ui/Input';
+import { OutlineButton } from '../ui/OutlineButton';
 import { useAppStore } from '../../store/appStore';
 import { startOAuth, consumeOAuth } from '../../lib/api';
 import { bridge } from '../../lib/bridge';
+import { BRIDGE_URL } from '../../lib/constants';
 
 export function SignInCard() {
   const [email, setEmail] = useState('');
@@ -14,41 +18,56 @@ export function SignInCard() {
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [validationError, setValidationError] = useState('');
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
   const setAuth = useAppStore((s) => s.setAuth);
+  const clearAuth = useAppStore((s) => s.clearAuth);
+  const setVpsActive = useAppStore((s) => s.setVpsActive);
+  const setRelayDots = useAppStore((s) => s.setRelayDots);
+  const setRelayStatus = useAppStore((s) => s.setRelayStatus);
   const auth = useAppStore((s) => s.auth);
 
   const handleOAuth = async (provider: 'google' | 'facebook') => {
     setLoading(true);
-    setError('');
+    setValidationError('');
     try {
       const { auth_url, state } = await startOAuth(provider);
       bridge.openExternal(auth_url);
-      // Poll for result
+      toast.info('Browser opened — complete sign-in then return here');
       for (let i = 0; i < 180; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         const result = await consumeOAuth(state);
         if (result) {
           setAuth({ userId: result.user_id, apiKey: result.api_key, oauthProvider: provider });
           if (remember) {
-            bridge.saveLastUser(JSON.stringify({ user_id: result.user_id, api_key: result.api_key, oauth_provider: provider }));
+            bridge.saveLastUser(JSON.stringify({
+              user_id: result.user_id,
+              api_key: result.api_key,
+              oauth_provider: provider,
+            }));
           }
-          break;
+          toast.success(`Signed in with ${provider}`);
+          return;
         }
       }
-    } catch (e) {
-      setError('OAuth failed. Please try again.');
+      toast.error('OAuth timed out — please try again');
+    } catch {
+      toast.error('OAuth failed — check your connection');
     } finally {
       setLoading(false);
     }
   };
 
   const handleEmailLogin = async () => {
-    if (!email || !password) return;
+    if (!email || !password) {
+      setValidationError('Email and password are required');
+      return;
+    }
     setLoading(true);
-    setError('');
+    setValidationError('');
     try {
-      const res = await fetch('https://app.platalgo.com/relay/login', {
+      const res = await fetch(`${BRIDGE_URL}/relay/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: email, password }),
@@ -57,31 +76,73 @@ export function SignInCard() {
       if (data.status === 'ok' || data.token) {
         setAuth({ userId: email, apiKey: data.api_key || null });
         if (remember) {
-          bridge.saveLastUser(JSON.stringify({ user_id: email }));
+          bridge.saveLastUser(JSON.stringify({ user_id: email, api_key: data.api_key || '' }));
           bridge.setKeyringPassword('platalgo-relay', email, password);
         }
+        toast.success('Signed in successfully');
       } else {
-        setError(data.error || 'Login failed');
+        toast.error(data.error || 'Login failed — please check your credentials');
       }
     } catch {
-      setError('Connection failed');
+      toast.error('Connection failed — check your internet connection');
     } finally {
       setLoading(false);
     }
   };
 
+  const confirmLogout = () => {
+    clearAuth();
+    setVpsActive(false);
+    setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
+    setRelayStatus('Idle');
+    bridge.saveLastUser(JSON.stringify({}));
+    setShowLogoutDialog(false);
+    toast.success('Signed out');
+  };
+
   if (auth.userId) {
-    const initials = auth.userId.slice(0, 2).toUpperCase();
     return (
       <Card>
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-accent/20 border-2 border-accent/40 flex items-center justify-center">
-            <span className="text-lg font-bold text-accent">{initials}</span>
+          <div className="w-12 h-12 rounded-full bg-accent/20 border-2 border-accent/40 flex items-center justify-center shrink-0">
+            <span className="text-lg font-bold text-accent">
+              {auth.userId.includes('@')
+                ? auth.userId.split('@')[0].slice(0, 2).toUpperCase()
+                : auth.userId.slice(0, 2).toUpperCase()}
+            </span>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-fg">{auth.userId}</div>
-            <div className="text-xs text-fg-muted">{auth.oauthProvider ? `Signed in via ${auth.oauthProvider}` : 'Signed in'}</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-fg truncate">{auth.userId}</div>
+            <div className="text-xs text-fg-muted">
+              {auth.oauthProvider ? `Signed in via ${auth.oauthProvider}` : 'Signed in'}
+            </div>
           </div>
+
+          <Dialog.Root open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+            <Dialog.Trigger asChild>
+              <OutlineButton size="sm">
+                <LogOut size={14} className="mr-1.5 inline" />
+                Sign Out
+              </OutlineButton>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" />
+              <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 glass p-7 w-80 space-y-5">
+                <Dialog.Title className="text-base font-semibold text-fg">Sign out?</Dialog.Title>
+                <Dialog.Description className="text-sm text-fg-muted leading-relaxed">
+                  This will disconnect your relay and clear your saved session. Any active VPS connection will continue running on the server.
+                </Dialog.Description>
+                <div className="flex gap-3 justify-end">
+                  <Dialog.Close asChild>
+                    <OutlineButton size="sm">Cancel</OutlineButton>
+                  </Dialog.Close>
+                  <OutlineButton size="sm" danger onClick={confirmLogout}>
+                    Sign Out
+                  </OutlineButton>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
         </div>
       </Card>
     );
@@ -89,15 +150,15 @@ export function SignInCard() {
 
   return (
     <Card>
-      <h2 className="text-base font-semibold text-fg mb-4 flex items-center gap-2">
+      <h2 className="text-base font-semibold text-fg mb-6 flex items-center gap-2">
         <Mail size={18} className="text-accent" />
         Sign In
       </h2>
 
       {/* OAuth buttons */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-3 mb-6">
         <motion.button
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted"
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted disabled:opacity-50"
           onClick={() => handleOAuth('google')}
           disabled={loading}
           whileHover={{ scale: 1.02 }}
@@ -112,7 +173,7 @@ export function SignInCard() {
           Google
         </motion.button>
         <motion.button
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted"
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted disabled:opacity-50"
           onClick={() => handleOAuth('facebook')}
           disabled={loading}
           whileHover={{ scale: 1.02 }}
@@ -123,19 +184,18 @@ export function SignInCard() {
         </motion.button>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-6">
         <div className="flex-1 h-px bg-border" />
         <span className="text-[0.625rem] text-fg-faint font-medium uppercase tracking-wider">or</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      {/* Email/Password */}
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Input
           label="Email"
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); setValidationError(''); }}
           placeholder="you@example.com"
         />
         <div className="relative">
@@ -143,11 +203,11 @@ export function SignInCard() {
             label="Password"
             type={showPw ? 'text' : 'password'}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => { setPassword(e.target.value); setValidationError(''); }}
             placeholder="••••••••"
           />
           <button
-            className="absolute right-3 top-[calc(50%+4px)] text-fg-muted hover:text-fg transition-colors cursor-pointer bg-transparent border-none"
+            className="absolute right-3 top-[calc(50%+6px)] text-fg-muted hover:text-fg transition-colors cursor-pointer bg-transparent border-none"
             onClick={() => setShowPw(!showPw)}
           >
             {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -164,11 +224,25 @@ export function SignInCard() {
           <span className="text-xs text-fg-muted">Remember me</span>
         </label>
 
-        {error && <div className="text-xs text-danger bg-danger-bg px-3 py-2 rounded-lg">{error}</div>}
+        {validationError && (
+          <div className="text-xs text-danger bg-danger-bg px-3 py-2.5 rounded-lg border border-danger/20">
+            {validationError}
+          </div>
+        )}
 
-        <GoldButton fullWidth onClick={handleEmailLogin} disabled={loading || !email || !password}>
+        <GoldButton fullWidth onClick={handleEmailLogin} disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </GoldButton>
+
+        <p className="text-xs text-center text-fg-muted">
+          Don&apos;t have an account?{' '}
+          <button
+            className="text-accent underline cursor-pointer bg-transparent border-none p-0 text-xs"
+            onClick={() => bridge.openExternal('https://app.platalgo.com/register')}
+          >
+            Sign up
+          </button>
+        </p>
       </div>
     </Card>
   );

@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           COUNT=$(git rev-list --count HEAD)
-          VERSION="2.0.$COUNT"
+          VERSION="2.1.$COUNT"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           cd relay-ui
           npm version $VERSION --no-git-tag-version --allow-same-version

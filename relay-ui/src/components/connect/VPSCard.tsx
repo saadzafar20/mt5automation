@@ -48,7 +48,7 @@ export function VPSCard() {
       </div>
 
       <p className="text-sm text-fg-muted mt-auto pt-6 leading-relaxed">
-        Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 on Cloud"</span> to enable 24/7 automated execution without keeping your PC on.
+        Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 for 24/7 VPS Mode"</span> to enable 24/7 automated execution without keeping your PC on.
       </p>
     </Card>
   );

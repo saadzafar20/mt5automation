@@ -1,5 +1,15 @@
 import { BRIDGE_URL } from './constants';
 
+/* ── Auth helpers ── */
+
+function authHeaders(userId: string, apiKey: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'X-User-ID': userId,
+    'X-API-Key': apiKey,
+  };
+}
+
 /* ── Cloud Bridge API ── */
 
 export async function startOAuth(provider: 'google' | 'facebook') {
@@ -24,15 +34,11 @@ export async function getDashboardSummary(userId: string, apiKey: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, api_key: apiKey }),
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-export async function checkVersion() {
-  const res = await fetch(`${BRIDGE_URL}/version`);
-  return res.json();
-}
-
-/* ── Managed/Cloud MT5 API (calls cloud bridge directly) ── */
+/* ── Managed/Cloud MT5 API ── */
 
 export async function managedEnable(params: {
   user_id: string;
@@ -52,39 +58,84 @@ export async function managedEnable(params: {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (params.password) {
-    // Login-based auth
     body.user_id = params.user_id;
     body.password = params.password;
     url = `${BRIDGE_URL}/managed/setup/login`;
   } else {
-    // API key auth
     headers['X-User-ID'] = params.user_id;
     if (params.api_key) headers['X-API-Key'] = params.api_key;
     url = `${BRIDGE_URL}/managed/setup`;
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   return res.json();
 }
 
-export async function managedDisable(userId: string, apiKey?: string) {
-  const res = await fetch(`${BRIDGE_URL}/relay/managed/disable`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-ID': userId,
-      ...(apiKey ? { 'X-API-Key': apiKey } : {}),
-    },
-    body: JSON.stringify({ user_id: userId }),
+/* ── Telegram API (authenticated with API key headers) ── */
+
+export async function getTelegramChannels(userId: string, apiKey: string) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/channels`, {
+    headers: authHeaders(userId, apiKey),
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<{
+    channels: Array<{
+      channel_id: string; chat_id: string; chat_title: string;
+      enabled: number; risk_pct: number; max_trades_per_day: number;
+      allowed_symbols: string | null;
+    }>;
+    bot_running: boolean;
+    bot_username: string;
+  }>;
+}
+
+export async function addTelegramChannel(userId: string, apiKey: string, data: {
+  chat_id: string; risk_pct: number; max_trades_per_day: number; allowed_symbols: string | null;
+}) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/channels`, {
+    method: 'POST',
+    headers: authHeaders(userId, apiKey),
+    body: JSON.stringify({ ...data, script_name: 'Telegram' }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-export async function clearLogs() {
-  // No-op in Electron mode (no local Flask)
-  return { status: 'cleared' };
+export async function toggleTelegramChannel(userId: string, apiKey: string, channelId: string) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/channels/${channelId}/toggle`, {
+    method: 'POST',
+    headers: authHeaders(userId, apiKey),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteTelegramChannel(userId: string, apiKey: string, channelId: string) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/channels/${channelId}`, {
+    method: 'DELETE',
+    headers: authHeaders(userId, apiKey),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getTelegramSignals(userId: string, apiKey: string, limit = 30) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/signals?limit=${limit}`, {
+    headers: authHeaders(userId, apiKey),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<{ signals: Array<{
+    log_id: string; raw_text: string; parsed_action: string; parsed_symbol: string;
+    parse_confidence: number; execution_status: string; created_at: number;
+  }> }>;
+}
+
+export async function testTelegramParse(userId: string, apiKey: string, text: string, useLlm: boolean) {
+  const res = await fetch(`${BRIDGE_URL}/api/telegram/test-parse`, {
+    method: 'POST',
+    headers: authHeaders(userId, apiKey),
+    body: JSON.stringify({ text, use_llm: useLlm }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }

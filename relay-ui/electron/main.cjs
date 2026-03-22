@@ -50,16 +50,19 @@ autoUpdater.on('update-downloaded', (info) => {
     });
 });
 
-autoUpdater.on('update-not-available', () => {
-  console.log('Auto-update: already on latest version');
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Auto-update: already on latest version', info?.version);
 });
 
 autoUpdater.on('checking-for-update', () => {
-  console.log('Auto-update: checking for updates...');
+  console.log('Auto-update: checking for updates at', autoUpdater.getFeedURL());
 });
 
 autoUpdater.on('error', (err) => {
-  console.log('Auto-update error:', err.message);
+  console.error('Auto-update error:', err?.message || err);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', { status: 'error', error: err?.message });
+  }
 });
 
 // ── Window ──
@@ -72,7 +75,7 @@ function createWindow() {
     minHeight: 600,
     title: 'PlatAlgo Relay',
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 15, y: 15 },
+    trafficLightPosition: { x: 16, y: 18 },
     backgroundColor: '#081410',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

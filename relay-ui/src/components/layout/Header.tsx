@@ -10,6 +10,13 @@ interface UpdateInfo {
   percent?: number;
 }
 
+function getInitials(userId: string): string {
+  if (userId.includes('@')) {
+    return userId.split('@')[0].slice(0, 2).toUpperCase();
+  }
+  return userId.slice(0, 2).toUpperCase();
+}
+
 export function Header() {
   const relayStatus = useAppStore((s) => s.relayStatus);
   const dots = useAppStore((s) => s.relayDots);
@@ -25,16 +32,16 @@ export function Header() {
     }
   }, []);
 
-  const initials = auth.userId ? auth.userId.slice(0, 2).toUpperCase() : '??';
+  const initials = auth.userId ? getInitials(auth.userId) : '??';
   const isOnline = relayStatus !== 'Idle' && relayStatus !== 'Offline';
   const isMac = platform === 'darwin';
 
   return (
     <header
       className="h-14 flex items-center justify-between pr-5 border-b border-border bg-bg-sidebar/80 backdrop-blur-xl z-30 shrink-0"
-      style={{ paddingLeft: isMac ? 90 : 20, WebkitAppRegion: 'drag' } as React.CSSProperties}
+      style={{ paddingLeft: isMac ? 104 : 20, WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      {/* Logo — offset right to clear macOS traffic lights */}
+      {/* Logo */}
       <div className="flex items-center gap-3 shrink-0 mr-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
           <span className="text-accent">Plat</span>
@@ -62,7 +69,6 @@ export function Header() {
 
       {/* Right side */}
       <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        {/* Update notification */}
         {updateInfo && (
           <button
             className={`
@@ -86,7 +92,7 @@ export function Header() {
         )}
         <ThemeToggle />
         {auth.userId && (
-          <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0">
             <span className="text-xs font-bold text-accent">{initials}</span>
           </div>
         )}
