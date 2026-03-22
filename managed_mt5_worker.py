@@ -146,8 +146,8 @@ class MT5UserSession:
                 daemon=True,
             ).start()
 
-            # Wait up to 60 s for MT5 to start and authenticate
-            msg = self._read_json_timeout(60)
+            # Wait up to 120 s for MT5 to start and authenticate
+            msg = self._read_json_timeout(120)
             if msg.get("status") == "ready":
                 logger.info(f"[{self.user_id}] MT5 subprocess ready: {msg.get('account', '?')}")
                 return True
@@ -298,8 +298,12 @@ class SessionManager:
         """
         accounts = store.get_all_managed_accounts()
         started = 0
-        for acct in accounts:
+        for i, acct in enumerate(accounts):
             try:
+                # Stagger startup by 15 s per user so MT5 terminals don't all
+                # compete for initialization resources simultaneously.
+                if i > 0:
+                    time.sleep(15)
                 password = decrypt_fn(acct["mt5_password_enc"])
                 self.start_session(
                     acct["user_id"],
