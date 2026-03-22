@@ -20,9 +20,11 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
 
-RECONNECT_DELAY = 5  # seconds between reconnect attempts
+RECONNECT_DELAY = 5   # seconds between reconnect attempts
+KEEPALIVE_INTERVAL = 20  # seconds between keep-alive pings
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -160,9 +162,10 @@ def main():
             continue
 
         # ── Ensure AutoTrading is enabled ─────────────────────────────────────
-        # Always patch common.ini on first connect — trade_allowed may report
-        # True in headless mode even when AutoTrading is actually disabled.
-        # We only do this once per session startup (not on reconnects).
+        # Write config at actual data_path. On first connect the terminal may
+        # already be running with AutoTrading disabled (started by a prior
+        # session). We patch the config then kill+reinit once so the fresh
+        # terminal starts with AutoTrading on.
         if not _autotrading_patched:
             term = mt5.terminal_info()
             actual_data_path = getattr(term, "data_path", None) if term else None
@@ -170,40 +173,57 @@ def main():
                 try:
                     config_path = os.path.join(actual_data_path, "config", "common.ini")
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
-
-                    # Write directly — configparser lowercases keys and adds spaces around
-                    # '=' which MT5 does not recognise. Must match MT5's exact format.
                     with open(config_path, "w", encoding="utf-16") as f:
                         f.write("[Common]\nExpertAdvisorsEnabled=1\n")
-
                     _autotrading_patched = True
-                    _log(f"[{user_id}] Patched {config_path} — killing terminal process to force config reload")
+                    _log(f"[{user_id}] Patched {config_path} — restarting terminal")
 
-                    # mt5.shutdown() only disconnects — terminal process keeps running
-                    # and won't re-read common.ini. Must kill the process by path so
-                    # the next mt5.initialize() starts a fresh terminal with new config.
+                    # Get terminal PID before disconnecting so we can kill it reliably
+                    term_pid = getattr(term, "community_connection", None)  # not a real pid
                     mt5.shutdown()
+
+                    # Kill by path (most reliable for per-user terminal copies)
+                    killed = False
                     if terminal_exe and os.path.exists(terminal_exe):
                         import subprocess as sp
-                        sp.run(
+                        r = sp.run(
                             ['powershell', '-Command',
-                             f'Get-Process | Where-Object {{ $_.Path -eq "{terminal_exe}" }} | Stop-Process -Force'],
-                            capture_output=True, timeout=10,
+                             f'Get-Process | Where-Object {{ $_.Path -eq "{terminal_exe}" }} | Stop-Process -Force; $true'],
+                            capture_output=True, text=True, timeout=15,
                         )
-                    time.sleep(3)
+                        killed = True
+                        _log(f"[{user_id}] Kill result: {r.stdout.strip() or r.stderr.strip() or 'ok'}")
+
+                    # Wait longer to ensure process fully exits before re-init
+                    time.sleep(8)
                     ok = mt5.initialize(**init_kwargs)
                     if not ok:
-                        _log(f"[{user_id}] Re-init after patch failed: {mt5.last_error()}")
+                        _log(f"[{user_id}] Re-init after patch failed: {mt5.last_error()} — retrying")
                         time.sleep(RECONNECT_DELAY)
                         continue
                 except Exception as e:
                     _log(f"[{user_id}] Could not patch common.ini: {e}")
-                    _autotrading_patched = True  # don't retry patch on failure
+                    _autotrading_patched = True  # don't retry on failure
 
         info = mt5.account_info()
         account_str = f"{info.login} on {info.server}" if info else "unknown"
         _log(f"[{user_id}] Connected: {account_str}")
         _send({"status": "ready", "account": account_str})
+
+        # ── Keep-alive thread ─────────────────────────────────────────────────
+        # MT5 connections time out when idle. Ping account_info() periodically
+        # to keep the broker connection alive between trades.
+        _stop_keepalive = threading.Event()
+
+        def _keepalive():
+            while not _stop_keepalive.wait(KEEPALIVE_INTERVAL):
+                try:
+                    mt5.account_info()
+                except Exception:
+                    pass
+
+        ka_thread = threading.Thread(target=_keepalive, daemon=True)
+        ka_thread.start()
 
         # ── Command loop (one command → one response) ─────────────────────────
         lost_connection = False
@@ -220,8 +240,8 @@ def main():
 
             action = cmd.get("_action")
 
-            # Control commands
             if action == "shutdown":
+                _stop_keepalive.set()
                 mt5.shutdown()
                 return
 
@@ -233,13 +253,8 @@ def main():
                     break
                 continue
 
-            # Ensure still connected before executing trade
-            if not _is_connected(mt5):
-                _send({"status": "failed", "error": "MT5 disconnected — reconnecting"})
-                lost_connection = True
-                break
-
-            # Execute trade command
+            # Execute trade command — try even if connectivity check is uncertain;
+            # mt5_order_utils will return a proper error if the connection is gone.
             try:
                 from mt5_order_utils import execute_command
                 result = execute_command(mt5, cmd, comment_prefix="managed-vps")
@@ -252,6 +267,8 @@ def main():
 
             if lost_connection:
                 break
+
+        _stop_keepalive.set()
 
         if lost_connection:
             _log(f"[{user_id}] Connection lost — reconnecting in {RECONNECT_DELAY}s")
