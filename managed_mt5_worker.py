@@ -175,6 +175,8 @@ class MT5UserSession:
                 init_kwargs["path"] = path
             ok = mt5.initialize(**init_kwargs)
             if ok:
+                ok = self._ensure_autotrading(mt5, init_kwargs)
+            if ok:
                 info = mt5.account_info()
                 name = f"account {info.login} on {info.server}" if info else "unknown account"
                 logger.info(f"[{self.user_id}] MT5 connected: {name}")
@@ -184,6 +186,51 @@ class MT5UserSession:
         except Exception as exc:
             logger.error(f"[{self.user_id}] MT5 connect error: {exc}")
             return False
+
+    def _ensure_autotrading(self, mt5, init_kwargs: dict) -> bool:
+        """If AutoTrading is disabled in the terminal config, patch it and reinitialize."""
+        import configparser
+
+        term = mt5.terminal_info()
+        if term is None:
+            return False
+        if getattr(term, "trade_allowed", True):
+            return True  # already enabled, nothing to do
+
+        # Locate and patch common.ini to enable expert advisors
+        data_path = getattr(term, "data_path", None)
+        if not data_path:
+            logger.warning(f"[{self.user_id}] AutoTrading disabled but cannot find terminal data_path")
+            return True  # still connected, attempt trade anyway
+
+        config_path = os.path.join(data_path, "config", "common.ini")
+        try:
+            cfg = configparser.ConfigParser()
+            cfg.read(config_path)
+            section = "Common" if cfg.has_section("Common") else None
+            if section is None:
+                cfg.add_section("Common")
+                section = "Common"
+            cfg.set(section, "ExpertAdvisorsEnabled", "1")
+            with open(config_path, "w") as f:
+                cfg.write(f)
+            logger.info(f"[{self.user_id}] Patched {config_path} — ExpertAdvisorsEnabled=1; restarting terminal")
+        except Exception as exc:
+            logger.warning(f"[{self.user_id}] Could not patch common.ini: {exc}")
+            return True  # proceed anyway
+
+        # Restart the terminal so the new config takes effect
+        try:
+            mt5.shutdown()
+        except Exception:
+            pass
+        time.sleep(2)
+        ok = mt5.initialize(**init_kwargs)
+        if ok:
+            term = mt5.terminal_info()
+            allowed = getattr(term, "trade_allowed", False)
+            logger.info(f"[{self.user_id}] After config patch — trade_allowed={allowed}")
+        return ok
 
     def _is_alive(self, mt5) -> bool:
         """Return True if MT5 terminal is still connected to the broker."""
