@@ -78,7 +78,9 @@ export function useRelayPolling(intervalMs = 10000) {
           setRelayStatus('Idle');
         }
 
-        const hasManagedRelay = relayIds.some((id) => id.startsWith('managed-'));
+        const hasManagedRelay = relayIds.some(
+          (id) => id.startsWith('managed-') && relays[id]?.state === 'online'
+        );
         setVpsActive(hasManagedRelay);
       } catch {
         setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });

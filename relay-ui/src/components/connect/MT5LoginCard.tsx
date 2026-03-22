@@ -86,6 +86,7 @@ export function MT5LoginCard() {
         if (status.connected) {
           stopPolling();
           setPhase('connected');
+          setEditing(false);
           setVpsActive(true);
           toast.success('MT5 connected — 24/7 VPS Mode active');
           return;

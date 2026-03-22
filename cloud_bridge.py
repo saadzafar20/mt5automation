@@ -1542,6 +1542,29 @@ def _notification_worker():
 threading.Thread(target=_notification_worker, daemon=True, name="notify-worker").start()
 
 
+def _managed_heartbeat_worker():
+    """
+    Send periodic heartbeats for managed VPS sessions so they appear online
+    in the dashboard and the MT5/Broker indicators go green in the app.
+    """
+    while True:
+        time.sleep(15)
+        try:
+            for user_id, session in list(session_manager._sessions.items()):
+                connected = session.connected
+                relay_id = f"{MANAGED_RELAY_PREFIX}{user_id}"
+                metadata = {
+                    "mt5_connected": connected,
+                    "broker_connected": connected,
+                    "managed": True,
+                }
+                store.heartbeat(user_id, relay_id, metadata)
+        except Exception as exc:
+            logger.warning(f"Managed heartbeat worker error: {exc}")
+
+threading.Thread(target=_managed_heartbeat_worker, daemon=True, name="managed-heartbeat").start()
+
+
 def notify_user(user_id: str, message: str):
     """Enqueue a notification — returns immediately, delivery is async."""
     try:
