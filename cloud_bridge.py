@@ -1590,6 +1590,31 @@ def login_required(func):
     return wrapper
 
 
+def resolve_user_from_request() -> tuple:
+    """
+    Resolve authenticated user from either session cookie or X-User-ID/X-API-Key headers.
+    Returns (user_id, error_response) — error_response is None on success.
+    Accepts: session["dashboard_user"] OR X-User-ID + X-API-Key headers.
+    """
+    # Try session first (browser dashboard)
+    if "dashboard_user" in session:
+        return session["dashboard_user"], None
+
+    # Try header auth (API / desktop app)
+    user_id = (request.headers.get("X-User-ID") or "").strip()
+    if not user_id:
+        return None, (jsonify({"error": "missing X-User-ID header or session"}), 401)
+
+    if not store.user_exists(user_id):
+        return None, (jsonify({"error": "unauthorized"}), 401)
+
+    err = require_user_auth(user_id)
+    if err is not None:
+        return None, err
+
+    return user_id, None
+
+
 def admin_login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -2570,9 +2595,10 @@ def user_settings_api():
 # ==================== Telegram Signal Channel API ====================
 
 @app.route("/api/telegram/channels", methods=["GET", "POST"])
-@login_required
 def telegram_channels_api():
-    user_id = session["dashboard_user"]
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
     if request.method == "GET":
         channels = store.list_telegram_channels(user_id)
         return jsonify({
@@ -2620,9 +2646,10 @@ def telegram_channels_api():
 
 
 @app.route("/api/telegram/channels/<channel_id>", methods=["PUT", "DELETE"])
-@login_required
 def telegram_channel_manage_api(channel_id):
-    user_id = session["dashboard_user"]
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
     channel = store.get_telegram_channel(channel_id)
     if not channel or channel["user_id"] != user_id:
         return jsonify({"error": "not found"}), 404
@@ -2638,9 +2665,10 @@ def telegram_channel_manage_api(channel_id):
 
 
 @app.route("/api/telegram/channels/<channel_id>/toggle", methods=["POST"])
-@login_required
 def telegram_channel_toggle_api(channel_id):
-    user_id = session["dashboard_user"]
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
     channel = store.get_telegram_channel(channel_id)
     if not channel or channel["user_id"] != user_id:
         return jsonify({"error": "not found"}), 404
@@ -2650,9 +2678,10 @@ def telegram_channel_toggle_api(channel_id):
 
 
 @app.route("/api/telegram/signals", methods=["GET"])
-@login_required
 def telegram_signals_api():
-    user_id = session["dashboard_user"]
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
     channel_id = request.args.get("channel_id")
     limit = min(int(request.args.get("limit", 50)), 200)
     logs = store.list_telegram_signal_log(user_id=user_id, channel_id=channel_id, limit=limit)
@@ -2660,8 +2689,10 @@ def telegram_signals_api():
 
 
 @app.route("/api/telegram/test-parse", methods=["POST"])
-@login_required
 def telegram_test_parse_api():
+    _, err = resolve_user_from_request()
+    if err is not None:
+        return err
     data = request.get_json(silent=True) or {}
     text = data.get("text", "")
     use_llm = data.get("use_llm", False)

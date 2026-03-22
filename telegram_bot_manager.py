@@ -81,6 +81,23 @@ class TelegramAPI:
             raise RuntimeError(f"getChat failed: {data}")
         return data["result"]
 
+    def send_message(self, chat_id: str, text: str) -> bool:
+        """Send a text message to a chat/group. Returns True on success."""
+        try:
+            resp = requests.post(
+                f"{self.base_url}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+                timeout=self.timeout,
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                logger.warning(f"sendMessage failed for chat {chat_id}: {data}")
+                return False
+            return True
+        except Exception as exc:
+            logger.warning(f"sendMessage error for chat {chat_id}: {exc}")
+            return False
+
     def get_file(self, file_id: str) -> bytes:
         """Download a file from Telegram servers. Returns raw bytes."""
         # Step 1: get file path
@@ -594,10 +611,18 @@ class TelegramBotManager:
                         f"Channel-scoped close for user {user_id}, "
                         f"channel {channel_id}: {closed_count} positions"
                     )
+                    self._reply_to_chat(
+                        chat_id=sub.get("chat_id", ""),
+                        text=f"Closed {closed_count} position(s) for this channel.",
+                    )
                 except Exception as exc:
                     log_entry["execution_status"] = "failed"
                     log_entry["execution_detail"] = f"Close failed: {exc}"
                     logger.exception(f"Channel-scoped close failed for user {user_id}")
+                    self._reply_to_chat(
+                        chat_id=sub.get("chat_id", ""),
+                        text=f"Close failed: {exc}",
+                    )
             else:
                 # Other management types — log but don't execute yet
                 log_entry["execution_status"] = "skipped"
@@ -665,14 +690,47 @@ class TelegramBotManager:
                 log_entry["execution_status"] = "executed"
                 log_entry["command_id"] = result.get("command_id")
                 log_entry["execution_detail"] = json.dumps(result)
+                # Reply-back to group chat on successful execution
+                self._reply_to_chat(
+                    chat_id=sub.get("chat_id", ""),
+                    text=(
+                        f"Trade queued: <b>{parsed.action} {parsed.symbol}</b>"
+                        + (f" SL {parsed.sl}" if parsed.sl else "")
+                        + (f" TP {parsed.tp_list[0]}" if parsed.tp_list else "")
+                    ),
+                )
             else:
                 log_entry["execution_status"] = "failed"
                 log_entry["execution_detail"] = result.get("error", "unknown error")
+                # Reply-back to group chat on failure
+                self._reply_to_chat(
+                    chat_id=sub.get("chat_id", ""),
+                    text=(
+                        f"Trade failed: <b>{parsed.action} {parsed.symbol}</b> — "
+                        + result.get("error", "unknown error")
+                    ),
+                )
         except Exception as exc:
             log_entry["execution_status"] = "failed"
             log_entry["execution_detail"] = str(exc)
+            # Reply-back to group chat on exception
+            self._reply_to_chat(
+                chat_id=sub.get("chat_id", ""),
+                text=(
+                    f"Trade error: <b>{parsed.action} {parsed.symbol}</b> — {exc}"
+                ),
+            )
 
         self._store.add_telegram_signal_log(log_entry)
+
+    def _reply_to_chat(self, chat_id: str, text: str) -> None:
+        """Send a reply message to the originating chat/group. No-op if bot not running."""
+        if not chat_id or not self._api:
+            return
+        try:
+            self._api.send_message(chat_id, text)
+        except Exception as exc:
+            logger.warning(f"Failed to send reply to chat {chat_id}: {exc}")
 
     def _apply_channel_filters(self, sub: dict, parsed) -> str | None:
         """
