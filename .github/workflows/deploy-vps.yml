@@ -1,7 +1,12 @@
+# NOTE: Windows .exe build is now handled automatically by build-windows.yml
+# via self-hosted runner on the VPS (triggers on every push to main).
+# This workflow is kept for manually restarting/redeploying the bridge service only.
+
 name: Deploy to VPS
 
 on:
   workflow_dispatch:
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
