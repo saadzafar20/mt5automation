@@ -23,7 +23,7 @@ import secrets
 import sqlite3
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from functools import wraps
 import queue as _queue
@@ -866,7 +866,7 @@ class BridgeStore:
                 "script_code": row["script_code"],
                 "script_name": row["script_name"],
                 "active": bool(row["active"]),
-                "created_at": datetime.utcfromtimestamp(row["created_at"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "created_at": datetime.fromtimestamp(row["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             })
         return output
 
@@ -973,7 +973,7 @@ class BridgeStore:
         for row in rows:
             output.append({
                 "user_id": row["user_id"],
-                "created_at": datetime.utcfromtimestamp(row["created_at"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "created_at": datetime.fromtimestamp(row["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             })
         return output
 
@@ -992,7 +992,7 @@ class BridgeStore:
                 "user_id": row["user_id"],
                 "script_code": row["script_code"],
                 "script_name": row["script_name"],
-                "purchased_at": datetime.utcfromtimestamp(row["purchased_at"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "purchased_at": datetime.fromtimestamp(row["purchased_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
             for row in rows
         ]
@@ -1006,7 +1006,7 @@ class BridgeStore:
                 "relay_type": relay_info["relay_type"],
                 "metadata": relay_info.get("metadata", {}),
                 "last_heartbeat_raw": relay_info["last_heartbeat"],
-                "last_heartbeat": datetime.utcfromtimestamp(relay_info["last_heartbeat"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "last_heartbeat": datetime.fromtimestamp(relay_info["last_heartbeat"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
 
         user_scripts = self.get_user_scripts(user_id)
@@ -1051,14 +1051,14 @@ class BridgeStore:
                     "status": row["status"],
                     "relay_id": row["relay_id"],
                     "error_message": result_data.get("error_message") or result_data.get("error") or "",
-                    "created_at": datetime.utcfromtimestamp(row["created_at"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    "executed_at": datetime.utcfromtimestamp(row["executed_at"]).strftime("%Y-%m-%d %H:%M:%S UTC") if row["executed_at"] else "-",
+                    "created_at": datetime.fromtimestamp(row["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "executed_at": datetime.fromtimestamp(row["executed_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC") if row["executed_at"] else "-",
                 })
 
             script_metrics.append({
                 "script_code": script["script_code"],
                 "script_name": script_name,
-                "purchased_at": datetime.utcfromtimestamp(script["purchased_at"]).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "purchased_at": datetime.fromtimestamp(script["purchased_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
                 "signals_count": totals["signals_count"] or 0,
                 "executed_count": totals["executed_count"] or 0,
                 "recent_signals": recent_signals,
@@ -1634,7 +1634,7 @@ def health():
         "db_path": DB_PATH,
         "require_api_key": REQUIRE_API_KEY,
         "public_base_url": os.getenv("BRIDGE_PUBLIC_URL", "NOT_SET"),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -2122,7 +2122,7 @@ def _process_signal_for_user(user_id: str, data: dict):
             "command_id": cmd.id,
             "relay_id": target_relay,
             "result": result,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }), 200 if status == CommandStatus.EXECUTED else 500
 
     logger.info(
@@ -2132,7 +2132,7 @@ def _process_signal_for_user(user_id: str, data: dict):
         "status": "queued",
         "command_id": cmd.id,
         "relay_id": target_relay,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }), 202
 
 
@@ -2364,7 +2364,7 @@ def relay_heartbeat():
     session = session_manager.session_status(user_id)
     return jsonify({
         "status": "ack",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "vps_mt5_connected": session.get("connected", False),
         "vps_active": session.get("active", False),
     })
@@ -2418,7 +2418,7 @@ def relay_poll():
     logger.info(f"Relay poll: user={user_id}, relay={relay_id}, commands={len(commands_data)}")
     return jsonify({
         "commands": commands_data,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 @app.route("/relay/result", methods=["POST"])
@@ -2462,7 +2462,7 @@ def relay_result():
     return jsonify({
         "status": "ack",
         "command_id": cmd_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 @app.route("/commands/<cmd_id>", methods=["GET"])
@@ -2503,7 +2503,7 @@ def list_relays():
     relays = store.list_relays(user_id)
     return jsonify({
         "relays": relays,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 @app.route("/stats", methods=["GET"])
@@ -2529,7 +2529,7 @@ def get_stats():
             "online": online_count,
             "offline": len(relays) - online_count,
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -2555,7 +2555,7 @@ def get_version():
         "windows_url": RELAY_DOWNLOAD_URL,
         "mac_url": RELAY_DOWNLOAD_URL,
         "relay_download_url": RELAY_DOWNLOAD_URL,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
