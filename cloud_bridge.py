@@ -1571,13 +1571,22 @@ def require_user_id():
 
 def require_user_auth(user_id: str):
     api_key = (request.headers.get("X-API-Key") or "").strip()
-    if REQUIRE_API_KEY and not api_key:
-        return jsonify({"error": "missing X-API-Key header"}), 401
+    relay_token = (request.headers.get("X-Relay-Token") or "").strip()
+    relay_id = (request.headers.get("X-Relay-ID") or "").strip()
+
     if api_key:
         if not verify_api_key(user_id, api_key):
             return jsonify({"error": "unauthorized"}), 401
-    elif REQUIRE_API_KEY:
+        return None
+
+    # Accept relay token as fallback auth (desktop app uses token from relay/login)
+    if relay_token and relay_id:
+        if store.verify_relay_token(user_id, relay_id, relay_token):
+            return None
         return jsonify({"error": "unauthorized"}), 401
+
+    if REQUIRE_API_KEY:
+        return jsonify({"error": "missing X-API-Key header"}), 401
     return None
 
 

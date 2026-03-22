@@ -45,7 +45,8 @@ autoUpdater.on('update-downloaded', (info) => {
     })
     .then(({ response }) => {
       if (response === 0) {
-        autoUpdater.quitAndInstall();
+        // setImmediate gives the dialog time to close before quit
+        setImmediate(() => autoUpdater.quitAndInstall(false, true));
       }
     });
 });
