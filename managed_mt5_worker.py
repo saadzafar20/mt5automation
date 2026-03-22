@@ -1,45 +1,58 @@
 """Persistent per-user MT5 session for managed VPS execution.
 
-Each managed user gets one dedicated thread. MT5 is initialized immediately
-when the session starts (not on first trade), so every trade is instant.
+Each managed user gets one dedicated subprocess running mt5_subprocess_worker.py.
+Because MetaTrader5 is a single-connection-per-process library, running each user
+in a subprocess gives complete isolation — sessions never interfere with each other.
 
-The thread stays alive permanently, reconnecting automatically if the
-broker connection drops.
+Each subprocess uses portable mode with a user-specific data directory, so config,
+logs, and terminal state are fully separated. AutoTrading is pre-enabled by writing
+config/common.ini before every connection attempt.
+
+Communication with the subprocess uses JSON lines on stdin/stdout.
 """
 
+import json
 import logging
 import os
-import queue
+import subprocess
+import sys
 import threading
 import time
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-TRADE_TIMEOUT_SECS = 20
-RECONNECT_DELAY_SECS = 5
-HEALTH_CHECK_INTERVAL_SECS = 5
+TRADE_TIMEOUT_SECS      = 20
+RECONNECT_DELAY_SECS    = 5
+HEALTH_CHECK_INTERVAL_SECS = 10
+MT5_USERS_BASE_DIR      = r"C:\mt5_users"
 
 
 class MT5UserSession:
     """
-    One per managed user. Owns a single dedicated thread that:
-      1. Calls mt5.initialize() immediately at startup (warm, ready to trade)
-      2. Loops waiting for trade commands on an internal queue
-      3. Reconnects automatically if the broker connection drops
+    One per managed user. Owns a dedicated subprocess (mt5_subprocess_worker.py)
+    that manages one MT5 terminal connection in an isolated data directory.
+
+    The supervisor thread (_run) watches the subprocess and restarts it if it exits.
+    All trade commands go through execute(), which serialises stdin/stdout I/O with
+    a lock so concurrent callers never interleave messages.
     """
 
     def __init__(self, user_id: str, login: int, password: str,
                  server: str, path: Optional[str] = None):
-        self.user_id  = user_id
-        self._login   = int(login)
+        self.user_id   = user_id
+        self._login    = int(login)
         self._password = str(password)
-        self._server  = str(server) if server else None
-        self._path    = path or None
+        self._server   = str(server)
+        self._path     = path or None
 
-        self._queue     = queue.Queue()
+        # Isolated data directory for this user's MT5 terminal
+        self._data_dir = os.path.join(MT5_USERS_BASE_DIR, user_id)
+
         self._connected = False
         self._stopped   = False
+        self._proc: Optional[subprocess.Popen] = None
+        self._io_lock   = threading.Lock()  # serialise stdin write + stdout read
 
         self._thread = threading.Thread(
             target=self._run,
@@ -51,17 +64,30 @@ class MT5UserSession:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def execute(self, command: Dict[str, Any]) -> Dict[str, Any]:
-        """Queue a trade command and block until the session thread executes it."""
+        """Send a trade command to the subprocess and return the result."""
         if self._stopped:
             return {"status": "failed", "error": "session is shut down"}
+        if not self._connected or not self._proc or self._proc.poll() is not None:
+            return {"status": "failed", "error": "MT5 session not connected"}
 
-        result_box: list = []
-        done = threading.Event()
-        self._queue.put((command, result_box, done))
+        with self._io_lock:
+            try:
+                self._proc.stdin.write(json.dumps(command) + "\n")
+                self._proc.stdin.flush()
+            except Exception as e:
+                self._connected = False
+                return {"status": "failed", "error": f"write error: {e}"}
 
-        if done.wait(timeout=TRADE_TIMEOUT_SECS):
-            return result_box[0]
-        return {"status": "failed", "error": "trade execution timed out"}
+            result = self._read_json_timeout(TRADE_TIMEOUT_SECS)
+
+        # If we timed out the subprocess may be in an inconsistent state — kill it
+        if result.get("_timed_out"):
+            logger.warning(f"[{self.user_id}] Trade timed out — restarting subprocess")
+            self._kill_subprocess()
+            self._connected = False
+            return {"status": "failed", "error": "trade execution timed out"}
+
+        return result
 
     @property
     def connected(self) -> bool:
@@ -69,184 +95,154 @@ class MT5UserSession:
 
     def update_credentials(self, login: int, password: str,
                            server: str, path: Optional[str] = None):
-        """Restart the session with new credentials (called after cred update)."""
+        """Restart the session with new credentials."""
         self._login    = int(login)
         self._password = str(password)
-        self._server   = str(server) if server else None
+        self._server   = str(server)
         self._path     = path or None
-        # Signal the thread to reconnect by poisoning the queue
-        self._queue.put(("_reconnect", None, None))
+        self._kill_subprocess()  # supervisor will restart with new creds
 
     def shutdown(self):
-        """Cleanly stop the session thread."""
+        """Cleanly stop this session."""
         self._stopped = True
-        self._queue.put(("_stop", None, None))
+        self._kill_subprocess()
 
-    # ── Thread body ───────────────────────────────────────────────────────────
+    # ── Subprocess management ─────────────────────────────────────────────────
 
-    def _run(self):
+    def _start_subprocess(self) -> bool:
+        """Spawn the worker subprocess, send init params, wait for ready."""
+        worker = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "mt5_subprocess_worker.py",
+        )
         try:
-            import MetaTrader5 as mt5
-        except ImportError:
-            logger.error(f"[{self.user_id}] MetaTrader5 not available — session cannot start")
-            return
+            proc = subprocess.Popen(
+                [sys.executable, "-u", worker],   # -u = unbuffered stdout
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self._proc = proc
 
-        while not self._stopped:
-            # ── Connect ───────────────────────────────────────────────────────
-            self._connected = self._connect(mt5)
-            if not self._connected:
-                time.sleep(RECONNECT_DELAY_SECS)
-                continue
-
-            # ── Trade loop ────────────────────────────────────────────────────
-            while not self._stopped:
-                try:
-                    item = self._queue.get(timeout=HEALTH_CHECK_INTERVAL_SECS)
-                except queue.Empty:
-                    # Periodic health check — ensure broker connection is alive
-                    if not self._is_alive(mt5):
-                        logger.warning(f"[{self.user_id}] MT5 broker connection lost, reconnecting")
-                        self._connected = False
-                        break
-                    continue
-
-                cmd, result_box, done = item
-
-                # Control signals
-                if cmd == "_stop":
-                    self._connected = False
-                    return
-                if cmd == "_reconnect":
-                    self._connected = False
-                    try:
-                        mt5.shutdown()
-                    except Exception:
-                        pass
-                    break
-
-                # Execute trade
-                try:
-                    from mt5_order_utils import execute_command
-                    result = execute_command(mt5, cmd, comment_prefix="managed-vps")
-                except Exception as exc:
-                    logger.exception(f"[{self.user_id}] Trade execution error")
-                    result = {"status": "failed", "error": str(exc)}
-                    self._connected = False
-
-                result_box.append(result)
-                done.set()
-
-                if not self._connected:
-                    break
-
-        try:
-            import MetaTrader5 as mt5
-            mt5.shutdown()
-        except Exception:
-            pass
-
-    def _connect(self, mt5) -> bool:
-        """Initialize MT5 with user credentials. Returns True on success."""
-        try:
-            # Shut down any stale session cleanly first
-            try:
-                if mt5.terminal_info() is not None:
-                    mt5.shutdown()
-            except Exception:
-                pass
-
-            # Auto-detect MT5 path on the VPS if not explicitly provided
-            path = self._path
-            if not path:
-                for candidate in [
-                    r"C:\Program Files\MetaTrader 5\terminal64.exe",
-                    r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe",
-                ]:
-                    if os.path.exists(candidate):
-                        path = candidate
-                        break
-
-            init_kwargs: dict = {
+            # Send init params
+            init_params: dict = {
+                "user_id":  self.user_id,
                 "login":    self._login,
                 "password": self._password,
                 "server":   self._server,
+                "data_dir": self._data_dir,
             }
-            if path:                # omit path entirely when not found
-                init_kwargs["path"] = path
-            ok = mt5.initialize(**init_kwargs)
-            if ok:
-                ok = self._ensure_autotrading(mt5, init_kwargs)
-            if ok:
-                info = mt5.account_info()
-                name = f"account {info.login} on {info.server}" if info else "unknown account"
-                logger.info(f"[{self.user_id}] MT5 connected: {name}")
-            else:
-                logger.warning(f"[{self.user_id}] MT5 init failed: {mt5.last_error()}")
-            return ok
-        except Exception as exc:
-            logger.error(f"[{self.user_id}] MT5 connect error: {exc}")
+            if self._path:
+                init_params["path"] = self._path
+
+            proc.stdin.write(json.dumps(init_params) + "\n")
+            proc.stdin.flush()
+
+            # Start a thread to drain stderr so the pipe never blocks
+            threading.Thread(
+                target=self._drain_stderr,
+                args=(proc,),
+                daemon=True,
+            ).start()
+
+            # Wait up to 60 s for MT5 to start and authenticate
+            msg = self._read_json_timeout(60)
+            if msg.get("status") == "ready":
+                logger.info(f"[{self.user_id}] MT5 subprocess ready: {msg.get('account', '?')}")
+                return True
+
+            logger.error(f"[{self.user_id}] Subprocess did not become ready: {msg}")
             return False
 
-    def _ensure_autotrading(self, mt5, init_kwargs: dict) -> bool:
-        """If AutoTrading is disabled in the terminal config, patch it and reinitialize."""
-        import configparser
-
-        term = mt5.terminal_info()
-        if term is None:
+        except Exception as e:
+            logger.error(f"[{self.user_id}] Failed to start subprocess: {e}")
             return False
-        if getattr(term, "trade_allowed", True):
-            return True  # already enabled, nothing to do
 
-        # Locate and patch common.ini to enable expert advisors
-        data_path = getattr(term, "data_path", None)
-        if not data_path:
-            logger.warning(f"[{self.user_id}] AutoTrading disabled but cannot find terminal data_path")
-            return True  # still connected, attempt trade anyway
-
-        config_path = os.path.join(data_path, "config", "common.ini")
+    def _kill_subprocess(self):
+        """Ask the subprocess to stop gracefully; kill if it doesn't comply."""
+        proc = self._proc
+        if not proc or proc.poll() is not None:
+            return
         try:
-            # MT5 writes common.ini as UTF-16-LE with BOM — detect and preserve encoding
-            with open(config_path, "rb") as f:
-                raw = f.read()
-            if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
-                encoding = "utf-16"
-            else:
-                encoding = "utf-8-sig"
+            proc.stdin.write(json.dumps({"_action": "shutdown"}) + "\n")
+            proc.stdin.flush()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
-            cfg = configparser.ConfigParser()
-            cfg.read(config_path, encoding=encoding)
-            section = "Common" if cfg.has_section("Common") else None
-            if section is None:
-                cfg.add_section("Common")
-                section = "Common"
-            cfg.set(section, "ExpertAdvisorsEnabled", "1")
-            with open(config_path, "w", encoding=encoding) as f:
-                cfg.write(f)
-            logger.info(f"[{self.user_id}] Patched {config_path} — ExpertAdvisorsEnabled=1; restarting terminal")
-        except Exception as exc:
-            logger.warning(f"[{self.user_id}] Could not patch common.ini: {exc}")
-            return True  # proceed anyway
-
-        # Restart the terminal so the new config takes effect
+    def _drain_stderr(self, proc: subprocess.Popen):
+        """Read subprocess stderr and forward to logger (prevents pipe blocking)."""
         try:
-            mt5.shutdown()
+            for line in proc.stderr:
+                line = line.rstrip()
+                if line:
+                    logger.debug(f"[{self.user_id}] worker: {line}")
         except Exception:
             pass
-        time.sleep(2)
-        ok = mt5.initialize(**init_kwargs)
-        if ok:
-            term = mt5.terminal_info()
-            allowed = getattr(term, "trade_allowed", False)
-            logger.info(f"[{self.user_id}] After config patch — trade_allowed={allowed}")
-        return ok
 
-    def _is_alive(self, mt5) -> bool:
-        """Return True if MT5 terminal is still connected to the broker."""
+    def _read_json_timeout(self, timeout: float) -> dict:
+        """
+        Read one JSON line from subprocess stdout within `timeout` seconds.
+        Returns {"_timed_out": True} if deadline exceeded.
+        """
+        result: list = [None]
+        proc = self._proc
+
+        def _read():
+            try:
+                result[0] = proc.stdout.readline()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+
+        line = result[0]
+        if line is None:
+            return {"_timed_out": True}
+        if not line:
+            self._connected = False
+            return {"status": "failed", "error": "subprocess stdout closed"}
         try:
-            term = mt5.terminal_info()
-            return term is not None and bool(getattr(term, "connected", False))
+            return json.loads(line)
         except Exception:
-            return False
+            return {"status": "failed", "error": f"bad JSON from worker: {line[:120]}"}
+
+    # ── Supervisor thread ─────────────────────────────────────────────────────
+
+    def _run(self):
+        """Supervisor: start subprocess, monitor it, restart if it exits."""
+        while not self._stopped:
+            self._connected = False
+
+            if self._start_subprocess():
+                self._connected = True
+                logger.info(f"[{self.user_id}] MT5 session active (pid {self._proc.pid})")
+
+                # Poll until subprocess exits or we are stopped
+                while not self._stopped:
+                    time.sleep(HEALTH_CHECK_INTERVAL_SECS)
+                    if self._proc.poll() is not None:
+                        logger.warning(
+                            f"[{self.user_id}] Subprocess exited "
+                            f"(code {self._proc.returncode}) — restarting"
+                        )
+                        self._connected = False
+                        break
+            else:
+                try:
+                    if self._proc:
+                        self._proc.kill()
+                except Exception:
+                    pass
+                time.sleep(RECONNECT_DELAY_SECS)
+
+        logger.info(f"[{self.user_id}] Session supervisor stopped")
 
 
 class SessionManager:
