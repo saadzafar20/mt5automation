@@ -180,7 +180,7 @@ class MT5UserSession:
             for line in proc.stderr:
                 line = line.rstrip()
                 if line:
-                    logger.debug(f"[{self.user_id}] worker: {line}")
+                    logger.info(f"[{self.user_id}] worker: {line}")
         except Exception:
             pass
 

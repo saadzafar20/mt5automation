@@ -60,12 +60,8 @@ def _setup_user_terminal(data_dir: str, base_exe: str) -> str:
     os.makedirs(data_dir, exist_ok=True)
     user_exe = os.path.join(data_dir, "terminal64.exe")
     if not os.path.exists(user_exe):
-        try:
-            os.link(base_exe, user_exe)
-            _log(f"Hard-linked terminal64.exe → {user_exe}")
-        except OSError:
-            shutil.copy2(base_exe, user_exe)
-            _log(f"Copied terminal64.exe → {user_exe}")
+        shutil.copy2(base_exe, user_exe)
+        _log(f"Copied terminal64.exe → {user_exe}")
     return user_exe
 
 
