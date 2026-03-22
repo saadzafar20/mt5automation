@@ -205,14 +205,22 @@ class MT5UserSession:
 
         config_path = os.path.join(data_path, "config", "common.ini")
         try:
+            # MT5 writes common.ini as UTF-16-LE with BOM — detect and preserve encoding
+            with open(config_path, "rb") as f:
+                raw = f.read()
+            if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+                encoding = "utf-16"
+            else:
+                encoding = "utf-8-sig"
+
             cfg = configparser.ConfigParser()
-            cfg.read(config_path)
+            cfg.read(config_path, encoding=encoding)
             section = "Common" if cfg.has_section("Common") else None
             if section is None:
                 cfg.add_section("Common")
                 section = "Common"
             cfg.set(section, "ExpertAdvisorsEnabled", "1")
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding=encoding) as f:
                 cfg.write(f)
             logger.info(f"[{self.user_id}] Patched {config_path} — ExpertAdvisorsEnabled=1; restarting terminal")
         except Exception as exc:
