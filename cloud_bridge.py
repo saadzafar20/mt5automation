@@ -2225,11 +2225,13 @@ def relay_login():
         return jsonify({"error": "user not found"}), 404
 
     token = store.register_relay(user_id, relay_id, relay_type)
+    api_key = store.regenerate_api_key(user_id)
     return jsonify({
         "status": "authenticated",
         "user_id": user_id,
         "relay_id": relay_id,
         "token": token,
+        "api_key": api_key,
         "heartbeat_interval": 10,
         "poll_timeout": 25,
     }), 200
