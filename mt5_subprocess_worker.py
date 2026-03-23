@@ -288,9 +288,14 @@ def main():
 
             # Execute trade command — try even if connectivity check is uncertain;
             # mt5_order_utils will return a proper error if the connection is gone.
+            _log(f"[{user_id}] Executing cmd: {cmd.get('action')} {cmd.get('symbol')}")
             try:
                 from mt5_order_utils import execute_command
+                # Quick connectivity sanity check before execution
+                _info = mt5.account_info()
+                _log(f"[{user_id}] Pre-exec account: {_info.login if _info else 'None'}, last_err={mt5.last_error()}")
                 result = execute_command(mt5, cmd, comment_prefix="managed-vps")
+                _log(f"[{user_id}] Exec result: {result}")
             except Exception as e:
                 _log(f"[{user_id}] Trade execution exception: {e}")
                 result = {"status": "failed", "error": str(e)}
