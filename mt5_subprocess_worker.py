@@ -138,15 +138,18 @@ def main():
         except Exception:
             pass
 
-        # Connect to whichever terminal is running in the desktop session.
-        # Specifying a path starts a new process in Session 0 (no desktop) which
-        # fails on MetaQuotes-Demo. Without a path, MT5 attaches to the already-
-        # running terminal (started interactively) and works reliably.
+        # Prefer the user's own terminal copy (portable mode) so each user runs
+        # in an isolated process.  Fall back to no-path (attach to running
+        # terminal) only when no user copy is present.
+        user_exe = os.path.join(data_dir, "terminal64.exe")
         init_kwargs: dict = {
             "login":    login,
             "password": password,
             "server":   server,
         }
+        if os.path.exists(user_exe):
+            init_kwargs["path"]     = user_exe
+            init_kwargs["portable"] = True
 
         ok = mt5.initialize(**init_kwargs)
         if not ok:
