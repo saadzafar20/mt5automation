@@ -24,7 +24,7 @@ import threading
 import time
 
 RECONNECT_DELAY = 5   # seconds between reconnect attempts
-KEEPALIVE_INTERVAL = 20  # seconds between keep-alive pings
+KEEPALIVE_INTERVAL = 30  # seconds between keep-alive pings
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -227,18 +227,26 @@ def main():
         # to keep the broker connection alive between trades.
         _stop_keepalive = threading.Event()
         _keepalive_lost = threading.Event()
+        _keepalive_fail_count = [0]  # mutable container so inner fn can write it
 
         def _keepalive():
             while not _stop_keepalive.wait(KEEPALIVE_INTERVAL):
                 try:
                     info = mt5.account_info()
-                    if info is None or info.login == 0:
-                        _log(f"[{user_id}] Keepalive: MT5 session lost — triggering reconnect")
+                    if info and info.login != 0:
+                        _keepalive_fail_count[0] = 0  # reset on success
+                    else:
+                        _keepalive_fail_count[0] += 1
+                        _log(f"[{user_id}] Keepalive: account_info None/0 (fail {_keepalive_fail_count[0]})")
+                        if _keepalive_fail_count[0] >= 3:
+                            _log(f"[{user_id}] Keepalive: 3 consecutive failures — triggering reconnect")
+                            _keepalive_lost.set()
+                            return
+                except Exception as _e:
+                    _keepalive_fail_count[0] += 1
+                    if _keepalive_fail_count[0] >= 3:
                         _keepalive_lost.set()
                         return
-                except Exception:
-                    _keepalive_lost.set()
-                    return
 
         ka_thread = threading.Thread(target=_keepalive, daemon=True)
         ka_thread.start()
