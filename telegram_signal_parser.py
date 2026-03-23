@@ -91,6 +91,9 @@ MANAGEMENT_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bSECURE\s+(PROFIT|TRADE)", re.IGNORECASE), "secure_profit"),
 ]
 
+# Pips format detection — "50 pips", "100 pip"
+PIPS_PATTERN = re.compile(r"\bPIPS?\b", re.IGNORECASE)
+
 # Emoji removal pattern
 EMOJI_PATTERN = re.compile(
     "["
@@ -232,8 +235,9 @@ def _extract_tp_list(text: str) -> list[float]:
     """Extract one or more take profit levels."""
     tp_values: list[float] = []
 
-    # Try numbered TPs: TP1, TP2, TP3
-    numbered = re.findall(r"\bTP\s*\d*[\s:=]*(\d+\.?\d*)", text)
+    # Try numbered TPs: TP1, TP2, TP3 — require at least one separator between
+    # the TP label and the price to avoid backtracking into "TP 100 pips" → "10"
+    numbered = re.findall(r"\bTP\d{0,2}[\s:=]+(\d+\.?\d*)", text)
     if numbered:
         for val in numbered:
             try:
@@ -344,6 +348,20 @@ def parse_telegram_message(raw_text: str) -> ParsedSignal:
             raw_text=raw_text,
             skip_reason=f"management message: {mgmt_type}",
             management_type=mgmt_type,
+        )
+
+    # Detect pips-format signals before extraction — "TP 100 pips SL 50 pips".
+    # The regex pipeline treats pips values as absolute prices (wrong); route to LLM instead.
+    if PIPS_PATTERN.search(cleaned):
+        action = _extract_action(cleaned)
+        symbol = _extract_symbol(cleaned)
+        confidence = (0.35 if action else 0.0) + (0.35 if symbol else 0.0)
+        return ParsedSignal(
+            raw_text=raw_text,
+            action=action,
+            symbol=symbol,
+            skip_reason="pips format signal — needs LLM interpretation",
+            confidence=confidence,
         )
 
     # Layer 2: Extract

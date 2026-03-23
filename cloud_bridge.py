@@ -13,6 +13,7 @@ load_dotenv(_os.path.join(_script_dir, ".env"))
 
 import argparse
 import base64
+import collections as _collections
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
@@ -23,7 +24,7 @@ import secrets
 import sqlite3
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import wraps
 import queue as _queue
@@ -79,6 +80,8 @@ DESKTOP_OAUTH_STATE_TTL = max(180, min(int(os.getenv("DESKTOP_OAUTH_STATE_TTL", 
 app.secret_key = SESSION_SECRET
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Section 9: session expires after 24 hours of inactivity
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
 
 # ==================== OAuth Setup ====================
 _oauth_client = _OAuth(app) if _OAuth else None
@@ -471,6 +474,17 @@ class BridgeStore:
             with self.lock, self.conn:
                 self.conn.execute("ALTER TABLE commands ADD COLUMN script_name TEXT NOT NULL DEFAULT 'Uncategorized'")
 
+        # Section 2: default lot/SL/TP per user
+        for col, coltype in [
+            ("default_lot_size", "REAL"),
+            ("default_sl_pips", "REAL"),
+            ("default_tp_pips", "REAL"),
+            ("private_chat_id", "TEXT"),
+        ]:
+            if not self._has_column("user_settings", col):
+                with self.lock, self.conn:
+                    self.conn.execute(f"ALTER TABLE user_settings ADD COLUMN {col} {coltype}")
+
         with self.lock, self.conn:
             self.conn.executescript(
                 """
@@ -535,6 +549,36 @@ class BridgeStore:
                     ON telegram_signal_log(channel_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_tg_signal_log_user
                     ON telegram_signal_log(user_id, created_at);
+
+                -- Section 5: Telegram account linking
+                CREATE TABLE IF NOT EXISTS telegram_users (
+                    telegram_user_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    private_chat_id TEXT NOT NULL,
+                    username TEXT,
+                    linked_at REAL NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
+
+                -- Section 5: One-time tokens for /start linking flow
+                CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+                    token TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                );
+
+                -- Section 3: Per-user symbol whitelist
+                CREATE TABLE IF NOT EXISTS user_allowed_symbols (
+                    user_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    added_at REAL NOT NULL,
+                    PRIMARY KEY (user_id, symbol),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_telegram_users_user
+                    ON telegram_users(user_id);
                 """
             )
 
@@ -659,7 +703,9 @@ class BridgeStore:
             row = self.conn.execute(
                 """
                 SELECT max_lot_size, rate_limit_max_trades, rate_limit_window_secs,
-                       notifications_enabled, telegram_bot_token, telegram_chat_id, discord_webhook_url
+                       notifications_enabled, telegram_bot_token, telegram_chat_id,
+                       discord_webhook_url, default_lot_size, default_sl_pips,
+                       default_tp_pips, private_chat_id
                 FROM user_settings
                 WHERE user_id = ?
                 """,
@@ -673,6 +719,10 @@ class BridgeStore:
             "telegram_bot_token": "",
             "telegram_chat_id": "",
             "discord_webhook_url": "",
+            "default_lot_size": None,
+            "default_sl_pips": None,
+            "default_tp_pips": None,
+            "private_chat_id": None,
         }
 
     def update_user_settings(self, user_id: str, updates: dict):
@@ -685,6 +735,10 @@ class BridgeStore:
             "telegram_bot_token",
             "telegram_chat_id",
             "discord_webhook_url",
+            "default_lot_size",
+            "default_sl_pips",
+            "default_tp_pips",
+            "private_chat_id",
         }
         fields = [k for k in updates.keys() if k in allowed]
         if not fields:
@@ -1403,6 +1457,274 @@ class BridgeStore:
             ).fetchall()
         return [r["command_id"] for r in rows if r["command_id"]]
 
+    # ── Telegram account linking (Section 5) ─────────────────────────────
+
+    def create_telegram_link_token(self, user_id: str, ttl: int = 600) -> str:
+        """Create a one-time token for the /start linking flow. Valid for ttl seconds."""
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        # Clean up old tokens for this user first
+        with self.lock, self.conn:
+            self.conn.execute("DELETE FROM telegram_link_tokens WHERE user_id = ?", (user_id,))
+            self.conn.execute(
+                "INSERT INTO telegram_link_tokens (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (token, user_id, now, now + ttl),
+            )
+        return token
+
+    def consume_telegram_link_token(self, token: str):
+        """Validate and delete a link token. Returns user_id or None."""
+        now = time.time()
+        with self.lock, self.conn:
+            row = self.conn.execute(
+                "SELECT user_id, expires_at FROM telegram_link_tokens WHERE token = ?",
+                (token,),
+            ).fetchone()
+            if not row:
+                return None
+            if row["expires_at"] < now:
+                self.conn.execute("DELETE FROM telegram_link_tokens WHERE token = ?", (token,))
+                return None
+            self.conn.execute("DELETE FROM telegram_link_tokens WHERE token = ?", (token,))
+        return row["user_id"]
+
+    def link_telegram_user(self, telegram_user_id: str, user_id: str,
+                           private_chat_id: str, username: str = "") -> None:
+        """Store the Telegram→account link and update private_chat_id in user_settings."""
+        now = time.time()
+        with self.lock, self.conn:
+            self.conn.execute(
+                """INSERT INTO telegram_users (telegram_user_id, user_id, private_chat_id, username, linked_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(telegram_user_id) DO UPDATE SET
+                       user_id=excluded.user_id,
+                       private_chat_id=excluded.private_chat_id,
+                       username=excluded.username,
+                       linked_at=excluded.linked_at""",
+                (telegram_user_id, user_id, private_chat_id, username or "", now),
+            )
+            # Also persist private_chat_id in user_settings for _send_private()
+            self.conn.execute(
+                "UPDATE user_settings SET private_chat_id = ?, updated_at = ? WHERE user_id = ?",
+                (private_chat_id, now, user_id),
+            )
+
+    def get_user_id_by_telegram_id(self, telegram_user_id: str):
+        """Resolve a Telegram user_id to a PlatAlgo user_id."""
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT user_id FROM telegram_users WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            ).fetchone()
+        return row["user_id"] if row else None
+
+    def get_telegram_id_for_user(self, user_id: str):
+        """Reverse lookup: PlatAlgo user_id → Telegram user_id."""
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT telegram_user_id FROM telegram_users WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return row["telegram_user_id"] if row else None
+
+    def unlink_telegram_user(self, telegram_user_id: str) -> None:
+        """Remove a Telegram link and clear private_chat_id from user_settings."""
+        with self.lock, self.conn:
+            row = self.conn.execute(
+                "SELECT user_id FROM telegram_users WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            ).fetchone()
+            if row:
+                self.conn.execute(
+                    "UPDATE user_settings SET private_chat_id = NULL, updated_at = ? WHERE user_id = ?",
+                    (time.time(), row["user_id"]),
+                )
+            self.conn.execute(
+                "DELETE FROM telegram_users WHERE telegram_user_id = ?", (telegram_user_id,)
+            )
+
+    def get_private_chat_id_for_user(self, user_id: str):
+        """Get the private Telegram chat_id stored from the /start link flow."""
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT private_chat_id FROM user_settings WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return row["private_chat_id"] if row else None
+
+    # ── User default settings (Section 2) ────────────────────────────────
+
+    def get_user_defaults(self, user_id: str) -> dict:
+        """Return default_lot_size, default_sl_pips, default_tp_pips for a user."""
+        self.ensure_user_settings(user_id)
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT default_lot_size, default_sl_pips, default_tp_pips FROM user_settings WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return dict(row) if row else {"default_lot_size": None, "default_sl_pips": None, "default_tp_pips": None}
+
+    def set_user_default(self, user_id: str, field: str, value) -> None:
+        """Set a single default value (default_lot_size, default_sl_pips, default_tp_pips)."""
+        allowed = {"default_lot_size", "default_sl_pips", "default_tp_pips"}
+        if field not in allowed:
+            raise ValueError(f"unknown default field: {field}")
+        self.ensure_user_settings(user_id)
+        with self.lock, self.conn:
+            self.conn.execute(
+                f"UPDATE user_settings SET {field} = ?, updated_at = ? WHERE user_id = ?",
+                (value, time.time(), user_id),
+            )
+
+    # ── Per-user symbol whitelist (Section 3) ────────────────────────────
+
+    def get_user_allowed_symbols(self, user_id: str) -> list:
+        """Return the user's allowed symbols list. Empty = all symbols allowed."""
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT symbol FROM user_allowed_symbols WHERE user_id = ? ORDER BY symbol",
+                (user_id,),
+            ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def add_user_allowed_symbol(self, user_id: str, symbol: str) -> None:
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO user_allowed_symbols (user_id, symbol, added_at) VALUES (?, ?, ?)",
+                (user_id, symbol.upper(), time.time()),
+            )
+
+    def remove_user_allowed_symbol(self, user_id: str, symbol: str) -> None:
+        with self.lock, self.conn:
+            self.conn.execute(
+                "DELETE FROM user_allowed_symbols WHERE user_id = ? AND symbol = ?",
+                (user_id, symbol.upper()),
+            )
+
+    # ── Telegram channel management (Sections 4 / 5 bot commands) ────────
+
+    def get_channels_for_user(self, user_id: str) -> list:
+        """Alias for list_telegram_channels."""
+        return self.list_telegram_channels(user_id)
+
+    def add_telegram_channel_simple(self, user_id: str, chat_id: str,
+                                    chat_title: str = None) -> str:
+        """Add a channel subscription for a user (simplified, auto-generates channel_id)."""
+        channel_id = str(uuid.uuid4())
+        self.add_telegram_channel(
+            channel_id=channel_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            chat_title=chat_title or chat_id,
+        )
+        return channel_id
+
+    def remove_telegram_channel(self, user_id: str, chat_id: str) -> bool:
+        """Remove a channel subscription by user_id + chat_id."""
+        with self.lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM telegram_channels WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id),
+            )
+        return cursor.rowcount > 0
+
+    # ── Admin helpers (Section 8) ─────────────────────────────────────────
+
+    def get_all_users_summary(self) -> list:
+        """Return a lightweight list of all users for admin /admin users command."""
+        with self.lock:
+            rows = self.conn.execute(
+                """SELECT u.user_id, u.created_at,
+                          CASE WHEN ma.user_id IS NOT NULL THEN 1 ELSE 0 END as managed
+                   FROM users u
+                   LEFT JOIN managed_accounts ma ON u.user_id = ma.user_id AND ma.enabled = 1
+                   ORDER BY u.created_at DESC""",
+            ).fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "user_id": r["user_id"],
+                "managed": bool(r["managed"]),
+                "created_at_str": datetime.fromtimestamp(r["created_at"], tz=timezone.utc).strftime("%Y-%m-%d"),
+            })
+        return result
+
+    def get_recent_signal_logs(self, limit: int = 20) -> list:
+        """Return recent signal logs across all users for admin view."""
+        with self.lock:
+            rows = self.conn.execute(
+                """SELECT user_id, parsed_action, parsed_symbol, execution_status, created_at
+                   FROM telegram_signal_log ORDER BY created_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_platform_stats(self) -> dict:
+        """Return aggregate platform statistics for admin."""
+        cutoff_24h = time.time() - 86400
+        with self.lock:
+            total_users = self.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            managed_count = self.conn.execute(
+                "SELECT COUNT(*) FROM managed_accounts WHERE enabled = 1"
+            ).fetchone()[0]
+            signals_today = self.conn.execute(
+                "SELECT COUNT(*) FROM telegram_signal_log WHERE created_at >= ?",
+                (cutoff_24h,),
+            ).fetchone()[0]
+            executed_today = self.conn.execute(
+                "SELECT COUNT(*) FROM telegram_signal_log WHERE execution_status = 'executed' AND created_at >= ?",
+                (cutoff_24h,),
+            ).fetchone()[0]
+            active_channels = self.conn.execute(
+                "SELECT COUNT(*) FROM telegram_channels WHERE enabled = 1"
+            ).fetchone()[0]
+        return {
+            "total_users": total_users,
+            "managed_count": managed_count,
+            "signals_today": signals_today,
+            "executed_today": executed_today,
+            "active_channels": active_channels,
+        }
+
+    def get_user_admin_info(self, user_id: str) -> dict | None:
+        """Return detailed user info for admin inspection."""
+        if not self.user_exists(user_id):
+            return None
+        with self.lock:
+            settings_row = self.conn.execute(
+                "SELECT max_lot_size FROM user_settings WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            created_row = self.conn.execute(
+                "SELECT created_at FROM users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            channel_count = self.conn.execute(
+                "SELECT COUNT(*) FROM telegram_channels WHERE user_id = ?", (user_id,)
+            ).fetchone()[0]
+            signal_count = self.conn.execute(
+                "SELECT COUNT(*) FROM telegram_signal_log WHERE user_id = ?", (user_id,)
+            ).fetchone()[0]
+            managed = self.conn.execute(
+                "SELECT 1 FROM managed_accounts WHERE user_id = ? AND enabled = 1", (user_id,)
+            ).fetchone() is not None
+        return {
+            "user_id": user_id,
+            "managed": managed,
+            "max_lot_size": settings_row["max_lot_size"] if settings_row else None,
+            "channel_count": channel_count,
+            "signal_count": signal_count,
+            "created_at_str": datetime.fromtimestamp(
+                created_row["created_at"], tz=timezone.utc
+            ).strftime("%Y-%m-%d %H:%M UTC") if created_row else "?",
+        }
+
+    def admin_stop_managed_session(self, user_id: str) -> None:
+        """Mark a managed account as disabled. The caller should also stop the session."""
+        with self.lock, self.conn:
+            self.conn.execute(
+                "UPDATE managed_accounts SET enabled = 0, updated_at = ? WHERE user_id = ?",
+                (time.time(), user_id),
+            )
+
 # Global store
 store = BridgeStore(DB_PATH)
 PENDING_DESKTOP_STATES = {}
@@ -1412,6 +1734,25 @@ _pending_state_lock = RLock()
 session_manager = SessionManager()
 session_manager.load_from_store(store, decrypt_secret)
 LAST_OFFLINE_NOTIFY = {}
+
+# ── Section 9: In-memory rate limiter ─────────────────────────────────────────
+_rate_buckets: dict = {}  # key → deque of timestamps
+_rate_lock = threading.Lock()
+
+
+def _rate_check(key: str, max_calls: int, window_secs: int) -> bool:
+    """Return True if the call is allowed, False if the rate limit is exceeded."""
+    now = time.time()
+    cutoff = now - window_secs
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, _collections.deque())
+        # Evict old entries
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= max_calls:
+            return False
+        bucket.append(now)
+    return True
 
 
 def _process_signal_for_telegram(user_id: str, signal_data: dict) -> dict:
@@ -1488,11 +1829,14 @@ if _openai_api_key:
     )
     logger.info("LLM fallback configured (GPT-4o-mini)")
 
+_admin_telegram_id = os.getenv("ADMIN_TELEGRAM_ID", "").strip()
+
 from telegram_bot_manager import TelegramBotManager  # noqa: E402
 telegram_manager = TelegramBotManager(
     store, app, _process_signal_for_telegram, _tg_bot_token,
     close_callback=_close_channel_positions,
     llm_processor=_llm_processor,
+    admin_telegram_id=_admin_telegram_id or None,
 )
 telegram_manager.start()
 
@@ -1542,10 +1886,16 @@ def _notification_worker():
 threading.Thread(target=_notification_worker, daemon=True, name="notify-worker").start()
 
 
+_session_last_state: dict = {}      # user_id → bool (was connected)
+_session_offline_notified: dict = {}  # user_id → timestamp of last offline notify
+
 def _managed_heartbeat_worker():
     """
     Send periodic heartbeats for managed VPS sessions so they appear online
     in the dashboard and the MT5/Broker indicators go green in the app.
+
+    Section 7: Detect offline/recovery transitions and send Telegram notifications
+    to the user's private chat, throttled to once per hour for offline events.
     """
     while True:
         time.sleep(15)
@@ -1559,6 +1909,30 @@ def _managed_heartbeat_worker():
                     "managed": True,
                 }
                 store.heartbeat(user_id, relay_id, metadata)
+
+                # Section 7: Session state change notifications
+                prev = _session_last_state.get(user_id)
+                if prev is not None and prev != connected:
+                    now = time.time()
+                    if connected:
+                        # Recovery notification (always send)
+                        msg = "🟢 MT5 session reconnected and ready to trade."
+                        try:
+                            telegram_manager.send_session_notification(user_id, msg)
+                        except Exception:
+                            pass
+                        _session_offline_notified.pop(user_id, None)
+                    else:
+                        # Offline — throttle to once per hour
+                        last_notified = _session_offline_notified.get(user_id, 0)
+                        if now - last_notified >= 3600:
+                            msg = "⚠️ MT5 session went offline. Attempting to reconnect…"
+                            try:
+                                telegram_manager.send_session_notification(user_id, msg)
+                            except Exception:
+                                pass
+                            _session_offline_notified[user_id] = now
+                _session_last_state[user_id] = connected
         except Exception as exc:
             logger.warning(f"Managed heartbeat worker error: {exc}")
 
@@ -1655,6 +2029,20 @@ def admin_login_required(func):
         return func(*args, **kwargs)
     return wrapper
 
+# ==================== Request Logging (Section 9) ====================
+
+@app.before_request
+def _log_request():
+    """Log incoming API requests (excluding health checks and static assets)."""
+    if request.path in ("/health",) or request.path.startswith("/static"):
+        return
+    logger.debug(
+        f"[REQ] {request.method} {request.path} "
+        f"user={request.headers.get('X-User-ID', '-')} "
+        f"ip={request.headers.get('X-Forwarded-For', request.remote_addr or '-').split(',')[0].strip()}"
+    )
+
+
 # ==================== Endpoints ====================
 
 @app.route("/health", methods=["GET"])
@@ -1722,6 +2110,12 @@ def login_page():
     if request.method == "GET":
         return render_template("login.html")
 
+    # Section 9: rate limit login attempts — 5/min per IP
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not _rate_check(f"login:{client_ip}", max_calls=5, window_secs=60):
+        flash("Too many login attempts. Please wait a moment.", "error")
+        return render_template("login.html"), 429
+
     user_id = (request.form.get("user_id") or "").strip()
     password = request.form.get("password") or ""
 
@@ -1730,6 +2124,7 @@ def login_page():
         return render_template("login.html"), 401
 
     session["dashboard_user"] = user_id
+    session.permanent = True  # Section 9: respect session expiry
     flash("Signed in.", "success")
     return redirect(url_for("dashboard_page"))
 
@@ -2076,6 +2471,9 @@ def _process_signal_for_user(user_id: str, data: dict):
             size = 0.1
     sl = data.get("sl", data.get("stop_loss"))
     tp = data.get("tp", data.get("take_profit"))
+    # Section 2: pips-based SL/TP defaults (passed from Telegram bot when signal has no absolute SL/TP)
+    sl_pips = data.get("sl_pips")
+    tp_pips = data.get("tp_pips")
     script_name = str(
         data.get("script_name")
         or data.get("script")
@@ -2140,6 +2538,10 @@ def _process_signal_for_user(user_id: str, data: dict):
 
     if managed_mode:
         cmd_dict = {"action": action, "symbol": symbol, "size": size or 0.1, "sl": sl, "tp": tp}
+        if sl_pips and sl is None:
+            cmd_dict["sl_pips"] = float(sl_pips)
+        if tp_pips and tp is None:
+            cmd_dict["tp_pips"] = float(tp_pips)
         result = session_manager.execute(user_id, cmd_dict)
         result["mode"] = "managed-vps"
         status = CommandStatus.EXECUTED if result.get("status") == "executed" else CommandStatus.FAILED
@@ -2175,8 +2577,8 @@ def receive_signal():
     POST /signal
     """
     data = request.get_json(silent=True)
-    user_id = (request.headers.get("X-User-ID") or data.get("user_id") or "").strip()
-    api_key = (request.headers.get("X-API-Key") or data.get("api_key") or "").strip()
+    user_id = (request.headers.get("X-User-ID") or (data or {}).get("user_id") or "").strip()
+    api_key = (request.headers.get("X-API-Key") or (data or {}).get("api_key") or "").strip()
 
     if not user_id:
         return jsonify({"error": "missing user_id (header X-User-ID or body user_id)"}), 400
@@ -2184,6 +2586,11 @@ def receive_signal():
         return jsonify({"error": "missing api_key (header X-API-Key or body api_key)"}), 401
     if api_key and not verify_api_key(user_id, api_key):
         return jsonify({"error": "unauthorized"}), 401
+
+    # Section 9: rate limiting — 10 signals per minute per API key
+    rl_key = f"signal:{user_id}"
+    if not _rate_check(rl_key, max_calls=10, window_secs=60):
+        return jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429
 
     return _process_signal_for_user(user_id, data)
 
@@ -2623,9 +3030,72 @@ def user_settings_api():
         updates["telegram_chat_id"] = (data.get("telegram_chat_id") or "").strip()
     if "discord_webhook_url" in data:
         updates["discord_webhook_url"] = (data.get("discord_webhook_url") or "").strip()
+    # Section 2: default lot/SL/TP
+    if "default_lot_size" in data:
+        v = data["default_lot_size"]
+        updates["default_lot_size"] = float(v) if v else None
+    if "default_sl_pips" in data:
+        v = data["default_sl_pips"]
+        updates["default_sl_pips"] = float(v) if v else None
+    if "default_tp_pips" in data:
+        v = data["default_tp_pips"]
+        updates["default_tp_pips"] = float(v) if v else None
 
     store.update_user_settings(user_id, updates)
     return jsonify(store.get_user_settings(user_id))
+
+
+# ==================== Telegram Account Linking (Section 5) ====================
+
+@app.route("/telegram/link", methods=["POST"])
+def telegram_link():
+    """
+    Generate a one-time link token so the user can send /start <token> to the bot.
+    POST /telegram/link  (requires auth)
+    Returns: { "link_url": "https://t.me/<bot>?start=<token>", "token": "..." }
+    """
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    token = store.create_telegram_link_token(user_id)
+    bot_username = telegram_manager.bot_username
+    if bot_username:
+        link_url = f"https://t.me/{bot_username}?start={token}"
+    else:
+        link_url = None
+
+    return jsonify({
+        "token": token,
+        "link_url": link_url,
+        "expires_in": 600,
+    })
+
+
+# ==================== Symbol Filter API (Section 3) ====================
+
+@app.route("/api/user/symbols", methods=["GET", "POST", "DELETE"])
+def user_symbols_api():
+    """Manage per-user symbol whitelist."""
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    if request.method == "GET":
+        symbols = store.get_user_allowed_symbols(user_id)
+        return jsonify({"symbols": symbols, "filter_active": bool(symbols)})
+
+    data = request.get_json(silent=True) or {}
+    symbol = (data.get("symbol") or "").strip().upper()
+    if not symbol:
+        return jsonify({"error": "symbol is required"}), 400
+
+    if request.method == "POST":
+        store.add_user_allowed_symbol(user_id, symbol)
+        return jsonify({"symbols": store.get_user_allowed_symbols(user_id)})
+    else:  # DELETE
+        store.remove_user_allowed_symbol(user_id, symbol)
+        return jsonify({"symbols": store.get_user_allowed_symbols(user_id)})
 
 
 # ==================== Telegram Signal Channel API ====================

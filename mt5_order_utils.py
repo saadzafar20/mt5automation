@@ -78,6 +78,7 @@ def build_market_order(mt5, action: str, symbol: str, volume: float,
     Returns:
         Order request dict or None if invalid
     """
+    mt5.symbol_select(symbol, True)
     tick = mt5.symbol_info_tick(symbol)
     if not tick:
         return None
@@ -216,16 +217,68 @@ def close_positions(mt5, symbol: Optional[str] = None,
         return {"status": "failed", "error": "all close requests failed"}
 
 
-def execute_command(mt5, command: Dict[str, Any], 
+def pip_size_for_symbol(symbol: str) -> float:
+    """Return the pip size (1 pip in price terms) for a given symbol.
+
+    Used to convert pips-based SL/TP offsets into absolute price levels.
+    Covers forex majors/minors, metals, indices, and crypto.
+    """
+    s = symbol.upper().replace("/", "")
+    # JPY pairs: 1 pip = 0.01
+    if "JPY" in s:
+        return 0.01
+    # Gold (XAUUSD): 1 pip = $0.1
+    if s in ("XAUUSD", "GOLD"):
+        return 0.1
+    # Silver (XAGUSD): 1 pip = $0.01
+    if s in ("XAGUSD", "SILVER"):
+        return 0.01
+    # Oil: 1 pip = $0.01
+    if s in ("USOUSD", "UKOUSD", "BRENT", "WTI", "OIL"):
+        return 0.01
+    # Major indices: 1 pip = 1 index point
+    if any(s.startswith(x) for x in ("US30", "NAS100", "SPX500", "GER40", "UK100", "DAX")):
+        return 1.0
+    # Crypto: 1 pip = $1
+    if "BTC" in s or "ETH" in s:
+        return 1.0
+    # Default forex: 1 pip = 0.0001
+    return 0.0001
+
+
+def pips_to_price(symbol: str, pips: float, action: str,
+                  price: float, direction: str) -> float:
+    """Convert a pip offset to an absolute price level.
+
+    Args:
+        symbol:    Trading symbol
+        pips:      Number of pips
+        action:    "BUY" or "SELL"
+        price:     Current entry price (ask for BUY, bid for SELL)
+        direction: "sl" or "tp"
+
+    Returns:
+        Absolute price level
+    """
+    size = pip_size_for_symbol(symbol) * pips
+    is_buy = action.upper() == "BUY"
+    if direction == "sl":
+        return round(price - size if is_buy else price + size, 5)
+    else:  # tp
+        return round(price + size if is_buy else price - size, 5)
+
+
+def execute_command(mt5, command: Dict[str, Any],
                     comment_prefix: str = "bridge") -> Dict[str, Any]:
     """
     Execute a trade command dict via MT5.
-    
+
     Args:
         mt5: MetaTrader5 module
-        command: Command dict with action, symbol, size, sl, tp
+        command: Command dict with action, symbol, size, sl, tp,
+                 and optionally sl_pips / tp_pips (converted using current tick)
         comment_prefix: Prefix for order comments
-        
+
     Returns:
         Result dict
     """
@@ -234,6 +287,10 @@ def execute_command(mt5, command: Dict[str, Any],
     size = float(command.get("size") or 0.1)
     sl = command.get("sl")
     tp = command.get("tp")
+
+    # Ensure symbol is in market watch before any tick/info queries
+    if symbol and action in ("BUY", "SELL"):
+        mt5.symbol_select(symbol, True)
 
     # Negative size = percentage of equity (convention from cloud_bridge)
     if size < 0 and action in ("BUY", "SELL"):
@@ -258,6 +315,18 @@ def execute_command(mt5, command: Dict[str, Any],
                     size = vol_min
         else:
             size = 0.01
+
+    # Convert pips-based SL/TP to absolute price levels using current tick
+    sl_pips = command.get("sl_pips")
+    tp_pips = command.get("tp_pips")
+    if action in ("BUY", "SELL") and (sl_pips or tp_pips):
+        tick = mt5.symbol_info_tick(symbol)
+        if tick:
+            entry_price = tick.ask if action == "BUY" else tick.bid
+            if sl is None and sl_pips:
+                sl = pips_to_price(symbol, float(sl_pips), action, entry_price, "sl")
+            if tp is None and tp_pips:
+                tp = pips_to_price(symbol, float(tp_pips), action, entry_price, "tp")
 
     if action in ("BUY", "SELL"):
         return execute_market_order(

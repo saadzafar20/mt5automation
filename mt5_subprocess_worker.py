@@ -210,6 +210,18 @@ def main():
         _log(f"[{user_id}] Connected: {account_str}")
         _send({"status": "ready", "account": account_str})
 
+        # ── Populate full market watch ─────────────────────────────────────────
+        # Add every symbol available on the broker to the market watch so that
+        # symbol_info_tick() works for any symbol without manual market watch setup.
+        try:
+            all_syms = mt5.symbols_get()
+            if all_syms:
+                for _sym in all_syms:
+                    mt5.symbol_select(_sym.name, True)
+                _log(f"[{user_id}] Market watch populated: {len(all_syms)} symbols")
+        except Exception as _e:
+            _log(f"[{user_id}] Could not populate market watch: {_e}")
+
         # ── Keep-alive thread ─────────────────────────────────────────────────
         # MT5 connections time out when idle. Ping account_info() periodically
         # to keep the broker connection alive between trades.
