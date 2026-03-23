@@ -222,17 +222,24 @@ def main():
         _log(f"[{user_id}] Connected: {account_str}")
         _send({"status": "ready", "account": account_str})
 
-        # ── Populate full market watch ─────────────────────────────────────────
-        # Add every symbol available on the broker to the market watch so that
-        # symbol_info_tick() works for any symbol without manual market watch setup.
-        try:
-            all_syms = mt5.symbols_get()
-            if all_syms:
-                for _sym in all_syms:
-                    mt5.symbol_select(_sym.name, True)
-                _log(f"[{user_id}] Market watch populated: {len(all_syms)} symbols")
-        except Exception as _e:
-            _log(f"[{user_id}] Could not populate market watch: {_e}")
+        # ── Pre-select common symbols ──────────────────────────────────────────
+        # Select the most-traded symbols so tick data is immediately available.
+        # Full symbol selection (all 6087+) overwhelms the broker connection.
+        # Per-symbol symbol_select() in mt5_order_utils handles other symbols.
+        _COMMON_SYMBOLS = [
+            "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+            "EURGBP", "EURJPY", "GBPJPY", "XAUUSD", "XAGUSD",
+            "US30", "NAS100", "SPX500", "GER40", "UK100",
+            "BTCUSD", "ETHUSD", "USOUSD", "UKOUSD",
+        ]
+        _selected = 0
+        for _sym in _COMMON_SYMBOLS:
+            try:
+                if mt5.symbol_select(_sym, True):
+                    _selected += 1
+            except Exception:
+                pass
+        _log(f"[{user_id}] Pre-selected {_selected}/{len(_COMMON_SYMBOLS)} common symbols")
 
         # ── Keep-alive thread ─────────────────────────────────────────────────
         # MT5 connections time out when idle. Ping account_info() periodically
