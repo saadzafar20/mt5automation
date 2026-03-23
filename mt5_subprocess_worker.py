@@ -154,49 +154,26 @@ def main():
             time.sleep(RECONNECT_DELAY)
             continue
 
-        # ── Ensure AutoTrading is enabled ─────────────────────────────────────
-        # Check if autotrading is already on. If so, skip the kill+reinit cycle.
-        # Only patch+restart if trade_allowed is False — this avoids IPC instability
-        # caused by rapid kill/reinit of the portable terminal.
+        # ── Ensure AutoTrading config is written ──────────────────────────────
+        # Write ExpertAdvisorsEnabled=1 to the terminal's config directory so
+        # the next startup has autotrading on. We do NOT kill+restart the terminal
+        # because killing the system terminal breaks IPC. If trade_allowed is
+        # already True, we're good. If not, trades may return -10027 until the
+        # terminal is manually restarted with the new config.
         if not _autotrading_patched:
             term = mt5.terminal_info()
             trade_allowed = getattr(term, "trade_allowed", False) if term else False
             actual_data_path = getattr(term, "data_path", None) if term else None
-            if trade_allowed:
-                # AutoTrading already on — no restart needed
-                _autotrading_patched = True
-                _log(f"[{user_id}] AutoTrading already enabled — skipping patch")
-            elif actual_data_path:
+            if actual_data_path:
                 try:
                     config_path = os.path.join(actual_data_path, "config", "common.ini")
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
                     with open(config_path, "w", encoding="utf-16") as f:
                         f.write("[Common]\nExpertAdvisorsEnabled=1\n")
-                    _autotrading_patched = True
-                    _log(f"[{user_id}] Patched {config_path} — restarting terminal")
-
-                    mt5.shutdown()
-
-                    # Kill by path (most reliable for per-user terminal copies)
-                    if terminal_exe and os.path.exists(terminal_exe):
-                        import subprocess as sp
-                        r = sp.run(
-                            ['powershell', '-Command',
-                             f'Get-Process | Where-Object {{ $_.Path -eq "{terminal_exe}" }} | Stop-Process -Force; $true'],
-                            capture_output=True, text=True, timeout=15,
-                        )
-                        _log(f"[{user_id}] Kill result: {r.stdout.strip() or r.stderr.strip() or 'ok'}")
-
-                    # Wait longer to ensure process fully exits before re-init
-                    time.sleep(8)
-                    ok = mt5.initialize(**init_kwargs)
-                    if not ok:
-                        _log(f"[{user_id}] Re-init after patch failed: {mt5.last_error()} — retrying")
-                        time.sleep(RECONNECT_DELAY)
-                        continue
+                    _log(f"[{user_id}] Wrote autotrading config → {config_path} (trade_allowed={trade_allowed})")
                 except Exception as e:
-                    _log(f"[{user_id}] Could not patch common.ini: {e}")
-                    _autotrading_patched = True  # don't retry on failure
+                    _log(f"[{user_id}] Could not write autotrading config: {e}")
+            _autotrading_patched = True
 
         # Wait for account_info to reflect the authenticated account (login != 0).
         # MT5 initialize() can return True before the account sync completes.
