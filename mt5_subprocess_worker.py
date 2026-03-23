@@ -238,13 +238,19 @@ def main():
         # MT5 connections time out when idle. Ping account_info() periodically
         # to keep the broker connection alive between trades.
         _stop_keepalive = threading.Event()
+        _keepalive_lost = threading.Event()
 
         def _keepalive():
             while not _stop_keepalive.wait(KEEPALIVE_INTERVAL):
                 try:
-                    mt5.account_info()
+                    info = mt5.account_info()
+                    if info is None or info.login == 0:
+                        _log(f"[{user_id}] Keepalive: MT5 session lost — triggering reconnect")
+                        _keepalive_lost.set()
+                        return
                 except Exception:
-                    pass
+                    _keepalive_lost.set()
+                    return
 
         ka_thread = threading.Thread(target=_keepalive, daemon=True)
         ka_thread.start()
@@ -252,6 +258,9 @@ def main():
         # ── Command loop (one command → one response) ─────────────────────────
         lost_connection = False
         for raw_line in sys.stdin:
+            if _keepalive_lost.is_set():
+                lost_connection = True
+                break
             raw_line = raw_line.strip()
             if not raw_line:
                 continue
