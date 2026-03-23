@@ -162,14 +162,18 @@ def main():
             continue
 
         # ── Ensure AutoTrading is enabled ─────────────────────────────────────
-        # Write config at actual data_path. On first connect the terminal may
-        # already be running with AutoTrading disabled (started by a prior
-        # session). We patch the config then kill+reinit once so the fresh
-        # terminal starts with AutoTrading on.
+        # Check if autotrading is already on. If so, skip the kill+reinit cycle.
+        # Only patch+restart if trade_allowed is False — this avoids IPC instability
+        # caused by rapid kill/reinit of the portable terminal.
         if not _autotrading_patched:
             term = mt5.terminal_info()
+            trade_allowed = getattr(term, "trade_allowed", False) if term else False
             actual_data_path = getattr(term, "data_path", None) if term else None
-            if actual_data_path:
+            if trade_allowed:
+                # AutoTrading already on — no restart needed
+                _autotrading_patched = True
+                _log(f"[{user_id}] AutoTrading already enabled — skipping patch")
+            elif actual_data_path:
                 try:
                     config_path = os.path.join(actual_data_path, "config", "common.ini")
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
@@ -178,12 +182,9 @@ def main():
                     _autotrading_patched = True
                     _log(f"[{user_id}] Patched {config_path} — restarting terminal")
 
-                    # Get terminal PID before disconnecting so we can kill it reliably
-                    term_pid = getattr(term, "community_connection", None)  # not a real pid
                     mt5.shutdown()
 
                     # Kill by path (most reliable for per-user terminal copies)
-                    killed = False
                     if terminal_exe and os.path.exists(terminal_exe):
                         import subprocess as sp
                         r = sp.run(
@@ -191,7 +192,6 @@ def main():
                              f'Get-Process | Where-Object {{ $_.Path -eq "{terminal_exe}" }} | Stop-Process -Force; $true'],
                             capture_output=True, text=True, timeout=15,
                         )
-                        killed = True
                         _log(f"[{user_id}] Kill result: {r.stdout.strip() or r.stderr.strip() or 'ok'}")
 
                     # Wait longer to ensure process fully exits before re-init
