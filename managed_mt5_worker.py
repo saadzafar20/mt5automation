@@ -20,6 +20,221 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
+# ---------------------------------------------------------------------------
+# Windows-only helper: spawn a process in the active interactive user session
+# (Session 1) instead of the service's Session 0.  This is required so the
+# mt5_subprocess_worker can connect to MetaTrader5 with trade_allowed=True,
+# which the terminal only grants to processes in an interactive session.
+# ---------------------------------------------------------------------------
+
+def _spawn_in_session1(cmd: list, cwd: str):
+    """
+    Spawn *cmd* in the active Windows interactive session (Session 1) using
+    WTSQueryUserToken + CreateProcessAsUser.  Returns a Popen-compatible
+    object with .stdin, .stdout, .stderr, .pid, .poll(), .wait(), .kill()
+    attributes, or None if no interactive session exists / the call fails.
+
+    Only available on Windows; returns None immediately on other platforms.
+    """
+    if sys.platform != "win32":
+        return None
+
+    import ctypes
+    import ctypes.wintypes as wt
+    import msvcrt
+
+    try:
+        KERNEL32  = ctypes.windll.kernel32
+        ADVAPI32  = ctypes.windll.advapi32
+        WTSAPI32  = ctypes.windll.wtsapi32
+        USERENV   = ctypes.windll.userenv
+
+        # ── Structures ────────────────────────────────────────────────────
+        class SECURITY_ATTRIBUTES(ctypes.Structure):
+            _fields_ = [("nLength", wt.DWORD),
+                         ("lpSecurityDescriptor", wt.LPVOID),
+                         ("bInheritHandle", wt.BOOL)]
+
+        class STARTUPINFOW(ctypes.Structure):
+            _fields_ = [
+                ("cb",              wt.DWORD),
+                ("lpReserved",      wt.LPWSTR),
+                ("lpDesktop",       wt.LPWSTR),
+                ("lpTitle",         wt.LPWSTR),
+                ("dwX",             wt.DWORD), ("dwY",            wt.DWORD),
+                ("dwXSize",         wt.DWORD), ("dwYSize",        wt.DWORD),
+                ("dwXCountChars",   wt.DWORD), ("dwYCountChars",  wt.DWORD),
+                ("dwFillAttribute", wt.DWORD),
+                ("dwFlags",         wt.DWORD),
+                ("wShowWindow",     wt.WORD),
+                ("cbReserved2",     wt.WORD),
+                ("lpReserved2",     ctypes.c_char_p),
+                ("hStdInput",       wt.HANDLE),
+                ("hStdOutput",      wt.HANDLE),
+                ("hStdError",       wt.HANDLE),
+            ]
+
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [("hProcess", wt.HANDLE), ("hThread", wt.HANDLE),
+                         ("dwProcessId", wt.DWORD), ("dwThreadId", wt.DWORD)]
+
+        STARTF_USESTDHANDLES  = 0x100
+        STARTF_USESHOWWINDOW  = 0x001
+        SW_HIDE               = 0
+        CREATE_UNICODE_ENV    = 0x400
+        HANDLE_FLAG_INHERIT   = 0x1
+        TOKEN_ALL_ACCESS      = 0xF01FF
+        SecurityImpersonation = 2
+        TokenPrimary          = 1
+
+        def _make_pipe():
+            """Return (read_h, write_h) — both inheritable."""
+            sa = SECURITY_ATTRIBUTES()
+            sa.nLength = ctypes.sizeof(sa)
+            sa.bInheritHandle = True
+            r, w = wt.HANDLE(), wt.HANDLE()
+            if not KERNEL32.CreatePipe(ctypes.byref(r), ctypes.byref(w),
+                                        ctypes.byref(sa), 0):
+                raise ctypes.WinError()
+            return r, w
+
+        # ── Get the active console session ────────────────────────────────
+        session_id = KERNEL32.WTSGetActiveConsoleSessionId()
+        if session_id == 0xFFFFFFFF:
+            return None  # no interactive session
+
+        # ── Obtain the user's primary token ───────────────────────────────
+        hToken = wt.HANDLE()
+        if not WTSAPI32.WTSQueryUserToken(session_id, ctypes.byref(hToken)):
+            logger.debug("_spawn_in_session1: WTSQueryUserToken failed "
+                         f"(err={ctypes.GetLastError()})")
+            return None
+
+        hDupToken = wt.HANDLE()
+        if not ADVAPI32.DuplicateTokenEx(
+                hToken, TOKEN_ALL_ACCESS, None,
+                SecurityImpersonation, TokenPrimary,
+                ctypes.byref(hDupToken)):
+            KERNEL32.CloseHandle(hToken)
+            return None
+        KERNEL32.CloseHandle(hToken)
+
+        # ── Build user environment block ──────────────────────────────────
+        hEnv = ctypes.c_void_p()
+        USERENV.CreateEnvironmentBlock(ctypes.byref(hEnv), hDupToken, False)
+
+        # ── Create stdin/stdout/stderr pipes ──────────────────────────────
+        stdin_r,  stdin_w  = _make_pipe()
+        stdout_r, stdout_w = _make_pipe()
+        stderr_r, stderr_w = _make_pipe()
+
+        # Make the parent-side handles non-inheritable so only the
+        # child-side ends are passed through.
+        for h in (stdin_w, stdout_r, stderr_r):
+            KERNEL32.SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0)
+
+        # ── STARTUPINFO ───────────────────────────────────────────────────
+        si = STARTUPINFOW()
+        si.cb         = ctypes.sizeof(si)
+        si.lpDesktop  = "winsta0\\default"
+        si.dwFlags    = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW
+        si.wShowWindow = SW_HIDE
+        si.hStdInput  = stdin_r
+        si.hStdOutput = stdout_w
+        si.hStdError  = stderr_w
+
+        pi = PROCESS_INFORMATION()
+
+        # Build command string (quote paths with spaces)
+        import shlex
+        cmd_str = subprocess.list2cmdline(cmd)
+
+        ok = ADVAPI32.CreateProcessAsUserW(
+            hDupToken,
+            None,                    # lpApplicationName
+            cmd_str,                 # lpCommandLine
+            None, None,              # process / thread attributes
+            True,                    # bInheritHandles
+            CREATE_UNICODE_ENV,      # dwCreationFlags
+            hEnv if hEnv.value else None,
+            cwd,                     # lpCurrentDirectory
+            ctypes.byref(si),
+            ctypes.byref(pi),
+        )
+
+        # Close handles we no longer need
+        KERNEL32.CloseHandle(hDupToken)
+        KERNEL32.CloseHandle(stdin_r)
+        KERNEL32.CloseHandle(stdout_w)
+        KERNEL32.CloseHandle(stderr_w)
+        if hEnv.value:
+            USERENV.DestroyEnvironmentBlock(hEnv)
+
+        if not ok:
+            err = ctypes.GetLastError()
+            logger.warning(f"_spawn_in_session1: CreateProcessAsUser failed (err={err})")
+            KERNEL32.CloseHandle(stdin_w)
+            KERNEL32.CloseHandle(stdout_r)
+            KERNEL32.CloseHandle(stderr_r)
+            return None
+
+        # ── Wrap raw handles as Python file objects ───────────────────────
+        stdin_fd  = msvcrt.open_osfhandle(stdin_w.value,  os.O_WRONLY | os.O_TEXT)
+        stdout_fd = msvcrt.open_osfhandle(stdout_r.value, os.O_RDONLY | os.O_TEXT)
+        stderr_fd = msvcrt.open_osfhandle(stderr_r.value, os.O_RDONLY | os.O_TEXT)
+
+        stdin_file  = open(stdin_fd,  "w", encoding="utf-8", buffering=1)
+        stdout_file = open(stdout_fd, "r", encoding="utf-8", buffering=1,
+                           errors="replace")
+        stderr_file = open(stderr_fd, "r", encoding="utf-8", buffering=1,
+                           errors="replace")
+
+        hProcess = pi.hProcess
+        pid      = pi.dwProcessId
+        KERNEL32.CloseHandle(pi.hThread)
+
+        # ── Minimal Popen-compatible wrapper ──────────────────────────────
+        class _ProcWrapper:
+            def __init__(self):
+                self.stdin  = stdin_file
+                self.stdout = stdout_file
+                self.stderr = stderr_file
+                self.pid    = pid
+                self._hProc = hProcess
+                self._rc    = None
+
+            def poll(self):
+                if self._rc is not None:
+                    return self._rc
+                rc = wt.DWORD(259)  # STILL_ACTIVE
+                KERNEL32.GetExitCodeProcess(self._hProc, ctypes.byref(rc))
+                if rc.value != 259:
+                    self._rc = rc.value
+                    KERNEL32.CloseHandle(self._hProc)
+                return self._rc
+
+            def wait(self, timeout=None):
+                ms = int(timeout * 1000) if timeout is not None else 0xFFFFFFFF
+                KERNEL32.WaitForSingleObject(self._hProc, ms)
+                return self.poll()
+
+            def kill(self):
+                try:
+                    KERNEL32.TerminateProcess(self._hProc, 1)
+                except Exception:
+                    pass
+
+            @property
+            def returncode(self):
+                return self.poll()
+
+        logger.info(f"_spawn_in_session1: launched pid={pid} in session {session_id}")
+        return _ProcWrapper()
+
+    except Exception as exc:
+        logger.warning(f"_spawn_in_session1: unexpected error: {exc}")
+        return None
+
 logger = logging.getLogger(__name__)
 
 TRADE_TIMEOUT_SECS      = 20
@@ -121,14 +336,21 @@ class MT5UserSession:
             os.path.dirname(os.path.abspath(__file__)),
             "mt5_subprocess_worker.py",
         )
+        worker_cmd = [sys.executable, "-u", worker]
+        cwd = os.path.dirname(os.path.abspath(__file__))
         try:
-            proc = subprocess.Popen(
-                [sys.executable, "-u", worker],   # -u = unbuffered stdout
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+            # Prefer Session 1 (interactive user session) so MT5 grants
+            # trade_allowed=True.  Fall back to regular Popen if unavailable.
+            proc = _spawn_in_session1(worker_cmd, cwd)
+            if proc is None:
+                logger.debug(f"[{self.user_id}] Session 1 spawn unavailable — using regular Popen")
+                proc = subprocess.Popen(
+                    worker_cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
             self._proc = proc
 
             # Send init params

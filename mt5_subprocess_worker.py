@@ -22,6 +22,17 @@ import sys
 import threading
 import time
 
+# Ensure stderr is UTF-8 so log messages with non-ASCII characters (e.g. em-dash)
+# are correctly encoded.  The parent process opens the pipe with encoding="utf-8";
+# without this, the subprocess defaults to the system ANSI codepage (cp1252 on
+# most Windows installs) which causes UnicodeDecodeError in the parent's
+# _drain_stderr thread, silently dropping all subsequent log lines.
+if sys.platform == "win32" and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 RECONNECT_DELAY = 5   # seconds between reconnect attempts
 KEEPALIVE_INTERVAL = 30  # seconds between keep-alive pings
 
@@ -63,18 +74,217 @@ def _setup_user_terminal(data_dir: str, base_exe: str) -> str:
 
 def _write_autotrading_config(data_dir: str):
     """
-    Pre-write config/common.ini with ExpertAdvisorsEnabled=1.
-    MT5 reads this on startup — doing it before mt5.initialize() means
-    AutoTrading is enabled from the very first connection, no patching needed.
-    MT5 expects UTF-16 LE with BOM.
+    Ensure config/common.ini has ExpertAdvisorsEnabled=1 so MT5 starts with
+    AutoTrading enabled.
+
+    Strategy:
+    1. Try to read the existing file as UTF-16 (standard MT5 format).
+    2. If readable and well-formed, patch ExpertAdvisorsEnabled in-place.
+    3. If unreadable / corrupted (file is huge or encoding fails), write a
+       minimal clean file — never persist corrupted data back to disk.
+
+    Only writes when MT5 is NOT running (no file lock).  If a write error
+    occurs we log and skip — a missing setting is not fatal (the /expert
+    command-line flag and the Win32 toggle handle AutoTrading at runtime).
     """
     config_dir = os.path.join(data_dir, "config")
     os.makedirs(config_dir, exist_ok=True)
     config_path = os.path.join(config_dir, "common.ini")
-    content = "[Common]\nExpertAdvisorsEnabled=1\n"
+
+    MAX_SIZE = 64 * 1024  # 64 KB — anything larger is corrupt
+
+    try:
+        file_size = os.path.getsize(config_path) if os.path.exists(config_path) else 0
+    except OSError:
+        file_size = 0
+
+    lines = []
+    if 0 < file_size <= MAX_SIZE:
+        for enc in ("utf-16", "utf-16-le"):
+            try:
+                with open(config_path, "r", encoding=enc) as f:
+                    raw = f.read()
+                lines = raw.splitlines()
+                break
+            except (UnicodeDecodeError, UnicodeError, OSError):
+                lines = []
+
+    if not lines:
+        # File missing, empty, or corrupt — start from a minimal clean config.
+        if file_size > MAX_SIZE:
+            _log(f"common.ini is {file_size} bytes (corrupt) — resetting to clean file")
+        lines = ["[Common]", "ExpertAdvisorsEnabled=1"]
+        content = "\r\n".join(lines) + "\r\n"
+        with open(config_path, "w", encoding="utf-16") as f:
+            f.write(content)
+        _log(f"Wrote clean autotrading config → {config_path}")
+        return
+
+    # Patch or add ExpertAdvisorsEnabled under [Common].
+    found = False
+    for i, line in enumerate(lines):
+        if line.strip().lower().startswith("expertadvisorsenabled"):
+            lines[i] = "ExpertAdvisorsEnabled=1"
+            found = True
+            break
+    if not found:
+        if not any(l.strip() == "[Common]" for l in lines):
+            lines.insert(0, "[Common]")
+        lines.append("ExpertAdvisorsEnabled=1")
+
+    content = "\r\n".join(lines) + "\r\n"
     with open(config_path, "w", encoding="utf-16") as f:
         f.write(content)
-    _log(f"Wrote autotrading config → {config_path}")
+    _log(f"Patched autotrading config → {config_path}")
+
+
+def _kill_user_terminal(user_exe: str):
+    """
+    Kill the terminal64.exe process running from this user's specific exe path.
+    Uses PowerShell to match by full path so we never kill another user's terminal
+    or the system-wide installation.
+    """
+    try:
+        import subprocess as _sp
+        exe_escaped = user_exe.replace("'", "''")
+        _sp.run(
+            [
+                "powershell", "-NonInteractive", "-Command",
+                f"Get-Process -Name terminal64 -ErrorAction SilentlyContinue "
+                f"| Where-Object {{$_.Path -eq '{exe_escaped}'}} "
+                f"| Stop-Process -Force",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        _log(f"Killed terminal process at {user_exe}")
+    except Exception as e:
+        _log(f"Warning: could not kill terminal process: {e}")
+
+
+def _start_user_terminal(user_exe: str, data_dir: str):
+    """
+    Start the terminal in portable mode with /expert flag (enables AutoTrading).
+    MT5's /expert command-line switch turns on the AutoTrading button at startup,
+    bypassing the common.ini ExpertAdvisorsEnabled setting that is unreliable in
+    Session 0 / headless mode.
+
+    We start the terminal here then let mt5.initialize() attach to the running
+    process — passing the same path to initialize() connects without re-launching.
+    """
+    try:
+        import subprocess as _sp
+        _sp.Popen(
+            [user_exe, "/portable", "/expert"],
+            cwd=data_dir,
+            creationflags=getattr(_sp, "DETACHED_PROCESS", 0x00000008),
+        )
+        _log(f"Started terminal with /expert: {user_exe}")
+        time.sleep(8)  # allow MT5 to fully start and read config before init
+    except Exception as e:
+        _log(f"Warning: could not start terminal with /expert: {e}")
+
+
+# Common symbols to pre-select after connection so they are immediately tradable.
+# Kept to widely-used instruments to avoid overwhelming the broker's symbol feed.
+_COMMON_SYMBOLS = [
+    # Forex majors
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
+    # Forex minors
+    "EURGBP", "EURJPY", "EURCHF", "EURCAD", "EURAUD", "EURNZD",
+    "GBPJPY", "GBPCHF", "GBPCAD", "GBPAUD", "GBPNZD",
+    "AUDJPY", "AUDCAD", "AUDCHF", "AUDNZD",
+    "CADJPY", "CADCHF", "NZDJPY", "CHFJPY",
+    # Metals
+    "XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD",
+    # Indices (common CFD names)
+    "US30", "US500", "US100", "UK100", "DE40", "FR40", "JP225", "AU200",
+    "NAS100", "SPX500", "DJI30", "DAX40",
+    # Energy
+    "USOIL", "UKOIL", "NGAS",
+    # Crypto
+    "BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD",
+]
+
+
+def _select_common_symbols(mt5, user_id: str):
+    """
+    Pre-subscribe to common symbols so they are immediately available for trading.
+    Each symbol is selected individually; failures are silently skipped.
+    """
+    selected = 0
+    for sym in _COMMON_SYMBOLS:
+        try:
+            if mt5.symbol_select(sym, True):
+                selected += 1
+        except Exception:
+            pass
+    _log(f"[{user_id}] Pre-selected {selected}/{len(_COMMON_SYMBOLS)} common symbols")
+
+
+def _enable_autotrading_win32(mt5, user_id: str) -> bool:
+    """
+    Send WM_COMMAND 32851 to the MT5 main window to toggle AutoTrading ON.
+    Works when this process runs in the same Windows session as the MT5 window
+    (Session 1 via _spawn_in_session1 in managed_mt5_worker.py).
+
+    Waits up to 30 s for the window to appear (MT5 may still be loading its UI
+    when Python's named-pipe IPC is already up).  Returns True if trade_allowed
+    became True, False otherwise.
+    """
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        WM_COMMAND = 0x0111
+        AUTOTRADING_CMD = 32851  # toolbar button command ID (from Toolbar_488 in terminal.ini)
+
+        # Enumerate all top-level windows for diagnostics when FindWindow fails.
+        def _list_windows():
+            titles = []
+            @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            def _cb(h, _):
+                buf = ctypes.create_unicode_buffer(256)
+                user32.GetWindowTextW(h, buf, 256)
+                if buf.value:
+                    titles.append(buf.value)
+                return True
+            user32.EnumWindows(_cb, None)
+            return titles
+
+        # Wait up to 30 s for MT5 main window to appear.
+        hwnd = None
+        for attempt in range(6):
+            hwnd = user32.FindWindowW("MetaQuotes::MetaTrader::5.00", None)
+            if hwnd:
+                break
+            _log(f"[{user_id}] Waiting for MT5 window... (attempt {attempt + 1}/6)")
+            time.sleep(5)
+
+        if not hwnd:
+            visible = _list_windows()
+            _log(f"[{user_id}] MT5 main window not found after 30 s -- visible top-level windows: {visible[:20]}")
+            return False
+
+        # Re-check trade_allowed before toggling: MT5 may have enabled AutoTrading
+        # itself (e.g. /expert flag) while we were waiting for the window.  Toggling
+        # an already-ON button would turn it OFF.
+        term = mt5.terminal_info()
+        current_ta = getattr(term, "trade_allowed", False) if term else False
+        if current_ta:
+            _log(f"[{user_id}] trade_allowed became True while waiting -- skipping toggle")
+            return True
+
+        _log(f"[{user_id}] Found MT5 window hwnd={hwnd:#x}, sending AutoTrading toggle (cmd {AUTOTRADING_CMD})")
+        user32.PostMessageW(hwnd, WM_COMMAND, AUTOTRADING_CMD, 0)
+        time.sleep(1)
+
+        term = mt5.terminal_info()
+        trade_allowed = getattr(term, "trade_allowed", False) if term else False
+        _log(f"[{user_id}] After AutoTrading toggle: trade_allowed={trade_allowed}")
+        return trade_allowed
+    except Exception as e:
+        _log(f"[{user_id}] Win32 AutoTrading enable error: {e}")
+        return False
 
 
 def _is_connected(mt5) -> bool:
@@ -122,63 +332,92 @@ def main():
     if project_dir not in sys.path:
         sys.path.insert(0, project_dir)
 
-    # ── Connect + command loop ────────────────────────────────────────────────
-    _autotrading_patched = False  # patch once on first successful connect
-    while True:
-        # Pre-write autotrading config before every connect attempt
+    # ── Write autotrading config once before any terminal starts ─────────────
+    # Only write once at startup (not every reconnect loop) to avoid corrupting
+    # the file while MT5 has it locked or growing it on every retry.
+    user_exe = os.path.join(data_dir, "terminal64.exe")
+    has_user_exe = os.path.exists(user_exe)
+    if has_user_exe:
         try:
             _write_autotrading_config(data_dir)
         except Exception as e:
             _log(f"[{user_id}] Warning: could not write autotrading config: {e}")
 
-        # Shut down any stale session cleanly
+    # ── Connect + command loop ────────────────────────────────────────────────
+    # How many loops we've waited for a terminal to appear without starting one
+    # ourselves.  After NO_TERMINAL_FALLBACK_LOOPS attempts we start a fallback
+    # terminal (may end up in Session 0 if the VPS has no interactive login).
+    NO_TERMINAL_FALLBACK_LOOPS = 24  # 24 × RECONNECT_DELAY = ~2 min
+    _no_terminal_wait_count = 0
+
+    while True:
+        user_exe = os.path.join(data_dir, "terminal64.exe")
+        has_user_exe = os.path.exists(user_exe)
+
+        # Shut down stale Python ↔ MT5 session (does NOT kill the terminal process).
         try:
             if mt5.terminal_info() is not None:
                 mt5.shutdown()
         except Exception:
             pass
 
-        # Prefer the user's own terminal copy (portable mode) so each user runs
-        # in an isolated process.  Fall back to no-path (attach to running
-        # terminal) only when no user copy is present.
-        user_exe = os.path.join(data_dir, "terminal64.exe")
+        # Build init kwargs — attach to a running terminal if one exists.
         init_kwargs: dict = {
             "login":    login,
             "password": password,
             "server":   server,
         }
-        if os.path.exists(user_exe):
+        if has_user_exe:
             init_kwargs["path"]     = user_exe
             init_kwargs["portable"] = True
 
         ok = mt5.initialize(**init_kwargs)
-        if not ok:
-            err = mt5.last_error()
-            _log(f"[{user_id}] MT5 init failed: {err} — retrying in {RECONNECT_DELAY}s")
-            _send({"status": "connecting", "error": str(err)})
-            time.sleep(RECONNECT_DELAY)
-            continue
 
-        # ── Ensure AutoTrading config is written ──────────────────────────────
-        # Write ExpertAdvisorsEnabled=1 to the terminal's config directory so
-        # the next startup has autotrading on. We do NOT kill+restart the terminal
-        # because killing the system terminal breaks IPC. If trade_allowed is
-        # already True, we're good. If not, trades may return -10027 until the
-        # terminal is manually restarted with the new config.
-        if not _autotrading_patched:
+        if ok:
+            # Connected — check AutoTrading state but do NOT kill the terminal.
+            # If it was started by the startup-folder bat in Session 1,
+            # trade_allowed will be True here even though this process is in
+            # Session 0 (named-pipe IPC is cross-session).
             term = mt5.terminal_info()
             trade_allowed = getattr(term, "trade_allowed", False) if term else False
             actual_data_path = getattr(term, "data_path", None) if term else None
-            if actual_data_path:
-                try:
-                    config_path = os.path.join(actual_data_path, "config", "common.ini")
-                    os.makedirs(os.path.dirname(config_path), exist_ok=True)
-                    with open(config_path, "w", encoding="utf-16") as f:
-                        f.write("[Common]\nExpertAdvisorsEnabled=1\n")
-                    _log(f"[{user_id}] Wrote autotrading config → {config_path} (trade_allowed={trade_allowed})")
-                except Exception as e:
-                    _log(f"[{user_id}] Could not write autotrading config: {e}")
-            _autotrading_patched = True
+            _log(f"[{user_id}] Connected: trade_allowed={trade_allowed}, data_path={actual_data_path}")
+            _no_terminal_wait_count = 0
+            if not trade_allowed:
+                _log(f"[{user_id}] trade_allowed=False — attempting Win32 AutoTrading enable")
+                if _enable_autotrading_win32(mt5, user_id):
+                    _log(f"[{user_id}] AutoTrading enabled via Win32")
+                else:
+                    _log(f"[{user_id}] WARNING: trade_allowed=False and Win32 toggle failed — trades will fail retcode 10027")
+        else:
+            # No terminal running yet.  Wait for the startup-folder script to
+            # launch one in the interactive session rather than starting our own
+            # (which would land in Session 0 and keep AutoTrading disabled).
+            err = mt5.last_error()
+            _no_terminal_wait_count += 1
+            if has_user_exe and _no_terminal_wait_count > NO_TERMINAL_FALLBACK_LOOPS:
+                # Fallback: no terminal appeared after ~2 min.  Start one here.
+                # This happens when there is no active interactive session on the
+                # VPS (e.g. fresh install before auto-login is set up).
+                _log(f"[{user_id}] No terminal after {_no_terminal_wait_count} waits — starting fallback terminal")
+                _start_user_terminal(user_exe, data_dir)
+                _no_terminal_wait_count = 0
+                ok = mt5.initialize(**init_kwargs)
+            else:
+                _log(f"[{user_id}] No terminal yet (wait {_no_terminal_wait_count}/{NO_TERMINAL_FALLBACK_LOOPS}) — {err}")
+                _send({"status": "connecting", "error": str(err)})
+                time.sleep(RECONNECT_DELAY)
+                continue
+
+            if not ok:
+                err = mt5.last_error()
+                _log(f"[{user_id}] MT5 init failed: {err} — retrying in {RECONNECT_DELAY}s")
+                _send({"status": "connecting", "error": str(err)})
+                time.sleep(RECONNECT_DELAY)
+                continue
+
+        # ── Pre-select common symbols ─────────────────────────────────────────
+        _select_common_symbols(mt5, user_id)
 
         # Wait for account_info to reflect the authenticated account (login != 0).
         # MT5 initialize() can return True before the account sync completes.
@@ -258,6 +497,25 @@ def main():
                 if not alive:
                     lost_connection = True
                     break
+                continue
+
+            if action == "ACCOUNT_INFO":
+                info = mt5.account_info()
+                positions = mt5.positions_get()
+                if info:
+                    _send({
+                        "status": "ok",
+                        "login": info.login,
+                        "server": info.server,
+                        "balance": info.balance,
+                        "equity": info.equity,
+                        "margin": info.margin,
+                        "margin_level": info.margin_level if info.margin > 0 else 0.0,
+                        "currency": info.currency,
+                        "open_positions_count": len(positions) if positions else 0,
+                    })
+                else:
+                    _send({"status": "error", "error": "account_info() returned None"})
                 continue
 
             # Execute trade command — try even if connectivity check is uncertain;
