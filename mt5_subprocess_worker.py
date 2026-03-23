@@ -18,7 +18,6 @@ Protocol: JSON lines on stdin/stdout.
 
 import json
 import os
-import shutil
 import sys
 import threading
 import time
@@ -54,17 +53,12 @@ def _find_terminal() -> str | None:
 
 def _setup_user_terminal(data_dir: str, base_exe: str) -> str:
     """
-    Create a hard link to terminal64.exe inside the user's data dir.
-    Hard links share disk blocks so this costs ~0 extra space.
-    Falls back to a full copy if hard links aren't supported (e.g. cross-volume).
-    Returns the path to the user-local exe.
+    Return the base terminal exe path directly.
+    Using the main installation avoids IPC instability from copied/portable
+    terminal processes crashing on MetaQuotes-Demo.
     """
     os.makedirs(data_dir, exist_ok=True)
-    user_exe = os.path.join(data_dir, "terminal64.exe")
-    if not os.path.exists(user_exe):
-        shutil.copy2(base_exe, user_exe)
-        _log(f"Copied terminal64.exe → {user_exe}")
-    return user_exe
+    return base_exe
 
 
 def _write_autotrading_config(data_dir: str):
@@ -148,7 +142,6 @@ def main():
             "login":    login,
             "password": password,
             "server":   server,
-            "portable": True,   # store data inside terminal_exe's directory
         }
         if terminal_exe and os.path.exists(terminal_exe):
             init_kwargs["path"] = terminal_exe
