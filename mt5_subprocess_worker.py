@@ -222,59 +222,134 @@ def _select_common_symbols(mt5, user_id: str):
     _log(f"[{user_id}] Pre-selected {selected}/{len(_COMMON_SYMBOLS)} common symbols")
 
 
-def _enable_autotrading_win32(mt5, user_id: str) -> bool:
+def _enable_autotrading_win32(mt5, user_id: str, user_exe: str = None) -> bool:
     """
-    Send WM_COMMAND 32851 to the MT5 main window to toggle AutoTrading ON.
-    Works when this process runs in the same Windows session as the MT5 window
-    (Session 1 via _spawn_in_session1 in managed_mt5_worker.py).
+    Send WM_COMMAND 32851 to THIS user's MT5 main window to enable AutoTrading.
 
-    Waits up to 30 s for the window to appear (MT5 may still be loading its UI
-    when Python's named-pipe IPC is already up).  Returns True if trade_allowed
-    became True, False otherwise.
+    Safe for multi-user deployments: when user_exe is provided we locate the
+    MT5 process by its full executable path, then find its main window by class
+    name -- so we only ever touch the window that belongs to this user even when
+    several MT5 terminals are running simultaneously.
+
+    Falls back to FindWindow by class name if user_exe is not given.
+
+    Waits up to 30 s for the window to appear (MT5's UI loads after the
+    named-pipe IPC is already available).  Re-checks trade_allowed before
+    sending the toggle so we never accidentally turn AutoTrading OFF if it was
+    already enabled (e.g. by the /expert command-line flag).
+
+    Returns True if trade_allowed is True after the attempt, False otherwise.
     """
     try:
         import ctypes
-        user32 = ctypes.windll.user32
-        WM_COMMAND = 0x0111
-        AUTOTRADING_CMD = 32851  # toolbar button command ID (from Toolbar_488 in terminal.ini)
+        import ctypes.wintypes as wt
 
-        # Enumerate all top-level windows for diagnostics when FindWindow fails.
-        def _list_windows():
-            titles = []
+        kernel32 = ctypes.windll.kernel32
+        user32   = ctypes.windll.user32
+        WM_COMMAND     = 0x0111
+        AUTOTRADING_CMD = 32851
+
+        # ── helpers ──────────────────────────────────────────────────────────
+
+        def _pids_for_exe(target_exe: str) -> list:
+            """Return PIDs whose full image path matches target_exe (case-insensitive)."""
+            TH32CS_SNAPPROCESS = 0x2
+
+            class PROCESSENTRY32(ctypes.Structure):
+                _fields_ = [
+                    ("dwSize",             wt.DWORD),
+                    ("cntUsage",           wt.DWORD),
+                    ("th32ProcessID",      wt.DWORD),
+                    ("th32DefaultHeapID",  ctypes.POINTER(wt.ULONG)),
+                    ("th32ModuleID",       wt.DWORD),
+                    ("cntThreads",         wt.DWORD),
+                    ("th32ParentProcessID",wt.DWORD),
+                    ("pcPriClassBase",     ctypes.c_long),
+                    ("dwFlags",            wt.DWORD),
+                    ("szExeFile",          ctypes.c_char * 260),
+                ]
+
+            pids = []
+            hSnap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if not hSnap or hSnap == wt.HANDLE(-1).value:
+                return pids
+            try:
+                pe = PROCESSENTRY32()
+                pe.dwSize = ctypes.sizeof(PROCESSENTRY32)
+                if not kernel32.Process32First(hSnap, ctypes.byref(pe)):
+                    return pids
+                while True:
+                    hProc = kernel32.OpenProcess(0x1000, False, pe.th32ProcessID)
+                    if hProc:
+                        try:
+                            buf = ctypes.create_unicode_buffer(1024)
+                            sz  = wt.DWORD(1024)
+                            if kernel32.QueryFullProcessImageNameW(hProc, 0, buf,
+                                                                   ctypes.byref(sz)):
+                                if buf.value.lower() == target_exe.lower():
+                                    pids.append(pe.th32ProcessID)
+                        finally:
+                            kernel32.CloseHandle(hProc)
+                    if not kernel32.Process32Next(hSnap, ctypes.byref(pe)):
+                        break
+            finally:
+                kernel32.CloseHandle(hSnap)
+            return pids
+
+        def _main_window_for_pid(pid: int):
+            """Return the HWND of the MT5 main window (class MetaQuotes::MetaTrader::5.00)
+            owned by *pid*, or None."""
+            result = [None]
+
             @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-            def _cb(h, _):
-                buf = ctypes.create_unicode_buffer(256)
-                user32.GetWindowTextW(h, buf, 256)
-                if buf.value:
-                    titles.append(buf.value)
+            def _cb(hwnd, _):
+                win_pid = wt.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(win_pid))
+                if win_pid.value == pid:
+                    cls = ctypes.create_unicode_buffer(128)
+                    user32.GetClassNameW(hwnd, cls, 128)
+                    if cls.value == "MetaQuotes::MetaTrader::5.00":
+                        result[0] = hwnd
+                        return False  # stop enumeration
                 return True
-            user32.EnumWindows(_cb, None)
-            return titles
 
-        # Wait up to 30 s for MT5 main window to appear.
+            user32.EnumWindows(_cb, None)
+            return result[0]
+
+        # ── wait for the window ───────────────────────────────────────────────
+
         hwnd = None
-        for attempt in range(6):
-            hwnd = user32.FindWindowW("MetaQuotes::MetaTrader::5.00", None)
+        for attempt in range(6):   # up to 30 s (6 x 5 s)
+            if user_exe:
+                pids = _pids_for_exe(user_exe)
+                for pid in pids:
+                    h = _main_window_for_pid(pid)
+                    if h:
+                        hwnd = h
+                        break
+            else:
+                # No exe path -- find any MT5 window (single-user fallback)
+                hwnd = user32.FindWindowW("MetaQuotes::MetaTrader::5.00", None) or None
+
             if hwnd:
                 break
-            _log(f"[{user_id}] Waiting for MT5 window... (attempt {attempt + 1}/6)")
+            _log(f"[{user_id}] Waiting for MT5 window (attempt {attempt + 1}/6)...")
             time.sleep(5)
 
         if not hwnd:
-            visible = _list_windows()
-            _log(f"[{user_id}] MT5 main window not found after 30 s -- visible top-level windows: {visible[:20]}")
+            _log(f"[{user_id}] MT5 main window not found after 30 s -- cannot enable AutoTrading")
             return False
 
-        # Re-check trade_allowed before toggling: MT5 may have enabled AutoTrading
-        # itself (e.g. /expert flag) while we were waiting for the window.  Toggling
-        # an already-ON button would turn it OFF.
+        # ── safety re-check before toggling ──────────────────────────────────
+        # The /expert flag or a previous toggle may have already turned AutoTrading
+        # ON while we were waiting.  Sending the command again would turn it OFF.
         term = mt5.terminal_info()
-        current_ta = getattr(term, "trade_allowed", False) if term else False
-        if current_ta:
+        if getattr(term, "trade_allowed", False) if term else False:
             _log(f"[{user_id}] trade_allowed became True while waiting -- skipping toggle")
             return True
 
-        _log(f"[{user_id}] Found MT5 window hwnd={hwnd:#x}, sending AutoTrading toggle (cmd {AUTOTRADING_CMD})")
+        # ── send the toggle ───────────────────────────────────────────────────
+        _log(f"[{user_id}] Found MT5 window hwnd={hwnd:#x}, sending AutoTrading toggle")
         user32.PostMessageW(hwnd, WM_COMMAND, AUTOTRADING_CMD, 0)
         time.sleep(1)
 
@@ -282,6 +357,7 @@ def _enable_autotrading_win32(mt5, user_id: str) -> bool:
         trade_allowed = getattr(term, "trade_allowed", False) if term else False
         _log(f"[{user_id}] After AutoTrading toggle: trade_allowed={trade_allowed}")
         return trade_allowed
+
     except Exception as e:
         _log(f"[{user_id}] Win32 AutoTrading enable error: {e}")
         return False
@@ -347,7 +423,7 @@ def main():
     # How many loops we've waited for a terminal to appear without starting one
     # ourselves.  After NO_TERMINAL_FALLBACK_LOOPS attempts we start a fallback
     # terminal (may end up in Session 0 if the VPS has no interactive login).
-    NO_TERMINAL_FALLBACK_LOOPS = 24  # 24 × RECONNECT_DELAY = ~2 min
+    NO_TERMINAL_FALLBACK_LOOPS = 10  # 10 × RECONNECT_DELAY = ~50 s
     _no_terminal_wait_count = 0
 
     while True:
@@ -384,11 +460,12 @@ def main():
             _log(f"[{user_id}] Connected: trade_allowed={trade_allowed}, data_path={actual_data_path}")
             _no_terminal_wait_count = 0
             if not trade_allowed:
-                _log(f"[{user_id}] trade_allowed=False — attempting Win32 AutoTrading enable")
-                if _enable_autotrading_win32(mt5, user_id):
+                _log(f"[{user_id}] trade_allowed=False -- attempting Win32 AutoTrading enable")
+                exe = user_exe if has_user_exe else None
+                if _enable_autotrading_win32(mt5, user_id, exe):
                     _log(f"[{user_id}] AutoTrading enabled via Win32")
                 else:
-                    _log(f"[{user_id}] WARNING: trade_allowed=False and Win32 toggle failed — trades will fail retcode 10027")
+                    _log(f"[{user_id}] WARNING: trade_allowed=False and Win32 toggle failed -- trades will fail retcode 10027")
         else:
             # No terminal running yet.  Wait for the startup-folder script to
             # launch one in the interactive session rather than starting our own
