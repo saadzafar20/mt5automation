@@ -138,13 +138,15 @@ def main():
         except Exception:
             pass
 
+        # Connect to whichever terminal is running in the desktop session.
+        # Specifying a path starts a new process in Session 0 (no desktop) which
+        # fails on MetaQuotes-Demo. Without a path, MT5 attaches to the already-
+        # running terminal (started interactively) and works reliably.
         init_kwargs: dict = {
             "login":    login,
             "password": password,
             "server":   server,
         }
-        if terminal_exe and os.path.exists(terminal_exe):
-            init_kwargs["path"] = terminal_exe
 
         ok = mt5.initialize(**init_kwargs)
         if not ok:
