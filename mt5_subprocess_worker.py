@@ -222,25 +222,6 @@ def main():
         _log(f"[{user_id}] Connected: {account_str}")
         _send({"status": "ready", "account": account_str})
 
-        # ── Pre-select common symbols ──────────────────────────────────────────
-        # Select the most-traded symbols so tick data is immediately available.
-        # Full symbol selection (all 6087+) overwhelms the broker connection.
-        # Per-symbol symbol_select() in mt5_order_utils handles other symbols.
-        _COMMON_SYMBOLS = [
-            "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
-            "EURGBP", "EURJPY", "GBPJPY", "XAUUSD", "XAGUSD",
-            "US30", "NAS100", "SPX500", "GER40", "UK100",
-            "BTCUSD", "ETHUSD", "USOUSD", "UKOUSD",
-        ]
-        _selected = 0
-        for _sym in _COMMON_SYMBOLS:
-            try:
-                if mt5.symbol_select(_sym, True):
-                    _selected += 1
-            except Exception:
-                pass
-        _log(f"[{user_id}] Pre-selected {_selected}/{len(_COMMON_SYMBOLS)} common symbols")
-
         # ── Keep-alive thread ─────────────────────────────────────────────────
         # MT5 connections time out when idle. Ping account_info() periodically
         # to keep the broker connection alive between trades.

@@ -79,8 +79,15 @@ def build_market_order(mt5, action: str, symbol: str, volume: float,
         Order request dict or None if invalid
     """
     mt5.symbol_select(symbol, True)
-    tick = mt5.symbol_info_tick(symbol)
-    if not tick:
+    # Portable terminals start fresh — wait up to 3s for the first tick to arrive
+    tick = None
+    for _ in range(6):
+        tick = mt5.symbol_info_tick(symbol)
+        if tick and tick.bid > 0:
+            break
+        import time as _time
+        _time.sleep(0.5)
+    if not tick or tick.bid == 0:
         return None
     
     order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
