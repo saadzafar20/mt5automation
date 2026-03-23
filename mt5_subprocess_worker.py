@@ -205,8 +205,20 @@ def main():
                     _log(f"[{user_id}] Could not patch common.ini: {e}")
                     _autotrading_patched = True  # don't retry on failure
 
-        info = mt5.account_info()
-        account_str = f"{info.login} on {info.server}" if info else "unknown"
+        # Wait for account_info to reflect the authenticated account (login != 0).
+        # MT5 initialize() can return True before the account sync completes.
+        info = None
+        for _attempt in range(15):
+            info = mt5.account_info()
+            if info and info.login != 0:
+                break
+            time.sleep(1)
+        if not info or info.login == 0:
+            _log(f"[{user_id}] Account not authenticated after init (login=0) — retrying")
+            mt5.shutdown()
+            time.sleep(RECONNECT_DELAY)
+            continue
+        account_str = f"{info.login} on {info.server}"
         _log(f"[{user_id}] Connected: {account_str}")
         _send({"status": "ready", "account": account_str})
 
