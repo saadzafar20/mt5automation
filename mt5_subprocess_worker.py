@@ -214,14 +214,17 @@ def main():
                         _keepalive_fail_count[0] += 1
                         _log(f"[{user_id}] Keepalive: account_info None/0 (fail {_keepalive_fail_count[0]})")
                         if _keepalive_fail_count[0] >= 3:
-                            _log(f"[{user_id}] Keepalive: 3 consecutive failures — triggering reconnect")
+                            _log(f"[{user_id}] Keepalive: 3 consecutive failures — exiting for supervisor restart")
                             _keepalive_lost.set()
-                            return
+                            # Force-exit so the parent supervisor detects us gone and
+                            # restarts with a fresh subprocess.  The terminal process
+                            # stays alive; the new subprocess will re-attach to it.
+                            os._exit(1)
                 except Exception as _e:
                     _keepalive_fail_count[0] += 1
                     if _keepalive_fail_count[0] >= 3:
                         _keepalive_lost.set()
-                        return
+                        os._exit(1)
 
         ka_thread = threading.Thread(target=_keepalive, daemon=True)
         ka_thread.start()
