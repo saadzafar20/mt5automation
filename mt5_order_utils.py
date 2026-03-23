@@ -60,9 +60,10 @@ def map_mt5_retcode(retcode: Optional[int]) -> str:
     return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
 
 
-def build_market_order(mt5, action: str, symbol: str, volume: float, 
+def build_market_order(mt5, action: str, symbol: str, volume: float,
                        sl: Optional[float] = None, tp: Optional[float] = None,
-                       comment: str = "bridge-trade") -> Optional[Dict[str, Any]]:
+                       comment: str = "bridge-trade",
+                       magic: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """
     Build a market order request dict for MT5.
     
@@ -102,12 +103,14 @@ def build_market_order(mt5, action: str, symbol: str, volume: float,
         "comment": comment,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
-    
+
     if sl is not None:
         request["sl"] = float(sl)
     if tp is not None:
         request["tp"] = float(tp)
-    
+    if magic is not None:
+        request["magic"] = int(magic)
+
     return request
 
 
@@ -138,7 +141,8 @@ def build_close_request(mt5, position, comment: str = "bridge-close") -> Dict[st
 
 def execute_market_order(mt5, action: str, symbol: str, volume: float,
                          sl: Optional[float] = None, tp: Optional[float] = None,
-                         comment: str = "bridge-trade") -> Dict[str, Any]:
+                         comment: str = "bridge-trade",
+                         magic: Optional[int] = None) -> Dict[str, Any]:
     """
     Execute a market order via MT5.
     
@@ -161,13 +165,35 @@ def execute_market_order(mt5, action: str, symbol: str, volume: float,
     if action not in ("BUY", "SELL"):
         return {"status": "failed", "error": f"invalid action: {action}"}
     
-    request = build_market_order(mt5, action, symbol, volume, sl, tp, comment)
+    request = build_market_order(mt5, action, symbol, volume, sl, tp, comment, magic=magic)
     if not request:
         return {"status": "failed", "error": f"no tick data for {symbol}"}
-    
-    result = mt5.order_send(request)
-    
-    if result.retcode == mt5.TRADE_RETCODE_DONE:
+
+    # Pick the filling mode the broker actually supports for this symbol.
+    # symbol_info().filling_mode is a bitmask: bit0=FOK, bit1=IOC, bit2=RETURN.
+    # Try in order: IOC → FOK → RETURN; fall through to whichever works.
+    fill_modes = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
+    try:
+        info = mt5.symbol_info(symbol)
+        if info and hasattr(info, "filling_mode") and info.filling_mode:
+            fm = info.filling_mode
+            priority = []
+            if fm & 0x2: priority.append(mt5.ORDER_FILLING_IOC)
+            if fm & 0x1: priority.append(mt5.ORDER_FILLING_FOK)
+            if fm & 0x4: priority.append(mt5.ORDER_FILLING_RETURN)
+            if priority:
+                fill_modes = priority
+    except Exception:
+        pass
+
+    result = None
+    for fill in fill_modes:
+        request["type_filling"] = fill
+        result = mt5.order_send(request)
+        if result and result.retcode != 10030:  # 10030 = TRADE_RETCODE_INVALID_FILL
+            break
+
+    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
         return {
             "status": "executed",
             "order_id": result.order,
@@ -175,9 +201,9 @@ def execute_market_order(mt5, action: str, symbol: str, volume: float,
     else:
         return {
             "status": "failed",
-            "error": result.comment,
-            "retcode": result.retcode,
-            "error_message": map_mt5_retcode(result.retcode),
+            "error": result.comment if result else "order_send returned None",
+            "retcode": result.retcode if result else -1,
+            "error_message": map_mt5_retcode(result.retcode) if result else "no result",
         }
 
 
@@ -204,7 +230,26 @@ def close_positions(mt5, symbol: Optional[str] = None,
     
     for pos in positions:
         close_req = build_close_request(mt5, pos, comment)
-        result = mt5.order_send(close_req)
+        # Try filling modes in order (same logic as execute_market_order)
+        fill_modes = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
+        try:
+            info = mt5.symbol_info(pos.symbol)
+            if info and hasattr(info, "filling_mode") and info.filling_mode:
+                fm = info.filling_mode
+                priority = []
+                if fm & 0x2: priority.append(mt5.ORDER_FILLING_IOC)
+                if fm & 0x1: priority.append(mt5.ORDER_FILLING_FOK)
+                if fm & 0x4: priority.append(mt5.ORDER_FILLING_RETURN)
+                if priority:
+                    fill_modes = priority
+        except Exception:
+            pass
+        result = None
+        for fill in fill_modes:
+            close_req["type_filling"] = fill
+            result = mt5.order_send(close_req)
+            if result and result.retcode != 10030:
+                break
         
         if result and result.retcode == mt5.TRADE_RETCODE_DONE:
             closed_orders.append(result.order)
@@ -276,7 +321,8 @@ def pips_to_price(symbol: str, pips: float, action: str,
 
 
 def execute_command(mt5, command: Dict[str, Any],
-                    comment_prefix: str = "bridge") -> Dict[str, Any]:
+                    comment_prefix: str = "bridge",
+                    max_lot_size: Optional[float] = None) -> Dict[str, Any]:
     """
     Execute a trade command dict via MT5.
 
@@ -294,6 +340,12 @@ def execute_command(mt5, command: Dict[str, Any],
     size = float(command.get("size") or 0.1)
     sl = command.get("sl")
     tp = command.get("tp")
+    magic = command.get("magic")
+    # max_lot_size: explicit param takes priority, then command dict field
+    if max_lot_size is None:
+        max_lot_size = command.get("max_lot_size")
+        if max_lot_size is not None:
+            max_lot_size = float(max_lot_size)
 
     # Ensure symbol is in market watch before any tick/info queries
     if symbol and action in ("BUY", "SELL"):
@@ -323,6 +375,10 @@ def execute_command(mt5, command: Dict[str, Any],
         else:
             size = 0.01
 
+    # Apply max_lot_size cap
+    if max_lot_size is not None and size > 0 and size > max_lot_size:
+        size = max_lot_size
+
     # Convert pips-based SL/TP to absolute price levels using current tick
     sl_pips = command.get("sl_pips")
     tp_pips = command.get("tp_pips")
@@ -338,7 +394,8 @@ def execute_command(mt5, command: Dict[str, Any],
     if action in ("BUY", "SELL"):
         return execute_market_order(
             mt5, action, symbol, size, sl, tp,
-            comment=f"{comment_prefix}-trade"
+            comment=f"{comment_prefix}-trade",
+            magic=magic,
         )
     elif action.startswith("CLOSE"):
         close_symbol = None if action == "CLOSE_ALL" else symbol
