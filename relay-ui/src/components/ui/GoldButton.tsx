@@ -16,9 +16,9 @@ const sizes = {
 export function GoldButton({ children, fullWidth, size = 'md', className = '', ...props }: Props) {
   return (
     <motion.button
-      className={`btn-gold ${sizes[size]} font-semibold rounded-[var(--radius)] ${fullWidth ? 'w-full' : ''} ${className}`}
-      whileHover={{ scale: 1.02, y: -1 }}
-      whileTap={{ scale: 0.98 }}
+      className={`btn-gold ${sizes[size]} rounded-[var(--radius)] ${fullWidth ? 'w-full' : ''} ${className}`}
+      whileHover={{ scale: 1.015, y: -1 }}
+      whileTap={{ scale: 0.985 }}
       {...(props as object)}
     >
       {children}

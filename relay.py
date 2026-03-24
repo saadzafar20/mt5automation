@@ -371,6 +371,7 @@ class MT5Executor:
         size = command.get("size", 0.1)
         sl = command.get("sl")
         tp = command.get("tp")
+        max_lot_size = command.get("max_lot_size")
 
         if not symbol:
             return {"status": "failed", "error": "missing symbol"}
@@ -379,6 +380,12 @@ class MT5Executor:
             size = float(size)
         except (TypeError, ValueError):
             size = 0.1
+
+        if max_lot_size is not None:
+            try:
+                max_lot_size = float(max_lot_size)
+            except (TypeError, ValueError):
+                max_lot_size = None
 
         try:
             if not self.mt5_connected:
@@ -422,6 +429,11 @@ class MT5Executor:
                 else:
                     size = 0.01
                 logger.info(f"Percentage lot resolved to {size:.4f} lots")
+
+            # Apply max_lot_size cap from command payload
+            if max_lot_size is not None and size > 0 and size > max_lot_size:
+                logger.info(f"Capping lot size from {size:.4f} to max_lot_size={max_lot_size:.4f}")
+                size = max_lot_size
 
             filling = get_filling_mode(symbol)
             tick = mt5.symbol_info_tick(symbol)

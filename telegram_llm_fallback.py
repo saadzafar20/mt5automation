@@ -278,6 +278,7 @@ class LLMFallbackProcessor:
             "executed": 0,
             "skipped": 0,
             "errors": 0,
+            "dropped": 0,
         }
 
     @property
@@ -358,8 +359,10 @@ class LLMFallbackProcessor:
                 continue
 
             # Skip items older than 30 seconds (stale)
-            if time.time() - item["queued_at"] > 30:
-                self.stats["skipped"] += 1
+            age = time.time() - item["queued_at"]
+            if age > 30:
+                logger.warning(f"[LLM] Dropping stale item (age={age:.1f}s): {item!r}")
+                self.stats["dropped"] = self.stats.get("dropped", 0) + 1
                 continue
 
             try:

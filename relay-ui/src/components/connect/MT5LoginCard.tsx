@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Lock, Eye, EyeOff, Cloud, ExternalLink, LogIn, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Lock, Eye, EyeOff, Cloud, ExternalLink, LogIn, CheckCircle2, XCircle, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card } from '../ui/Card';
 import { GoldButton } from '../ui/GoldButton';
 import { Input } from '../ui/Input';
 import { OutlineButton } from '../ui/OutlineButton';
 import { useAppStore } from '../../store/appStore';
-import { managedEnable, managedStatus } from '../../lib/api';
+import { managedEnable, managedStatus, managedDisable } from '../../lib/api';
 import { bridge } from '../../lib/bridge';
 
 const POLL_INTERVAL_MS = 3000;
@@ -39,8 +39,11 @@ export function MT5LoginCard() {
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAt  = useRef<number>(0);
 
+  const [disconnecting, setDisconnecting] = useState(false);
+
   const auth        = useAppStore((s) => s.auth);
   const setVpsActive = useAppStore((s) => s.setVpsActive);
+  const setRelayDots = useAppStore((s) => s.setRelayDots);
   const vpsActive   = useAppStore((s) => s.vpsActive);
   const dots        = useAppStore((s) => s.relayDots);
 
@@ -141,6 +144,25 @@ export function MT5LoginCard() {
     } catch {
       setPhase('failed');
       setFailReason('Connection failed — check your internet connection');
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!auth.userId) return;
+    setDisconnecting(true);
+    try {
+      await managedDisable(auth.userId, auth.apiKey || undefined);
+      toast.success('MT5 disconnected — terminal stopped on cloud VPS');
+    } catch {
+      toast.error('Disconnect request failed — try again');
+    } finally {
+      setDisconnecting(false);
+      // Reset local state regardless of server response
+      stopPolling();
+      setVpsActive(false);
+      setRelayDots({ bridge: 'unknown', mt5: 'offline', broker: 'offline' });
+      setPhase('form');
+      setEditing(false);
     }
   };
 
@@ -300,37 +322,56 @@ export function MT5LoginCard() {
       {/* ── ACTIVE / CONNECTED ───────────────────────────── */}
       {(vpsActive || phase === 'connected') && !editing && phase !== 'connecting' && phase !== 'failed' && (
         <div className="space-y-4">
-          <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--radius)] border text-sm font-medium ${
-            dots.mt5 === 'online'
-              ? 'bg-success-bg border-success/20 text-success'
-              : 'bg-accent/10 border-accent/20 text-accent'
-          }`}>
-            {dots.mt5 === 'online'
-              ? <CheckCircle2 size={16} />
-              : <Loader2 size={16} className="animate-spin" />}
-            {dots.mt5 === 'online'
-              ? 'Connected to Cloud — 24/7 Execution Active'
-              : 'Cloud Relay Active — MT5 Connecting…'}
-          </div>
+          {dots.mt5 === 'online' ? (
+            <div className="flex flex-col items-center gap-3 py-3">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full bg-success-bg border border-success/30 flex items-center justify-center shadow-[0_0_24px_hsla(155,65%,50%,0.25)]">
+                  <CheckCircle2 size={28} className="text-success" />
+                </div>
+                <div className="absolute inset-0 rounded-full animate-ping bg-success/10" style={{ animationDuration: '2.5s' }} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-success">24/7 Execution Active</p>
+                <p className="text-xs text-fg-muted mt-0.5">Cloud VPS connected — trading runs around the clock</p>
+              </div>
+              <div className="flex gap-5 text-xs text-fg-muted">
+                <span className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${dots.bridge === 'online' ? 'bg-success' : 'bg-danger'}`} />
+                  Bridge
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-success" />
+                  MT5
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${dots.broker === 'online' ? 'bg-success' : 'bg-danger'}`} />
+                  Broker
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--radius)] border bg-accent/10 border-accent/20 text-accent text-sm font-medium">
+              <Loader2 size={16} className="animate-spin" />
+              Cloud Relay Active — MT5 Connecting…
+            </div>
+          )}
 
-          <div className="flex gap-4 text-xs text-fg-muted px-1">
-            <span className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${dots.bridge === 'online' ? 'bg-success' : 'bg-danger'}`} />
-              Bridge
-            </span>
-            <span className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${dots.mt5 === 'online' ? 'bg-success' : 'bg-danger'}`} />
-              MT5
-            </span>
-            <span className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${dots.broker === 'online' ? 'bg-success' : 'bg-danger'}`} />
-              Broker
-            </span>
+          <div className="flex gap-2.5">
+            <OutlineButton size="sm" onClick={() => { setEditing(true); setPhase('form'); }}>
+              Change Credentials
+            </OutlineButton>
+            <OutlineButton
+              size="sm"
+              danger
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting
+                ? <><Loader2 size={13} className="animate-spin inline mr-1.5" />Stopping…</>
+                : <><LogOut size={13} className="inline mr-1.5" />Disconnect MT5</>
+              }
+            </OutlineButton>
           </div>
-
-          <OutlineButton size="sm" onClick={() => { setEditing(true); setPhase('form'); }}>
-            Change Credentials
-          </OutlineButton>
         </div>
       )}
     </Card>

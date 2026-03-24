@@ -20,7 +20,7 @@ export function VPSCard() {
       <div className="flex items-center gap-3 mb-6">
         <Cloud size={18} className="text-accent shrink-0" />
         <h2 className="text-base font-semibold text-fg flex-1">Cloud Execution</h2>
-        <span className="text-[0.6rem] font-bold text-[hsl(155,40%,10%)] bg-accent px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
+        <span className="text-[0.6rem] font-bold text-bg bg-accent px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
           Recommended
         </span>
       </div>
@@ -32,24 +32,26 @@ export function VPSCard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 flex-1">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 flex-1">
         {features.map(({ icon: Icon, text }, i) => (
           <motion.div
             key={i}
-            className="flex items-center gap-3 text-sm text-fg-muted"
-            initial={{ opacity: 0, x: -10 }}
+            className="flex items-center gap-2.5 text-[0.8rem] text-fg-muted"
+            initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}
           >
-            <Icon size={14} className="text-success shrink-0 transition-all duration-300 hover:scale-125 hover:text-accent hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
+            <Icon size={13} className="text-success shrink-0 transition-all duration-300 hover:scale-125 hover:text-accent hover:drop-shadow-[0_0_6px_var(--color-accent-glow)]" />
             {text}
           </motion.div>
         ))}
       </div>
 
-      <p className="text-sm text-fg-muted mt-auto pt-6 leading-relaxed">
-        Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 for 24/7 VPS Mode"</span> to enable 24/7 automated execution without keeping your PC on.
-      </p>
+      {!vpsActive && (
+        <p className="text-sm text-fg-muted mt-auto pt-6 leading-relaxed">
+          Enter your MT5 credentials on the left and click <span className="text-accent font-medium">"Login to MT5 for 24/7 VPS Mode"</span> to enable 24/7 automated execution without keeping your PC on.
+        </p>
+      )}
     </Card>
   );
 }

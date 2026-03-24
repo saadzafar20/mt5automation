@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld('electronBridge', {
   onUpdateStatus: (callback) => {
     ipcRenderer.on('update-status', (_event, data) => callback(data));
   },
+  showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
 });

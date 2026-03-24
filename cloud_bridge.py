@@ -80,6 +80,15 @@ if Limiter is not None:
 else:
     _limiter = None
 
+
+def _rate_limit(limit_string):
+    """Decorator that applies a flask-limiter rate limit when available, otherwise is a no-op."""
+    def decorator(f):
+        if _limiter is not None:
+            return _limiter.limit(limit_string)(f)
+        return f
+    return decorator
+
 # Trust Caddy reverse proxy headers so url_for generates https:// URLs
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
@@ -2450,6 +2459,7 @@ def home_page():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@_rate_limit("10 per minute")
 def register_page():
     available_scripts = store.list_scripts()
 
@@ -2459,7 +2469,6 @@ def register_page():
     user_id = (request.form.get("user_id") or "").strip()
     password = request.form.get("password") or ""
     password_confirm = request.form.get("password_confirm") or ""
-    selected_scripts = request.form.getlist("scripts")
 
     invite_code = (request.form.get("invite_code") or "").strip()
     if not invite_code:
@@ -2530,6 +2539,7 @@ def logout_page():
 # ==================== OAuth Routes ====================
 
 @app.route("/auth/google")
+@_rate_limit("20 per minute")
 def google_login():
     if not google_oauth:
         flash("Google login is not configured.", "error")
@@ -2602,6 +2612,7 @@ def google_callback():
 
 
 @app.route("/auth/facebook")
+@_rate_limit("20 per minute")
 def facebook_login():
     if not facebook_oauth:
         flash("Facebook login is not configured.", "error")
@@ -2810,40 +2821,89 @@ def dashboard_analytics():
     if auth_err:
         return auth_err
 
+    now = time.time()
+    today_cutoff = now - 86400
+    week_cutoff = now - 7 * 86400
+
     with store.lock:
-        # Per-script performance breakdown
-        rows = store.conn.execute(
+        total_signals = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()[0]
+
+        executed = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND status = 'executed'",
+            (user_id,),
+        ).fetchone()[0]
+
+        failed = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND status = 'failed'",
+            (user_id,),
+        ).fetchone()[0]
+
+        signals_today = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND created_at > ?",
+            (user_id, today_cutoff),
+        ).fetchone()[0]
+
+        signals_this_week = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND created_at > ?",
+            (user_id, week_cutoff),
+        ).fetchone()[0]
+
+        by_symbol_rows = store.conn.execute(
+            """
+            SELECT symbol,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN status = 'executed' THEN 1 ELSE 0 END) AS executed,
+                   SUM(CASE WHEN status = 'failed'   THEN 1 ELSE 0 END) AS failed
+            FROM commands
+            WHERE user_id = ?
+            GROUP BY symbol
+            ORDER BY total DESC
+            LIMIT 20
+            """,
+            (user_id,),
+        ).fetchall()
+
+        by_script_rows = store.conn.execute(
             """
             SELECT script_name,
-                   COUNT(*) AS total_signals,
+                   COUNT(*) AS total,
                    SUM(CASE WHEN status = 'executed' THEN 1 ELSE 0 END) AS executed,
-                   SUM(CASE WHEN status = 'failed'   THEN 1 ELSE 0 END) AS failed,
-                   MIN(created_at) AS first_signal,
-                   MAX(created_at) AS last_signal
-            FROM signals
+                   SUM(CASE WHEN status = 'failed'   THEN 1 ELSE 0 END) AS failed
+            FROM commands
             WHERE user_id = ?
             GROUP BY script_name
-            ORDER BY total_signals DESC
+            ORDER BY total DESC
+            LIMIT 20
             """,
             (user_id,),
         ).fetchall()
 
-        # Last 7-day daily volume
-        daily_rows = store.conn.execute(
+        recent_24h_rows = store.conn.execute(
             """
-            SELECT DATE(created_at) AS day, COUNT(*) AS count
-            FROM signals
-            WHERE user_id = ?
-              AND created_at >= datetime('now', '-7 days')
-            GROUP BY day
-            ORDER BY day ASC
+            SELECT action, symbol, size, status, created_at, script_name
+            FROM commands
+            WHERE user_id = ? AND created_at > ?
+            ORDER BY created_at DESC
+            LIMIT 50
             """,
-            (user_id,),
+            (user_id, today_cutoff),
         ).fetchall()
+
+    win_rate = round(executed / total_signals * 100, 1) if total_signals else 0.0
 
     return jsonify({
-        "by_script": [dict(r) for r in rows],
-        "daily_volume": [dict(r) for r in daily_rows],
+        "win_rate": win_rate,
+        "total_signals": total_signals,
+        "executed": executed,
+        "failed": failed,
+        "signals_today": signals_today,
+        "signals_this_week": signals_this_week,
+        "by_symbol": [dict(r) for r in by_symbol_rows],
+        "by_script": [dict(r) for r in by_script_rows],
+        "recent_24h": [dict(r) for r in recent_24h_rows],
     })
 
 
@@ -3018,7 +3078,7 @@ def admin_overview_page():
         with store.lock:
             user_count = store.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             relay_count = store.conn.execute("SELECT COUNT(*) FROM relays").fetchone()[0]
-            signal_count = store.conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+            signal_count = store.conn.execute("SELECT COUNT(*) FROM commands").fetchone()[0]
             managed_count = store.conn.execute(
                 "SELECT COUNT(*) FROM managed_accounts WHERE enabled=1"
             ).fetchone()[0]
@@ -3381,6 +3441,7 @@ def receive_signal_by_token(webhook_token):
     return _process_signal_for_user(user_id, data)
 
 @app.route("/relay/register", methods=["POST"])
+@_rate_limit("10 per minute")
 def relay_register():
     """
     Register a relay.
@@ -3483,6 +3544,7 @@ def relay_login():
 
 
 @app.route("/managed/setup", methods=["POST"])
+@_rate_limit("10 per minute")
 def managed_setup():
     """
     One-time setup for VPS-managed execution for a user.
@@ -3528,6 +3590,7 @@ def managed_setup():
 
 
 @app.route("/managed/setup/login", methods=["POST"])
+@_rate_limit("10 per minute")
 def managed_setup_login():
     """
     One-time setup for VPS-managed execution authenticated by dashboard login.
@@ -4291,6 +4354,7 @@ def dashboard_reset_circuit_breaker():
 # ==================== MT5 Account Info (Section 8) ====================
 
 @app.route("/api/mt5/account-info", methods=["GET"])
+@app.route("/managed/account-info", methods=["GET"])
 def mt5_account_info():
     user_id, err = resolve_user_from_request()
     if err is not None:

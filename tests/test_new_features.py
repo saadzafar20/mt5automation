@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import unittest
+import pytest
 from unittest.mock import MagicMock, patch, call
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -940,6 +941,7 @@ class TestPlatformStats(unittest.TestCase):
 # Live TradingView webhook test (Ayan / 123456Uy)
 # ===========================================================================
 
+@pytest.mark.integration
 class TestLiveWebhook(unittest.TestCase):
     """
     Live integration test: authenticate as Ayan and send a TradingView-style

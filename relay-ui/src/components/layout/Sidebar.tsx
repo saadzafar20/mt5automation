@@ -26,8 +26,8 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-[240px] shrink-0 bg-bg-sidebar border-r border-border flex flex-col py-8 z-20">
-      <nav className="flex flex-col gap-3 px-5 flex-1 justify-center">
+    <aside className="w-[220px] shrink-0 bg-bg-sidebar border-r border-border flex flex-col py-6 z-20">
+      <nav className="flex flex-col gap-1 px-3 flex-1 justify-center">
         {navItems.map(({ tab, icon: Icon, label }) => {
           const isActive = activeTab === tab;
           return (
@@ -35,35 +35,40 @@ export function Sidebar() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`
-                flex items-center gap-4 px-4 py-4 rounded-lg text-base font-medium
-                cursor-pointer transition-all duration-200 border-none bg-transparent w-full text-left
+                flex items-center gap-4 pl-4 pr-3 py-3.5 rounded-lg text-[0.95rem] font-medium
+                cursor-pointer transition-all duration-200 w-full text-left relative
                 ${isActive
-                  ? 'bg-primary/10 text-fg border-l-2 border-l-accent'
-                  : 'text-fg-muted hover:text-fg hover:bg-bg-hover'}
+                  ? 'text-fg border-l-2 border-l-accent'
+                  : 'text-fg-muted hover:text-fg border-l-2 border-l-transparent'}
               `}
-              whileHover={{ x: 4 }}
+              style={isActive ? {
+                background: 'linear-gradient(90deg, hsla(155,65%,36%,0.13) 0%, transparent 80%)',
+              } : undefined}
+              whileHover={!isActive ? { x: 3 } : {}}
               whileTap={{ scale: 0.97 }}
             >
               <Icon
-                size={22}
-                className={`transition-all duration-300 ${isActive
-                  ? 'text-accent drop-shadow-[0_0_6px_var(--color-accent-glow)]'
-                  : ''}`}
+                size={20}
+                className={`shrink-0 transition-all duration-300 ${isActive
+                  ? 'text-accent drop-shadow-[0_0_5px_var(--color-accent-glow)]'
+                  : 'text-fg-muted'}`}
               />
-              {label}
+              <span style={{ letterSpacing: '-0.005em' }}>{label}</span>
             </motion.button>
           );
         })}
       </nav>
 
-      <div className="px-5 space-y-3">
+      <div className="px-3 space-y-2.5">
         {vpsActive && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success-bg border border-success/20 text-xs text-success font-medium">
-            <div className="w-2 h-2 rounded-full bg-success animate-[pulse-dot_2s_ease-in-out_infinite]" />
+            <div className="w-1.5 h-1.5 rounded-full bg-success animate-[pulse-dot_2s_ease-in-out_infinite] shrink-0" />
             VPS Active — 24/7
           </div>
         )}
-        <div className="text-[0.625rem] text-fg-faint px-3">v{appVersion}</div>
+        <div className="text-[0.625rem] text-fg-faint/60 px-3 font-medium" style={{ letterSpacing: '0.06em' }}>
+          v{appVersion}
+        </div>
       </div>
     </aside>
   );

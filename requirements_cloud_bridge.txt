@@ -1,7 +1,27 @@
+# Web framework
 flask==3.0.0
 flask-cors==4.0.0
+
+# Rate limiting
+flask-limiter==3.7.0
+
+# Environment / config
 python-dotenv==1.0.0
+
+# HTTP client (OAuth callbacks, Telegram, LLM)
 requests==2.31.0
+
+# Credential encryption (MT5 passwords at rest)
 cryptography==43.0.1
+
+# OAuth2 / OpenID Connect (Google, Facebook login)
 authlib==1.3.2
+
+# WSGI production server
 waitress==3.0.0
+
+# Request validation (required by Flask 3+)
+werkzeug>=3.0.0
+
+# TOTP / 2FA (future use)
+pyotp==2.9.0

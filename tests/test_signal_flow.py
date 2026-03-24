@@ -62,12 +62,14 @@ class TestSignalEndpoint(unittest.TestCase):
         self.assertIn("user_id", resp.get_json()["error"])
 
     def test_signal_missing_api_key(self):
-        """Test signal without api_key returns 401."""
-        resp = self.client.post("/signal", json={
-            "user_id": self.user_id,
-            "action": "BUY",
-            "symbol": "EURUSD",
-        })
+        """Test signal without api_key returns 401 when API key is required."""
+        import cloud_bridge
+        with patch.object(cloud_bridge, 'REQUIRE_API_KEY', True):
+            resp = self.client.post("/signal", json={
+                "user_id": self.user_id,
+                "action": "BUY",
+                "symbol": "EURUSD",
+            })
         self.assertEqual(resp.status_code, 401)
 
     def test_signal_invalid_api_key(self):
@@ -230,7 +232,7 @@ class TestRelayPollFlow(unittest.TestCase):
         
         # Verify command status updated
         fetched = self.store.get_command(cmd.id)
-        self.assertEqual(fetched.status, CommandStatus.EXECUTED)
+        self.assertEqual(fetched.status.value, "executed")
 
 
 class TestManagedExecution(unittest.TestCase):

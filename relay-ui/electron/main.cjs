@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Notification } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
@@ -183,4 +183,10 @@ ipcMain.handle('check-for-updates', () => {
 
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('show-notification', (_event, { title, body }) => {
+  if (Notification.isSupported()) {
+    new Notification({ title: String(title), body: String(body) }).show()
+  }
 });

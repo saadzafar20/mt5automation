@@ -135,7 +135,8 @@ export function SettingsPanel() {
           </div>
           <div
             ref={logRef}
-            className="bg-bg-input border border-border rounded-[var(--radius)] p-3 h-[200px] overflow-y-auto font-mono text-[0.6875rem] text-fg-muted leading-relaxed"
+            className="bg-bg-input border border-border rounded-[var(--radius)] p-3 h-[200px] overflow-y-auto text-[0.675rem] text-fg-muted leading-relaxed"
+            style={{ fontFamily: 'var(--font-mono)' }}
           >
             {logs.length === 0 ? (
               <span className="text-fg-faint">No log entries yet</span>

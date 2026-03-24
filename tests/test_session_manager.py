@@ -48,91 +48,75 @@ def _make_mt5(connected=True, init_ok=True, order_ok=True):
 # ---------------------------------------------------------------------------
 
 class TestMT5UserSessionConnect(unittest.TestCase):
-    """Test MT5UserSession connection logic."""
+    """Test MT5UserSession subprocess connection guard behavior."""
 
-    def test_connect_success_sets_connected(self):
-        """_connect() should set _connected True on successful mt5.initialize()."""
-        mt5 = _make_mt5(init_ok=True, connected=True)
+    def test_execute_returns_error_when_not_connected(self):
+        """execute() returns error when _connected is False."""
         session = MT5UserSession.__new__(MT5UserSession)
         session.user_id = "user1"
-        session._login = 12345
-        session._password = "pass"
-        session._server = "MockBroker"
-        session._path = None
+        session._stopped = False
+        session._connected = False
+        session._proc = None
+        session._io_lock = threading.Lock()
 
-        result = session._connect(mt5)
+        result = session.execute({"action": "BUY", "symbol": "EURUSD"})
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("not connected", result["error"])
 
-        self.assertTrue(result)
-        # path may be auto-detected on Windows, so just check login/password/server
-        call_kwargs = mt5.initialize.call_args[1]
-        self.assertEqual(call_kwargs["login"], 12345)
-        self.assertEqual(call_kwargs["password"], "pass")
-        self.assertEqual(call_kwargs["server"], "MockBroker")
-
-    def test_connect_failure_returns_false(self):
-        """_connect() should return False when mt5.initialize() fails."""
-        mt5 = _make_mt5(init_ok=False)
-        mt5.last_error.return_value = (-1, "connection error")
+    def test_execute_returns_error_when_proc_exited(self):
+        """execute() returns error when subprocess has exited (poll() not None)."""
         session = MT5UserSession.__new__(MT5UserSession)
         session.user_id = "user1"
-        session._login = 12345
-        session._password = "pass"
-        session._server = "MockBroker"
-        session._path = None
+        session._stopped = False
+        session._connected = True
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 1  # exited with code 1
+        session._proc = mock_proc
+        session._io_lock = threading.Lock()
 
-        result = session._connect(mt5)
-        self.assertFalse(result)
+        result = session.execute({"action": "BUY", "symbol": "EURUSD"})
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("not connected", result["error"])
 
-    def test_is_alive_true_when_connected(self):
-        """_is_alive() returns True when terminal reports connected."""
-        mt5 = _make_mt5(connected=True)
+    def test_connected_property_reflects_state(self):
+        """connected property returns the current _connected value."""
         session = MT5UserSession.__new__(MT5UserSession)
-        session.user_id = "user1"
-
-        self.assertTrue(session._is_alive(mt5))
-
-    def test_is_alive_false_when_disconnected(self):
-        """_is_alive() returns False when terminal is not connected."""
-        mt5 = _make_mt5(connected=False)
-        session = MT5UserSession.__new__(MT5UserSession)
-        session.user_id = "user1"
-
-        self.assertFalse(session._is_alive(mt5))
+        session._connected = False
+        self.assertFalse(session.connected)
+        session._connected = True
+        self.assertTrue(session.connected)
 
 
 class TestMT5UserSessionExecute(unittest.TestCase):
-    """Test command execution via MT5UserSession queue."""
+    """Test command execution via MT5UserSession subprocess I/O."""
 
-    @patch("managed_mt5_worker.MT5UserSession._connect", return_value=True)
-    @patch("managed_mt5_worker.MT5UserSession._is_alive", return_value=True)
-    def test_execute_command_routed_to_thread(self, mock_alive, mock_connect):
-        """execute() should dispatch to the session thread and return result."""
+    def _make_subprocess_session(self, response_json: str):
+        """Return a session whose subprocess mock immediately returns response_json."""
+        import json as _json
         session = MT5UserSession.__new__(MT5UserSession)
         session.user_id = "user1"
-        session._login = 12345
-        session._password = "pass"
-        session._server = "MockBroker"
-        session._path = None
         session._stopped = False
         session._connected = True
+        session._io_lock = threading.Lock()
 
-        import queue as _queue
-        session._queue = _queue.Queue()
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # still running
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline.return_value = response_json + "\n"
+        session._proc = mock_proc
+        return session, mock_proc
 
-        # Simulate a command being processed synchronously
-        cmd = {"action": "BUY", "symbol": "EURUSD", "size": 0.1}
+    def test_execute_command_returns_subprocess_response(self):
+        """execute() sends JSON to subprocess stdin and returns parsed response."""
+        import json as _json
         expected = {"status": "executed", "order_id": 77777}
+        session, mock_proc = self._make_subprocess_session(_json.dumps(expected))
 
-        def fake_put(item):
-            # Immediately resolve the result_box and set the event
-            command, result_box, done = item
-            result_box.append(expected)
-            done.set()
-
-        session._queue.put = fake_put
-
-        result = session.execute(cmd)
-        self.assertEqual(result, expected)
+        result = session.execute({"action": "BUY", "symbol": "EURUSD"})
+        self.assertEqual(result["status"], "executed")
+        self.assertEqual(result["order_id"], 77777)
+        mock_proc.stdin.write.assert_called_once()
 
     def test_execute_returns_error_when_stopped(self):
         """execute() should immediately return error when session is stopped."""
@@ -145,17 +129,29 @@ class TestMT5UserSessionExecute(unittest.TestCase):
         self.assertIn("shut down", result["error"])
 
     def test_execute_timeout(self):
-        """execute() should return timeout error if result never arrives."""
-        import queue as _queue
+        """execute() returns timeout error when subprocess does not respond."""
         import managed_mt5_worker as mw
 
         original_timeout = mw.TRADE_TIMEOUT_SECS
-        mw.TRADE_TIMEOUT_SECS = 0.1  # very short timeout for test speed
+        mw.TRADE_TIMEOUT_SECS = 0.1  # very short for test speed
 
         session = MT5UserSession.__new__(MT5UserSession)
         session.user_id = "user1"
         session._stopped = False
-        session._queue = _queue.Queue()
+        session._connected = True
+        session._io_lock = threading.Lock()
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+
+        def _slow_read():
+            time.sleep(1.0)  # longer than timeout
+            return ""
+
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline.side_effect = _slow_read
+        session._proc = mock_proc
 
         result = session.execute({"action": "BUY", "symbol": "EURUSD"})
         mw.TRADE_TIMEOUT_SECS = original_timeout

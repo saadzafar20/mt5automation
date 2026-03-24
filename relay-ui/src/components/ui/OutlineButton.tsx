@@ -19,15 +19,15 @@ export function OutlineButton({ children, danger, fullWidth, size = 'md', classN
     <motion.button
       className={`
         ${danger
-          ? 'bg-danger-bg text-danger border border-danger/20 hover:border-danger/40'
-          : 'bg-bg-hover text-fg border border-border hover:border-accent-muted'}
+          ? 'bg-danger-bg text-danger border border-danger/20 hover:border-danger/38 hover:bg-danger/[0.06]'
+          : 'bg-bg-hover/70 text-fg border border-border hover:border-accent/20 hover:bg-primary/[0.06]'}
         ${sizes[size]}
         font-medium rounded-[var(--radius)] cursor-pointer transition-all duration-200
         ${fullWidth ? 'w-full' : ''}
         ${className}
       `}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.015 }}
+      whileTap={{ scale: 0.985 }}
       {...(props as object)}
     >
       {children}

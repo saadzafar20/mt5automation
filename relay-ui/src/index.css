@@ -1,10 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
 
 @import "tailwindcss";
 
 @theme {
   --color-bg: hsl(158, 50%, 4%);
-  --color-bg-card: hsla(156, 45%, 7%, 0.8);
+  --color-bg-card: hsla(156, 45%, 7%, 0.85);
   --color-bg-input: hsl(156, 35%, 10%);
   --color-bg-sidebar: hsl(155, 40%, 5%);
   --color-bg-hover: hsla(156, 35%, 10%, 0.5);
@@ -17,7 +17,7 @@
   --color-accent: hsl(43, 85%, 55%);
   --color-accent-glow: hsla(43, 85%, 55%, 0.35);
   --color-accent-muted: hsla(43, 85%, 55%, 0.15);
-  --color-border: hsla(156, 25%, 13%, 0.3);
+  --color-border: hsla(156, 25%, 13%, 0.35);
   --color-border-solid: hsl(155, 40%, 20%);
   --color-danger: hsl(0, 72%, 50%);
   --color-danger-bg: hsl(0, 40%, 8%);
@@ -29,11 +29,15 @@
 }
 
 :root {
-  --glass-blur: 24px;
+  --glass-blur: 20px;
   --radius: 0.75rem;
-  --shadow-glass: 0 8px 32px -8px hsla(155, 65%, 36%, 0.18), 0 4px 16px -4px hsla(0,0%,0%,0.08);
-  --shadow-gold: 0 8px 32px -8px hsla(43, 85%, 55%, 0.35);
+  /* Top-edge inner highlight baked into every card shadow */
+  --shadow-glass: 0 4px 28px -6px hsla(0, 0%, 0%, 0.55),
+    inset 0 1px 0 0 hsla(0, 0%, 100%, 0.055);
+  --shadow-gold: 0 8px 32px -8px hsla(43, 85%, 55%, 0.38),
+    inset 0 1px 0 0 hsla(43, 85%, 75%, 0.11);
   --gradient-gold: linear-gradient(135deg, hsl(43, 85%, 50%), hsl(43, 80%, 65%));
+  --font-mono: 'IBM Plex Mono', 'Fira Code', 'Courier New', monospace;
 }
 
 [data-theme="light"] {
@@ -60,29 +64,60 @@
   --color-blue: hsl(210, 60%, 45%);
   --color-buy: hsl(155, 55%, 35%);
   --color-sell: hsl(0, 65%, 48%);
-  --shadow-glass: 0 4px 20px -4px hsla(155,30%,20%,0.08);
-  --shadow-gold: 0 4px 20px -4px hsla(43,80%,45%,0.2);
+  --shadow-glass: 0 4px 20px -4px hsla(155, 30%, 20%, 0.1),
+    inset 0 1px 0 0 hsla(0, 0%, 100%, 0.85);
+  --shadow-gold: 0 4px 20px -4px hsla(43, 80%, 45%, 0.2),
+    inset 0 1px 0 0 hsla(43, 85%, 85%, 0.6);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body, #root {
   height: 100%;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--color-bg);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--color-fg);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 6px; }
+/* Layered ambient background: teal bloom top-left, gold bloom bottom-right */
+/* Uses var(--color-bg) so light/dark theme switching works correctly */
+html, body, #root {
+  background: var(--color-bg);
+}
+
+body {
+  background:
+    radial-gradient(ellipse 1100px 800px at -8% -5%, hsla(155, 65%, 36%, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 800px 700px at 108% 110%, hsla(43, 85%, 55%, 0.05) 0%, transparent 55%),
+    var(--color-bg);
+}
+
+/* Fine-grain noise texture for tactile depth (2% opacity — imperceptible in screenshots, felt in motion) */
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.022;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Refined scrollbar */
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-fg-faint); border-radius: 3px; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-fg-faint);
+  border-radius: 2px;
+}
 ::-webkit-scrollbar-thumb:hover { background: var(--color-fg-muted); }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.3; }
 }
 
 @keyframes ring-pulse {
@@ -90,47 +125,68 @@ html, body, #root {
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
-/* Glassmorphism card styles */
+/* Glassmorphism card */
 .glass {
   background: var(--color-bg-card);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-glass);
+  transition: box-shadow 0.28s ease, border-color 0.28s ease;
 }
 .glass:hover {
-  box-shadow: 0 0 24px -4px hsla(155, 65%, 36%, 0.25), var(--shadow-glass);
+  border-color: hsla(155, 35%, 22%, 0.55);
+  box-shadow:
+    0 0 36px -6px hsla(155, 65%, 36%, 0.22),
+    0 4px 28px -6px hsla(0, 0%, 0%, 0.55),
+    inset 0 1px 0 0 hsla(0, 0%, 100%, 0.07);
 }
+
 .glass-gold {
   background: var(--color-bg-card);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   border: 1px solid var(--color-accent-muted);
   border-radius: var(--radius);
   box-shadow: var(--shadow-gold);
+  transition: box-shadow 0.28s ease, border-color 0.28s ease;
 }
 .glass-gold:hover {
-  box-shadow: 0 0 28px -4px hsla(43, 85%, 55%, 0.3), var(--shadow-gold);
+  border-color: hsla(43, 85%, 55%, 0.26);
+  box-shadow:
+    0 0 40px -6px hsla(43, 85%, 55%, 0.26),
+    0 4px 28px -6px hsla(0, 0%, 0%, 0.5),
+    inset 0 1px 0 0 hsla(43, 85%, 75%, 0.15);
 }
 
-/* Gold button */
+/* Gold button — premium CTA */
 .btn-gold {
   background: var(--gradient-gold);
   color: hsl(40, 30%, 10%);
-  border: 1px solid var(--color-accent-muted);
+  border: 1px solid hsla(43, 85%, 68%, 0.28);
   box-shadow: var(--shadow-gold);
   cursor: pointer;
-  transition: box-shadow 0.2s, opacity 0.2s;
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  letter-spacing: -0.01em;
+  font-weight: 600;
 }
 .btn-gold:hover {
-  box-shadow: 0 0 28px -4px hsla(43, 85%, 55%, 0.5), var(--shadow-gold);
+  filter: brightness(1.07);
+  box-shadow: 0 0 36px -4px hsla(43, 85%, 55%, 0.52), var(--shadow-gold);
 }
 .btn-gold:disabled {
-  opacity: 0.45;
+  opacity: 0.42;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* Monospace data display utility */
+.font-mono-data {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
 }

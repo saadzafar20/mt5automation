@@ -14,6 +14,7 @@ interface ElectronBridge {
   checkForUpdates: () => Promise<void>;
   installUpdate: () => Promise<void>;
   onUpdateStatus: (callback: (data: { status: string; version?: string; percent?: number }) => void) => void;
+  showNotification: (title: string, body: string) => Promise<void>;
 }
 
 declare global {
@@ -95,6 +96,12 @@ export const bridge = {
 
   browseFile: async (_title: string, _startDir: string, _filter: string): Promise<string> => {
     return '';
+  },
+
+  showNotification: (title: string, body: string): Promise<void> => {
+    const b = eb();
+    if (b?.showNotification) return b.showNotification(title, body);
+    return Promise.resolve();
   },
 
   isAvailable: () => !!eb(),

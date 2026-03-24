@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, ExternalLink, Copy, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, ExternalLink, Copy, Check, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
@@ -20,12 +20,18 @@ interface DashboardResult {
   relayOnline: number;
   relayTotal: number;
   scripts: Array<{ script_code: string; script_name: string; signals_count: number; executed_count: number }>;
+  managedConnected?: boolean;
+  brokerConnected?: boolean;
+  circuitBroken?: boolean;
+  magicNumber?: number;
+  plan?: string;
 }
 
 export function DashboardPanel() {
   const auth = useAppStore((s) => s.auth);
   const dots = useAppStore((s) => s.relayDots);
   const setDashboardData = useAppStore((s) => s.setDashboardData);
+  const setRelayDots = useAppStore((s) => s.setRelayDots);
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState('');
   const queryClient = useQueryClient();
@@ -42,18 +48,39 @@ export function DashboardPanel() {
         relayOnline: res.dashboard?.relay_online || 0,
         relayTotal: res.dashboard?.relay_total || 0,
         scripts: res.dashboard?.scripts || [],
+        managedConnected: res.managed_connected ?? false,
+        brokerConnected: res.broker_connected ?? false,
+        circuitBroken: res.circuit_broken ?? false,
+        magicNumber: res.magic_number,
+        plan: res.plan,
       };
+      // Update relay dots from summary response
+      setRelayDots({
+        bridge: 'online',
+        mt5: result.managedConnected ? 'online' : (result.relayOnline > 0 ? 'online' : 'offline'),
+        broker: result.brokerConnected ? 'online' : 'offline',
+      });
       // Keep Zustand store in sync for the background polling
       setDashboardData(result);
       return result;
     },
     enabled: !!auth.userId && !!auth.apiKey,
+    refetchInterval: 15000,
   });
+
+  // 15-second polling effect for relay status refresh
+  useEffect(() => {
+    if (!auth.userId || !auth.apiKey) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard', auth.userId] });
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [auth.userId, auth.apiKey, queryClient]);
 
   const copyText = (text: string, label: string) => {
     bridge.setClipboard(text);
     setCopied(label);
-    setTimeout(() => setCopied(''), 2000);
+    setTimeout(() => setCopied(''), 3000);
   };
 
   if (!auth.userId) {
@@ -116,15 +143,16 @@ export function DashboardPanel() {
               <input
                 readOnly
                 value={isPending ? 'Loading...' : (data?.webhookUrl || '—')}
-                className="flex-1 bg-bg-input border border-border text-fg text-xs px-3 py-2 rounded-[var(--radius)] outline-none font-mono"
+                className="flex-1 bg-bg-input border border-border text-fg text-xs px-3 py-2 rounded-[var(--radius)] outline-none" style={{ fontFamily: 'var(--font-mono)' }}
               />
               <motion.button
-                className="px-3 py-2 rounded-[var(--radius)] bg-bg-hover border border-border text-fg-muted hover:text-accent cursor-pointer transition-colors"
+                className={`px-3 py-2 rounded-[var(--radius)] border cursor-pointer transition-all duration-200 ${copied === 'webhook' ? 'bg-success-bg border-success/20 text-success' : 'bg-bg-hover border-border text-fg-muted hover:text-accent'}`}
                 onClick={() => data?.webhookUrl && copyText(data.webhookUrl, 'webhook')}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                title={copied === 'webhook' ? 'Copied!' : 'Copy'}
               >
-                <Copy size={14} className={copied === 'webhook' ? 'text-success' : ''} />
+                {copied === 'webhook' ? <Check size={14} /> : <Copy size={14} />}
               </motion.button>
             </div>
           </Card>
@@ -144,7 +172,7 @@ export function DashboardPanel() {
                 readOnly
                 type={showKey ? 'text' : 'password'}
                 value={isPending ? '' : (data?.apiKey || auth.apiKey || '')}
-                className="flex-1 bg-bg-input border border-border text-fg text-xs px-3 py-2 rounded-[var(--radius)] outline-none font-mono"
+                className="flex-1 bg-bg-input border border-border text-fg text-xs px-3 py-2 rounded-[var(--radius)] outline-none" style={{ fontFamily: 'var(--font-mono)' }}
               />
               <motion.button
                 className="px-3 py-2 rounded-[var(--radius)] bg-bg-hover border border-border text-fg-muted hover:text-fg cursor-pointer transition-colors"
@@ -154,12 +182,13 @@ export function DashboardPanel() {
                 {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
               </motion.button>
               <motion.button
-                className="px-3 py-2 rounded-[var(--radius)] bg-bg-hover border border-border text-fg-muted hover:text-accent cursor-pointer transition-colors"
+                className={`px-3 py-2 rounded-[var(--radius)] border cursor-pointer transition-all duration-200 ${copied === 'api' ? 'bg-success-bg border-success/20 text-success' : 'bg-bg-hover border-border text-fg-muted hover:text-accent'}`}
                 onClick={() => data?.apiKey && copyText(data.apiKey, 'api')}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                title={copied === 'api' ? 'Copied!' : 'Copy'}
               >
-                <Copy size={14} className={copied === 'api' ? 'text-success' : ''} />
+                {copied === 'api' ? <Check size={14} /> : <Copy size={14} />}
               </motion.button>
             </div>
           </Card>
@@ -170,7 +199,7 @@ export function DashboardPanel() {
       <ScrollReveal variant="fade-up" delay={0.2}>
         <Card>
           <h3 className="text-xs font-semibold text-fg-muted mb-4">Account Summary</h3>
-          <div className="bg-bg-input border border-border rounded-[var(--radius)] p-4 font-mono text-xs text-fg-muted space-y-2">
+          <div className="bg-bg-input border border-border rounded-[var(--radius)] p-4 text-xs text-fg-muted space-y-2" style={{ fontFamily: 'var(--font-mono)' }}>
             <div>Account: <span className="text-fg">{auth.userId || '—'}</span></div>
             <div>Relays Online: <span className="text-success">{data?.relayOnline || 0}</span> / {data?.relayTotal || 0}</div>
             <div>Scripts: <span className="text-fg">{data?.scripts.length || 0}</span></div>

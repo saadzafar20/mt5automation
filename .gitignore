@@ -2,14 +2,19 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 
 # Database files
+bridge.db
+bridge.db-shm
+bridge.db-wal
 *.db
 *.db-shm
 *.db-wal
 
 # Logs
 *.log
+logs/
 
 # Environment
 .env
@@ -25,3 +30,14 @@ relay_last_user.json
 
 # Claude AI memory
 .claude/
+
+# Build outputs
+dist-electron/
+relay-ui/node_modules/
+relay-ui/dist/
+
+# Installers / binaries
+*.dmg
+*.exe
+*.zip
+*.blockmap
