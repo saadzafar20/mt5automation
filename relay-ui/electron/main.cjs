@@ -98,6 +98,26 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  // F4: Content Security Policy — restrict what the renderer can load
+  const { session } = require('electron');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: https:; " +
+          "connect-src 'self' https://app.platalgo.com https://api.telegram.org wss: ws:; " +
+          "font-src 'self' data:; " +
+          "object-src 'none';"
+        ],
+      },
+    });
+  });
+
   // Check for updates after launch (not in dev mode)
   if (!process.env.VITE_DEV_SERVER_URL) {
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);
@@ -115,7 +135,7 @@ app.on('activate', () => {
 // ── IPC Handlers ──
 
 ipcMain.handle('open-external', async (_event, url) => {
-  if (url && url.startsWith('http')) {
+  if (url && url.startsWith('https://')) {
     await shell.openExternal(url);
     return true;
   }

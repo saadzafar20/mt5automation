@@ -1416,7 +1416,7 @@ class BridgeStore:
         return hmac.compare_digest(provided, expected)
 
     def register_relay(self, user_id: str, relay_id: str, relay_type: str) -> str:
-        token = str(uuid.uuid4())
+        token = secrets.token_urlsafe(32)
         token_hash = hash_secret(user_id, token)
         now = time.time()
         with self.lock, self.conn:
@@ -2335,6 +2335,24 @@ class BridgeStore:
                 "INSERT OR REPLACE INTO signal_idempotency (idem_key, user_id, created_at) VALUES (?, ?, ?)",
                 (idem_key, user_id, time.time()),
             )
+
+    def check_and_record_idempotency(self, idem_key: str, user_id: str, ttl_secs: int = 120) -> bool:
+        """Atomically check + record idempotency. Returns True if this is a duplicate.
+        D2 fix: single lock acquisition eliminates TOCTOU between check and record.
+        """
+        cutoff = time.time() - ttl_secs
+        now = time.time()
+        with self.lock, self.conn:
+            # Remove expired entry so TTL-expired keys can be reused
+            self.conn.execute(
+                "DELETE FROM signal_idempotency WHERE idem_key = ? AND user_id = ? AND created_at <= ?",
+                (idem_key, user_id, cutoff),
+            )
+            cursor = self.conn.execute(
+                "INSERT OR IGNORE INTO signal_idempotency (idem_key, user_id, created_at) VALUES (?, ?, ?)",
+                (idem_key, user_id, now),
+            )
+        return cursor.rowcount == 0  # 0 = row already existed → duplicate
 
     def cleanup_idempotency(self, max_age_secs: int = 300):
         cutoff = time.time() - max_age_secs
@@ -3901,12 +3919,11 @@ def _process_signal_for_user(user_id: str, data: dict):
     # Explicit key always takes precedence (user-provided)
     idem_key = (data.get("idempotency_key") or "").strip()
     if idem_key:
-        if store.check_idempotency(idem_key, user_id, ttl_secs=120):
+        if store.check_and_record_idempotency(idem_key, user_id, ttl_secs=120):
             return jsonify({"status": "duplicate", "code": "DUPLICATE_SIGNAL",
                             "message": "signal already processed — idempotency key matched"}), 200
-        store.record_idempotency(idem_key, user_id)
     else:
-        # Content-hash dedup: prevent identical signals arriving within 10 seconds
+        # Content-hash dedup: prevent identical signals arriving within CONTENT_DEDUP_SECS
         _action_raw = (data.get("action") or "").strip().upper()
         _symbol_raw = (data.get("symbol") or "").strip().upper()[:20]
         _size_raw = data.get("size", data.get("lot_size", 0.1))
@@ -3920,10 +3937,9 @@ def _process_signal_for_user(user_id: str, data: dict):
             ).encode()
         ).hexdigest()[:16]
         _content_idem_key = f"hash:{_content_hash}"
-        if store.check_idempotency(_content_idem_key, user_id, ttl_secs=CONTENT_DEDUP_SECS):
+        if store.check_and_record_idempotency(_content_idem_key, user_id, ttl_secs=CONTENT_DEDUP_SECS):
             return jsonify({"status": "duplicate", "code": "DUPLICATE_SIGNAL",
                             "message": f"identical signal received within {CONTENT_DEDUP_SECS} seconds"}), 200
-        store.record_idempotency(_content_idem_key, user_id)
 
     action = (data.get("action") or "").strip().upper()
     symbol = (data.get("symbol") or "").strip().upper()[:20]
@@ -4230,6 +4246,10 @@ def account_register():
     Body: {user_id, password, invite_code}
     Returns: {status, user_id, api_key}
     """
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not _rate_check(f"register:ip:{client_ip}", max_calls=5, window_secs=60):
+        return jsonify({"error": "too many registration attempts, please wait"}), 429
+
     data = request.get_json(silent=True) or {}
     user_id = (data.get("user_id") or "").strip()
     password = data.get("password") or ""
@@ -5377,18 +5397,16 @@ def api_trade():
     # Idempotency check (explicit key or content-hash)
     idem_key = (data.get("idempotency_key") or "").strip()
     if idem_key:
-        if store.check_idempotency(idem_key, user_id, ttl_secs=120):
+        if store.check_and_record_idempotency(idem_key, user_id, ttl_secs=120):
             return jsonify({"status": "duplicate", "idempotency_key": idem_key}), 200
-        store.record_idempotency(idem_key, user_id)
     else:
         _content_hash = hashlib.sha256(
             json.dumps({"action": action, "symbol": symbol, "size": str(size)},
                        sort_keys=True).encode()
         ).hexdigest()[:16]
         _content_key = f"hash:{_content_hash}"
-        if store.check_idempotency(_content_key, user_id, ttl_secs=10):
+        if store.check_and_record_idempotency(_content_key, user_id, ttl_secs=10):
             return jsonify({"status": "duplicate"}), 200
-        store.record_idempotency(_content_key, user_id)
 
     if store.is_managed_enabled(user_id):
         cmd = {"action": action, "symbol": symbol, "size": size}

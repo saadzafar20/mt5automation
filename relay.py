@@ -481,10 +481,8 @@ class MT5Executor:
                     all_positions = mt5.positions_get() or []
                     if magic:
                         positions = [p for p in all_positions if p.magic == int(magic)]
-                        if not positions:
-                            # Fall back to all positions only if no magic-filtered ones found
-                            logger.info(f"CLOSE_ALL: no positions with magic={magic}, closing all")
-                            positions = all_positions
+                        # B1: Do NOT fall back — if magic specified and no match, close nothing.
+                        # Falling back to all_positions would nuke positions from other strategies.
                     else:
                         positions = all_positions
                 else:
