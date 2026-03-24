@@ -53,20 +53,51 @@ class TelegramAPI:
         return data["result"]
 
     def get_updates(self, offset: int | None = None, poll_timeout: int = 30) -> list[dict]:
-        """Long-poll for new updates."""
+        """Long-poll for new updates. FIX 7: Retry on 429 and connection errors."""
         params: dict = {"timeout": poll_timeout, "allowed_updates": '["message","channel_post"]'}
         if offset is not None:
             params["offset"] = offset
-        resp = requests.get(
-            f"{self.base_url}/getUpdates",
-            params=params,
-            timeout=poll_timeout + self.timeout,  # HTTP timeout > poll timeout
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("ok"):
-            raise RuntimeError(f"getUpdates failed: {data}")
-        return data.get("result", [])
+
+        max_retries = 3
+        backoff = 1
+        for attempt in range(max_retries + 1):
+            try:
+                resp = requests.get(
+                    f"{self.base_url}/getUpdates",
+                    params=params,
+                    timeout=poll_timeout + self.timeout,  # HTTP timeout > poll timeout
+                )
+                if resp.status_code == 429:
+                    # FIX 7: Respect Retry-After header
+                    retry_after = int(resp.headers.get("Retry-After", 30))
+                    logger.warning(
+                        f"Telegram 429 on getUpdates, waiting {retry_after}s "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    if attempt < max_retries:
+                        time.sleep(retry_after)
+                        continue
+                    else:
+                        logger.error("getUpdates: all retries exhausted after 429 responses")
+                        return []
+                resp.raise_for_status()
+                data = resp.json()
+                if not data.get("ok"):
+                    raise RuntimeError(f"getUpdates failed: {data}")
+                return data.get("result", [])
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.ReadTimeout) as conn_exc:
+                if attempt < max_retries:
+                    wait = min(2 ** attempt, 60)
+                    logger.warning(
+                        f"Telegram connection error on getUpdates: {conn_exc} — "
+                        f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error(f"getUpdates: all retries exhausted after connection errors: {conn_exc}")
+                    raise
+        return []
 
     def get_chat(self, chat_id: str) -> dict:
         """Get info about a chat. Used to verify bot access."""
@@ -82,21 +113,51 @@ class TelegramAPI:
         return data["result"]
 
     def send_message(self, chat_id: str, text: str) -> bool:
-        """Send a text message to a chat/group. Returns True on success."""
-        try:
-            resp = requests.post(
-                f"{self.base_url}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-                timeout=self.timeout,
-            )
-            data = resp.json()
-            if not data.get("ok"):
-                logger.warning(f"sendMessage failed for chat {chat_id}: {data}")
+        """Send a text message to a chat/group. Returns True on success.
+
+        FIX 7: Retry on 429 (rate limit) and connection errors with backoff.
+        """
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/sendMessage",
+                    json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+                    timeout=self.timeout,
+                )
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 30))
+                    logger.warning(
+                        f"Telegram 429 on sendMessage to {chat_id}, "
+                        f"waiting {retry_after}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    if attempt < max_retries:
+                        time.sleep(retry_after)
+                        continue
+                    else:
+                        logger.error(f"sendMessage: all retries exhausted for chat {chat_id}")
+                        return False
+                data = resp.json()
+                if not data.get("ok"):
+                    logger.warning(f"sendMessage failed for chat {chat_id}: {data}")
+                    return False
+                return True
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.ReadTimeout) as conn_exc:
+                if attempt < max_retries:
+                    wait = min(2 ** attempt, 60)
+                    logger.warning(
+                        f"sendMessage connection error for chat {chat_id}: {conn_exc} — "
+                        f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error(f"sendMessage: all retries exhausted for chat {chat_id}: {conn_exc}")
+                    return False
+            except Exception as exc:
+                logger.warning(f"sendMessage error for chat {chat_id}: {exc}")
                 return False
-            return True
-        except Exception as exc:
-            logger.warning(f"sendMessage error for chat {chat_id}: {exc}")
-            return False
+        return False
 
     def get_file(self, file_id: str) -> bytes:
         """Download a file from Telegram servers. Returns raw bytes."""

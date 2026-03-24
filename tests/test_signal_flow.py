@@ -149,7 +149,9 @@ class TestSignalEndpoint(unittest.TestCase):
             "rate_limit_window_secs": 60,
         })
         
-        # First two should succeed
+        # First two should succeed — use unique idempotency_key so content-hash
+        # dedup doesn't suppress them (FIX 2: identical content within 10s would dedup)
+        import uuid as _uuid
         for i in range(2):
             resp = self.client.post("/signal", json={
                 "user_id": self.user_id,
@@ -158,9 +160,10 @@ class TestSignalEndpoint(unittest.TestCase):
                 "symbol": "EURUSD",
                 "size": 0.01,
                 "script_name": "RateLimitTest",
+                "idempotency_key": f"rl-test-{_uuid.uuid4()}",
             })
             self.assertEqual(resp.status_code, 202)
-        
+
         # Third should be rate limited
         resp = self.client.post("/signal", json={
             "user_id": self.user_id,
@@ -169,6 +172,7 @@ class TestSignalEndpoint(unittest.TestCase):
             "symbol": "EURUSD",
             "size": 0.01,
             "script_name": "RateLimitTest",
+            "idempotency_key": f"rl-test-{_uuid.uuid4()}",
         })
         self.assertEqual(resp.status_code, 429)
 

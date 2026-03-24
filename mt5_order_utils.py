@@ -63,6 +63,77 @@ def map_mt5_retcode(retcode: Optional[int]) -> str:
     return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
 
 
+# FIX 11: User-friendly error messages with actionable guidance
+_USER_FRIENDLY_ERRORS = {
+    10027: (
+        "AutoTrading disabled",
+        "Enable AutoTrading in MT5: Tools → Options → Expert Advisors → Allow automated trading",
+    ),
+    10031: (
+        "No broker connection",
+        "Check your internet connection and MT5 terminal status",
+    ),
+    10019: (
+        "Insufficient funds",
+        "Your account balance is too low for this trade size",
+    ),
+    10018: (
+        "Market closed",
+        "This market is currently closed. Try during market hours",
+    ),
+    10016: (
+        "Invalid SL/TP",
+        "Stop loss or take profit is too close to the current price",
+    ),
+    10026: (
+        "AutoTrading disabled by server",
+        "Contact your broker — AutoTrading has been disabled server-side",
+    ),
+    10017: (
+        "Trading disabled",
+        "Trading is disabled for this account. Contact your broker",
+    ),
+    10014: (
+        "Invalid volume",
+        "The lot size is invalid for this symbol. Check min/max lot size with your broker",
+    ),
+    10015: (
+        "Invalid price",
+        "The submitted price is invalid. The market may have moved — try again",
+    ),
+    10024: (
+        "Too many requests",
+        "MT5 is rate-limiting trade requests. Wait a moment and try again",
+    ),
+    10033: (
+        "Pending order limit reached",
+        "Maximum number of pending orders reached. Close some orders first",
+    ),
+    10034: (
+        "Volume limit reached",
+        "Maximum volume for this symbol has been reached",
+    ),
+    10040: (
+        "Open position limit reached",
+        "Maximum number of open positions reached. Close some positions first",
+    ),
+}
+
+
+def user_friendly_error(retcode: Optional[int]) -> tuple:
+    """
+    FIX 11: Return (short_message, action_hint) for the given MT5 retcode.
+
+    Returns:
+        tuple of (short_message: str, action_hint: str)
+    """
+    if retcode is None:
+        return ("Trade failed", "Unknown error — check MT5 connection")
+    if retcode in _USER_FRIENDLY_ERRORS:
+        return _USER_FRIENDLY_ERRORS[retcode]
+    return ("Trade failed", f"Error code {retcode}")
+
+
 def build_market_order(mt5, action: str, symbol: str, volume: float,
                        sl: Optional[float] = None, tp: Optional[float] = None,
                        comment: str = "bridge-trade",
@@ -354,6 +425,15 @@ def execute_command(mt5, command: Dict[str, Any],
     if symbol and action in ("BUY", "SELL"):
         mt5.symbol_select(symbol, True)
 
+    # FIX 12: Cap percentage lot size at 10% max per trade
+    if size < 0 and action in ("BUY", "SELL"):
+        raw_pct = abs(size)
+        if raw_pct > 10.0:
+            logger.warning(
+                "Percentage lot size capped from %.1f%% to 10%%", raw_pct
+            )
+            size = -10.0
+
     # Negative size = percentage of equity (convention from cloud_bridge)
     if size < 0 and action in ("BUY", "SELL"):
         pct = abs(size) / 100.0
@@ -375,7 +455,16 @@ def execute_command(mt5, command: Dict[str, Any],
             if vol_step > 0:
                 size = math.floor(size / vol_step) * vol_step
                 if size < vol_min:
-                    size = vol_min
+                    # FIX 12: Return error if percentage mode yields sub-minimum lots
+                    logger.warning(
+                        "Percentage lot size too small for %s after rounding (%.5f < vol_min %.5f)",
+                        symbol, size, vol_min,
+                    )
+                    return {
+                        "status": "failed",
+                        "error": f"Calculated lot size {size:.5f} is below minimum {vol_min} for {symbol}",
+                        "retcode": -1,
+                    }
         else:
             logger.warning("Cannot compute lot size for %s (no account or symbol_info) — falling back to 0.01", symbol)
             size = 0.01

@@ -303,6 +303,10 @@ class MT5UserSession:
         self._proc: Optional[subprocess.Popen] = None
         self._io_lock   = threading.Lock()  # serialise stdin write + stdout read
 
+        # FIX 4: Circuit breaker for subprocess restart backoff
+        self._circuit_open = False
+        self._consecutive_failures = 0
+
         self._thread = threading.Thread(
             target=self._run,
             name=f"mt5-session-{user_id}",
@@ -361,6 +365,12 @@ class MT5UserSession:
         """Cleanly stop this session."""
         self._stopped = True
         self._kill_subprocess()
+
+    def reset_circuit(self):
+        """Reset the circuit breaker to allow subprocess restart attempts."""
+        self._circuit_open = False
+        self._consecutive_failures = 0
+        logger.info(f"[{self.user_id}] Circuit breaker reset")
 
     # ── Subprocess management ─────────────────────────────────────────────────
 
@@ -482,12 +492,40 @@ class MT5UserSession:
     # ── Supervisor thread ─────────────────────────────────────────────────────
 
     def _run(self):
-        """Supervisor: start subprocess, monitor it, restart if it exits."""
+        """Supervisor: start subprocess, monitor it, restart if it exits.
+
+        FIX 4: Exponential backoff (5s → 5min) and circuit breaker after 5 failures.
+        FIX 16: Log connection state changes with timestamps.
+        """
         while not self._stopped:
+            # FIX 4: Circuit breaker — stop retrying when open
+            if self._circuit_open:
+                time.sleep(HEALTH_CHECK_INTERVAL_SECS)
+                continue
+
+            prev_connected = self._connected
             self._connected = False
 
+            # FIX 16: log disconnection when state changes
+            if prev_connected:
+                logger.info(
+                    f"[{self.user_id}] MT5 state changed: connected → disconnected "
+                    f"at {time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())}"
+                )
+
             if self._start_subprocess():
+                self._consecutive_failures = 0
+
+                prev_state = self._connected
                 self._connected = True
+
+                # FIX 16: log connection when state changes
+                if not prev_state:
+                    logger.info(
+                        f"[{self.user_id}] MT5 state changed: disconnected → connected "
+                        f"at {time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())}"
+                    )
+
                 logger.info(f"[{self.user_id}] MT5 session active (pid {self._proc.pid})")
 
                 # Poll until subprocess exits or we are stopped
@@ -506,7 +544,25 @@ class MT5UserSession:
                         self._proc.kill()
                 except Exception:
                     pass
-                time.sleep(RECONNECT_DELAY_SECS)
+
+                self._consecutive_failures += 1
+                # FIX 4: Exponential backoff, max 300s (5 min)
+                delay = min(5 * (2 ** (self._consecutive_failures - 1)), 300)
+
+                if self._consecutive_failures >= 5:
+                    self._circuit_open = True
+                    logger.error(
+                        f"[{self.user_id}] Circuit breaker OPEN after "
+                        f"{self._consecutive_failures} consecutive failures — "
+                        "stopping restart attempts. Call reset_circuit() to retry."
+                    )
+                    continue
+
+                logger.warning(
+                    f"[{self.user_id}] Subprocess start failed "
+                    f"(attempt {self._consecutive_failures}), retrying in {delay}s"
+                )
+                time.sleep(delay)
 
         logger.info(f"[{self.user_id}] Session supervisor stopped")
 
@@ -521,6 +577,27 @@ class SessionManager:
     def __init__(self):
         self._sessions: Dict[str, MT5UserSession] = {}
         self._lock = threading.Lock()
+
+    def shutdown_all(self, timeout: float = 10.0):
+        """Cleanly shut down all active MT5 sessions. Waits up to `timeout` seconds."""
+        with self._lock:
+            sessions = dict(self._sessions)
+        logger.info(f"SessionManager.shutdown_all: stopping {len(sessions)} session(s)")
+        for user_id, session in sessions.items():
+            try:
+                session.shutdown()
+                logger.info(f"Session stopped for user {user_id}")
+            except Exception as exc:
+                logger.warning(f"Error stopping session for {user_id}: {exc}")
+        # Give threads time to exit
+        deadline = time.time() + timeout
+        for user_id, session in sessions.items():
+            remaining = deadline - time.time()
+            if remaining > 0:
+                session._thread.join(timeout=remaining)
+        with self._lock:
+            self._sessions.clear()
+        logger.info("SessionManager.shutdown_all: complete")
 
     def start_session(self, user_id: str, login: int, password: str,
                       server: str, path: Optional[str] = None):
@@ -553,8 +630,19 @@ class SessionManager:
         with self._lock:
             session = self._sessions.get(user_id)
         if not session:
-            return {"active": False, "connected": False}
-        return {"active": True, "connected": session.connected}
+            return {"active": False, "connected": False, "circuit_open": False}
+        return {
+            "active": True,
+            "connected": session.connected,
+            "circuit_open": session._circuit_open,
+        }
+
+    def reset_circuit(self, user_id: str):
+        """Reset the circuit breaker for a user's session."""
+        with self._lock:
+            session = self._sessions.get(user_id)
+        if session:
+            session.reset_circuit()
 
     def get_all_sessions_status(self) -> Dict[str, Any]:
         """Return {user_id: {active, connected}} for all sessions."""

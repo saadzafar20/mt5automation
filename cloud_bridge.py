@@ -20,8 +20,11 @@ import hmac
 import json
 import logging
 import os
+import re as _re_top
 import secrets
+import signal as _signal
 import sqlite3
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -30,6 +33,7 @@ from functools import wraps
 import queue as _queue
 import threading
 from threading import RLock
+from typing import Optional
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_cors import CORS
@@ -52,14 +56,52 @@ except ImportError:
     Fernet = None
 from werkzeug.security import check_password_hash, generate_password_hash
 from managed_mt5_worker import SessionManager
+from mt5_order_utils import user_friendly_error as _mt5_user_friendly_error
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import gzip
 import logging.handlers as _log_handlers
+import shutil as _shutil
 os.makedirs("logs", exist_ok=True)
-_file_handler = _log_handlers.TimedRotatingFileHandler(
+
+
+class _CompressedTimedRotatingFileHandler(_log_handlers.TimedRotatingFileHandler):
+    """FIX 13: Gzip rotated log files to save disk space."""
+
+    def doRollover(self):
+        super().doRollover()
+        # Compress the most-recently rotated file (it has a date suffix)
+        for fname in self.getFilesToDelete():
+            # getFilesToDelete returns files to *remove* — the rotated (uncompressed)
+            # file we want to compress is the one that was just created before deletion.
+            pass
+        # Compress any uncompressed rotated files (those without .gz suffix)
+        base = self.baseFilename
+        log_dir = os.path.dirname(base) or "."
+        prefix = os.path.basename(base) + "."
+        try:
+            for entry in os.listdir(log_dir):
+                if entry.startswith(os.path.basename(base) + ".") and not entry.endswith(".gz"):
+                    full = os.path.join(log_dir, entry)
+                    gz_path = full + ".gz"
+                    if not os.path.exists(gz_path):
+                        try:
+                            with open(full, "rb") as f_in, gzip.open(gz_path, "wb") as f_out:
+                                _shutil.copyfileobj(f_in, f_out)
+                            os.remove(full)
+                        except Exception as _gz_exc:
+                            # Don't let compression failure break logging
+                            logging.getLogger(__name__).warning(
+                                f"Log compression failed for {full}: {_gz_exc}"
+                            )
+        except Exception:
+            pass
+
+
+_file_handler = _CompressedTimedRotatingFileHandler(
     "logs/bridge.log", when="midnight", interval=1, backupCount=30, encoding="utf-8"
 )
 _file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
@@ -521,6 +563,11 @@ class BridgeStore:
                 CREATE INDEX IF NOT EXISTS idx_commands_user_relay_status ON commands(user_id, relay_id, status);
                 CREATE INDEX IF NOT EXISTS idx_commands_user_script ON commands(user_id, script_name);
                 CREATE INDEX IF NOT EXISTS idx_commands_user_script_time ON commands(user_id, script_name, created_at);
+
+                -- FIX 6: Additional performance indexes for tables in first block
+                CREATE INDEX IF NOT EXISTS idx_commands_created ON commands(created_at);
+                CREATE INDEX IF NOT EXISTS idx_commands_status_created ON commands(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_relays_heartbeat ON relays(user_id, last_heartbeat);
                 """
             )
         self._migrate_schema_if_needed()
@@ -699,6 +746,12 @@ class BridgeStore:
                     stripe_subscription_id TEXT,
                     FOREIGN KEY (user_id) REFERENCES users(user_id)
                 );
+
+                -- FIX 6: Indexes for tables created in migrate block
+                CREATE INDEX IF NOT EXISTS idx_tg_signal_status ON telegram_signal_log(user_id, execution_status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_tg_signal_created ON telegram_signal_log(created_at);
+                CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_desktop_tokens(expires_at);
+                CREATE INDEX IF NOT EXISTS idx_signal_idem_created ON signal_idempotency(created_at);
                 """
             )
 
@@ -2283,6 +2336,184 @@ def _managed_heartbeat_worker():
 threading.Thread(target=_managed_heartbeat_worker, daemon=True, name="managed-heartbeat").start()
 
 
+# ── FIX 5: Relay Heartbeat Monitor ────────────────────────────────────────────
+
+def _relay_heartbeat_monitor():
+    """
+    FIX 5: Periodically mark relays offline when their heartbeat exceeds the timeout.
+    Runs every 60 seconds and logs a WARNING for any relay that just went offline.
+    """
+    _relay_last_state: dict = {}  # (user_id, relay_id) → was_online
+
+    while True:
+        time.sleep(60)
+        try:
+            cutoff = time.time() - DEFAULT_HEARTBEAT_TIMEOUT
+            with store.lock:
+                rows = store.conn.execute(
+                    """
+                    SELECT user_id, relay_id, state, last_heartbeat
+                    FROM relays
+                    WHERE last_heartbeat < ?
+                      AND state != ?
+                    """,
+                    (cutoff, RelayState.OFFLINE.value),
+                ).fetchall()
+
+            for row in rows:
+                uid = row["user_id"]
+                rid = row["relay_id"]
+                key = (uid, rid)
+                was_online = _relay_last_state.get(key, True)
+                if was_online:
+                    logger.warning(
+                        f"[HeartbeatMonitor] Relay {rid} for user {uid} went offline "
+                        f"(last heartbeat {time.time() - row['last_heartbeat']:.0f}s ago)"
+                    )
+                _relay_last_state[key] = False
+
+                with store.lock, store.conn:
+                    store.conn.execute(
+                        "UPDATE relays SET state = ? WHERE user_id = ? AND relay_id = ?",
+                        (RelayState.OFFLINE.value, uid, rid),
+                    )
+
+            # Update tracked state for relays that ARE online
+            with store.lock:
+                online_rows = store.conn.execute(
+                    "SELECT user_id, relay_id FROM relays WHERE state = ?",
+                    (RelayState.ONLINE.value,),
+                ).fetchall()
+            for row in online_rows:
+                _relay_last_state[(row["user_id"], row["relay_id"])] = True
+
+        except Exception as exc:
+            logger.warning(f"Relay heartbeat monitor error: {exc}")
+
+
+threading.Thread(target=_relay_heartbeat_monitor, daemon=True, name="relay-heartbeat-monitor").start()
+
+
+# ── FIX 3: OAuth Expired-State Cleanup ────────────────────────────────────────
+
+def _cleanup_expired_states():
+    """
+    FIX 3: Periodically clean up expired OAuth desktop tokens and in-memory states.
+    Runs every 5 minutes.
+    """
+    while True:
+        time.sleep(300)  # 5 minutes
+        try:
+            now = time.time()
+            # Clean DB tokens
+            with store.lock, store.conn:
+                store.conn.execute(
+                    "DELETE FROM oauth_desktop_tokens WHERE expires_at < ?", (now,)
+                )
+            # Clean in-memory pending states
+            with _pending_state_lock:
+                expired_keys = [
+                    k for k, v in PENDING_DESKTOP_STATES.items()
+                    if (v["expires_at"] if isinstance(v, dict) else v) < now
+                ]
+                for k in expired_keys:
+                    del PENDING_DESKTOP_STATES[k]
+            if expired_keys:
+                logger.info(f"Cleaned up {len(expired_keys)} expired OAuth desktop state(s)")
+        except Exception as exc:
+            logger.warning(f"OAuth state cleanup error: {exc}")
+
+
+threading.Thread(target=_cleanup_expired_states, daemon=True, name="oauth-state-cleanup").start()
+
+
+# ── FIX 14: Automated DB Backup ───────────────────────────────────────────────
+
+def _db_backup_thread():
+    """
+    FIX 14: Daily hot backup of bridge.db using SQLite's backup() API.
+    Keeps the last 7 backups.
+    """
+    while True:
+        time.sleep(86400)  # 24 hours
+        try:
+            db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+            backup_name = f"bridge.db.{datetime.now(timezone.utc).strftime('%Y%m%d')}.bak"
+            backup_path = os.path.join(db_dir, backup_name)
+            import sqlite3 as _sqlite3
+            with store.lock:
+                dest = _sqlite3.connect(backup_path)
+                try:
+                    store.conn.backup(dest)
+                finally:
+                    dest.close()
+            logger.info(f"[DBBackup] Hot backup written to {backup_path}")
+
+            # Keep only the last 7 backup files
+            bak_files = sorted(
+                [f for f in os.listdir(db_dir) if f.startswith("bridge.db.") and f.endswith(".bak")],
+                reverse=True,
+            )
+            for old_bak in bak_files[7:]:
+                try:
+                    os.remove(os.path.join(db_dir, old_bak))
+                    logger.info(f"[DBBackup] Removed old backup: {old_bak}")
+                except Exception as del_exc:
+                    logger.warning(f"[DBBackup] Could not remove {old_bak}: {del_exc}")
+        except Exception as exc:
+            logger.error(f"[DBBackup] Backup failed: {exc}")
+
+
+threading.Thread(target=_db_backup_thread, daemon=True, name="db-backup").start()
+
+
+# ── FIX 1: Global shutdown event ──────────────────────────────────────────────
+
+_shutdown_event = threading.Event()
+
+
+def _graceful_shutdown(signum, frame):
+    """
+    FIX 1: SIGTERM handler — cleanly shut down all background resources.
+    Gives threads 10 seconds to finish, then exits.
+    """
+    logger.info(f"[Shutdown] Received signal {signum} — initiating graceful shutdown")
+    _shutdown_event.set()
+
+    # Stop the Telegram bot
+    try:
+        telegram_manager.stop()
+        logger.info("[Shutdown] Telegram bot stopped")
+    except Exception as exc:
+        logger.warning(f"[Shutdown] Error stopping Telegram manager: {exc}")
+
+    # Shut down all MT5 sessions
+    try:
+        session_manager.shutdown_all(timeout=10)
+        logger.info("[Shutdown] All MT5 sessions stopped")
+    except Exception as exc:
+        logger.warning(f"[Shutdown] Error stopping MT5 sessions: {exc}")
+
+    # Close the DB connection cleanly
+    try:
+        with store.lock:
+            store.conn.close()
+        logger.info("[Shutdown] Database connection closed")
+    except Exception as exc:
+        logger.warning(f"[Shutdown] Error closing DB: {exc}")
+
+    logger.info("[Shutdown] Graceful shutdown complete — exiting")
+    sys.exit(0)
+
+
+# Register SIGTERM handler at module level (for service mode)
+try:
+    _signal.signal(_signal.SIGTERM, _graceful_shutdown)
+except (OSError, ValueError):
+    # SIGTERM can't be set in some contexts (e.g. Windows non-main thread) — ignore
+    pass
+
+
 def notify_user(user_id: str, message: str):
     """Enqueue a notification — returns immediately, delivery is async."""
     try:
@@ -2385,6 +2616,24 @@ def _log_request():
         f"user={request.headers.get('X-User-ID', '-')} "
         f"ip={request.headers.get('X-Forwarded-For', request.remote_addr or '-').split(',')[0].strip()}"
     )
+
+
+@app.after_request
+def _add_security_headers(response):
+    """Add security headers to all responses. FIX Phase 5."""
+    # Content Security Policy — tight for API endpoints, permissive for dashboard pages
+    if request.path.startswith("/admin") or request.path.startswith("/dashboard") or \
+            request.path in ("/login", "/register", "/terms", "/privacy"):
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Remove any accidental server fingerprinting
+    response.headers.remove("Server")
+    return response
 
 
 # ==================== Endpoints ====================
@@ -2514,7 +2763,10 @@ def login_page():
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
     if not _rate_check(f"login:{client_ip}", max_calls=5, window_secs=60):
         flash("Too many login attempts. Please wait a moment.", "error")
-        return render_template("login.html"), 429
+        from flask import make_response as _mkr2
+        _login_resp = _mkr2(render_template("login.html"), 429)
+        _login_resp.headers["Retry-After"] = "60"
+        return _login_resp
 
     user_id = (request.form.get("user_id") or "").strip()
     password = request.form.get("password") or ""
@@ -3127,6 +3379,8 @@ def admin_restart_session(user_id: str):
         flash(f"No managed account for {user_id}.", "error")
         return redirect(url_for("admin_users_page"))
     try:
+        # FIX 4: Reset the circuit breaker before restarting so the supervisor can retry
+        session_manager.reset_circuit(user_id)
         password = decrypt_secret(acct["mt5_password_enc"])
         session_manager.start_session(
             user_id,
@@ -3198,12 +3452,33 @@ def _process_signal_for_user(user_id: str, data: dict):
                 return jsonify({"error": "invalid JSON payload"}), 400
     data = data or {}
 
-    # Idempotency check
+    # FIX 2: Idempotency check
+    # Explicit key always takes precedence (user-provided)
     idem_key = (data.get("idempotency_key") or "").strip()
     if idem_key:
-        if store.check_idempotency(idem_key, user_id):
-            return jsonify({"status": "duplicate", "message": "signal already processed — idempotency key matched"}), 200
+        if store.check_idempotency(idem_key, user_id, ttl_secs=120):
+            return jsonify({"status": "duplicate", "code": "DUPLICATE_SIGNAL",
+                            "message": "signal already processed — idempotency key matched"}), 200
         store.record_idempotency(idem_key, user_id)
+    else:
+        # Content-hash dedup: prevent identical signals arriving within 10 seconds
+        _action_raw = (data.get("action") or "").strip().upper()
+        _symbol_raw = (data.get("symbol") or "").strip().upper()[:20]
+        _size_raw = data.get("size", data.get("lot_size", 0.1))
+        _sl_raw = data.get("sl", data.get("stop_loss"))
+        _tp_raw = data.get("tp", data.get("take_profit"))
+        _content_hash = hashlib.sha256(
+            json.dumps(
+                {"action": _action_raw, "symbol": _symbol_raw,
+                 "size": str(_size_raw), "sl": str(_sl_raw), "tp": str(_tp_raw)},
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()[:16]
+        _content_idem_key = f"hash:{_content_hash}"
+        if store.check_idempotency(_content_idem_key, user_id, ttl_secs=10):
+            return jsonify({"status": "duplicate", "code": "DUPLICATE_SIGNAL",
+                            "message": "identical signal received within 10 seconds"}), 200
+        store.record_idempotency(_content_idem_key, user_id)
 
     action = (data.get("action") or "").strip().upper()
     symbol = (data.get("symbol") or "").strip().upper()[:20]
@@ -3312,7 +3587,12 @@ def _process_signal_for_user(user_id: str, data: dict):
                 f"{limit_window}s. Execution paused."
             )
             notify_user(user_id, msg)
-            return jsonify({"error": "rate limit exceeded", "script": script_name}), 429
+            from flask import make_response as _mkr3
+            _rl_resp = _mkr3(
+                jsonify({"error": "rate limit exceeded", "script": script_name}), 429
+            )
+            _rl_resp.headers["Retry-After"] = "60"
+            return _rl_resp
 
     target_relay = None
     managed_mode = store.is_managed_enabled(user_id)
@@ -3365,7 +3645,14 @@ def _process_signal_for_user(user_id: str, data: dict):
         if status == CommandStatus.EXECUTED:
             notify_user(user_id, f"🟢 {action} {size} {symbol} executed.")
         else:
-            notify_user(user_id, f"🔴 Trade failed: {result.get('error_message') or result.get('error') or 'Unknown error'}")
+            # FIX 11: Use user-friendly error message with actionable hint
+            _retcode = result.get("retcode")
+            if _retcode:
+                _short_msg, _hint = _mt5_user_friendly_error(_retcode)
+                _fail_msg = f"🔴 Trade failed: {_short_msg}. {_hint}"
+            else:
+                _fail_msg = f"🔴 Trade failed: {result.get('error_message') or result.get('error') or 'Unknown error'}"
+            notify_user(user_id, _fail_msg)
             # Circuit breaker: check consecutive losses
             if action in ("BUY", "SELL"):
                 losses = store.count_consecutive_losses(user_id)
@@ -3418,7 +3705,10 @@ def receive_signal():
     # Section 9: rate limiting — 10 signals per minute per API key
     rl_key = f"signal:{user_id}"
     if not _rate_check(rl_key, max_calls=10, window_secs=60):
-        return jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429
+        from flask import make_response
+        resp = make_response(jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429)
+        resp.headers["Retry-After"] = "60"
+        return resp
 
     return _process_signal_for_user(user_id, data)
 
@@ -3435,7 +3725,10 @@ def receive_signal_by_token(webhook_token):
 
     # Rate-limit per resolved user_id (same budget as the API-key endpoint)
     if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
-        return jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429
+        from flask import make_response as _mkr
+        _resp = _mkr(jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429)
+        _resp.headers["Retry-After"] = "60"
+        return _resp
 
     data = request.get_json(silent=True)
     return _process_signal_for_user(user_id, data)
@@ -3575,7 +3868,8 @@ def managed_setup():
     try:
         store.upsert_managed_account(user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path or ""))
     except RuntimeError as exc:
-        return jsonify({"error": str(exc)}), 500
+        logger.error(f"managed_setup upsert error for {user_id}: {exc}")
+        return jsonify({"error": "failed to save managed account configuration"}), 500
 
     # Start (or restart) the persistent MT5 session immediately — warm before first trade
     session_manager.start_session(
@@ -3619,7 +3913,8 @@ def managed_setup_login():
     try:
         store.upsert_managed_account(user_id, mt5_login_int, str(mt5_password), str(mt5_server), str(mt5_path or ""))
     except RuntimeError as exc:
-        return jsonify({"error": str(exc)}), 500
+        logger.error(f"managed_setup_login upsert error for {user_id}: {exc}")
+        return jsonify({"error": "failed to save managed account configuration"}), 500
 
     # Start (or restart) the persistent MT5 session immediately — warm before first trade
     session_manager.start_session(
@@ -3768,7 +4063,13 @@ def relay_result():
     if status == CommandStatus.EXECUTED:
         notify_user(user_id, f"🟢 Trade executed (relay): {result.get('order_id', '')}")
     elif status == CommandStatus.FAILED:
-        notify_user(user_id, f"🔴 Trade failed (relay): {result.get('error_message') or result.get('error') or 'Unknown error'}")
+        # FIX 11: User-friendly error with hint
+        _r_retcode = result.get("retcode")
+        if _r_retcode:
+            _r_short, _r_hint = _mt5_user_friendly_error(_r_retcode)
+            notify_user(user_id, f"🔴 Trade failed (relay): {_r_short}. {_r_hint}")
+        else:
+            notify_user(user_id, f"🔴 Trade failed (relay): {result.get('error_message') or result.get('error') or 'Unknown error'}")
 
     logger.info(f"Relay result: command={cmd_id}, status={status.value}")
     return jsonify({
@@ -4001,6 +4302,30 @@ def telegram_channels_api():
     else:
         chat_title = data.get("chat_title", "")
 
+    # FIX 8: Validate allowed_symbols
+    raw_symbols = data.get("allowed_symbols")
+    validated_symbols_str = None
+    if raw_symbols is not None:
+        if isinstance(raw_symbols, str):
+            try:
+                sym_list = json.loads(raw_symbols)
+            except (json.JSONDecodeError, ValueError):
+                sym_list = [s.strip() for s in raw_symbols.split(",") if s.strip()]
+        elif isinstance(raw_symbols, list):
+            sym_list = raw_symbols
+        else:
+            sym_list = []
+        if len(sym_list) > 50:
+            return jsonify({"error": "allowed_symbols: max 50 symbols"}), 400
+        _sym_re = _re_top.compile(r'^[A-Z0-9]{2,10}$')
+        cleaned = []
+        for sym in sym_list:
+            s = str(sym).strip().upper()
+            if not _sym_re.match(s):
+                return jsonify({"error": f"allowed_symbols: invalid symbol '{sym}' (must be 2-10 alphanumeric chars)"}), 400
+            cleaned.append(s)
+        validated_symbols_str = json.dumps(cleaned) if cleaned else None
+
     channel_id = str(uuid.uuid4())
     try:
         store.add_telegram_channel(
@@ -4010,7 +4335,7 @@ def telegram_channels_api():
             chat_title=chat_title,
             risk_pct=float(data.get("risk_pct", 1.0)),
             max_trades_per_day=int(data.get("max_trades_per_day", 10)),
-            allowed_symbols=data.get("allowed_symbols"),  # JSON string or None
+            allowed_symbols=validated_symbols_str,
             script_name=data.get("script_name", "Telegram"),
         )
     except Exception as exc:
@@ -4035,6 +4360,29 @@ def telegram_channel_manage_api(channel_id):
 
     # PUT — update config
     data = request.get_json(silent=True) or {}
+    # FIX 8: Validate allowed_symbols on update too
+    if "allowed_symbols" in data and data["allowed_symbols"] is not None:
+        raw_syms = data["allowed_symbols"]
+        if isinstance(raw_syms, str):
+            try:
+                sym_list2 = json.loads(raw_syms)
+            except (json.JSONDecodeError, ValueError):
+                sym_list2 = [s.strip() for s in raw_syms.split(",") if s.strip()]
+        elif isinstance(raw_syms, list):
+            sym_list2 = raw_syms
+        else:
+            sym_list2 = []
+        if len(sym_list2) > 50:
+            return jsonify({"error": "allowed_symbols: max 50 symbols"}), 400
+        _sym_re2 = _re_top.compile(r'^[A-Z0-9]{2,10}$')
+        cleaned2 = []
+        for sym2 in sym_list2:
+            s2 = str(sym2).strip().upper()
+            if not _sym_re2.match(s2):
+                return jsonify({"error": f"allowed_symbols: invalid symbol '{sym2}'"}), 400
+            cleaned2.append(s2)
+        data = dict(data)
+        data["allowed_symbols"] = json.dumps(cleaned2) if cleaned2 else None
     store.update_telegram_channel(channel_id, data)
     return jsonify(store.get_telegram_channel(channel_id))
 
@@ -4130,12 +4478,10 @@ def dashboard_summary_login():
     webhook_token = store.get_or_create_webhook_token(user_id)
     root_url = get_public_base_url()
 
-    # Retrieve stored api_key for this user
-    with store.lock:
-        row = store.conn.execute(
-            "SELECT api_key FROM users WHERE user_id = ?", (user_id,)
-        ).fetchone()
-    stored_api_key = row["api_key"] if row else ""
+    # Generate (or regenerate) an API key for this session
+    # NOTE: api_key is not stored in plaintext; we regenerate on each login.
+    # The desktop app caches the returned api_key in the OS keyring.
+    stored_api_key = store.regenerate_api_key(user_id)
 
     # Managed connection / broker status
     managed_connected = False
@@ -4368,7 +4714,8 @@ def mt5_account_info():
         result = session_manager.execute(user_id, {"action": "ACCOUNT_INFO"})
         return jsonify(result)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        logger.error(f"mt5_account_info error for {user_id}: {exc}")
+        return jsonify({"error": "failed to retrieve account info"}), 500
 
 
 # ==================== Terms & Privacy (Section 9) ====================
@@ -4407,6 +4754,12 @@ if __name__ == "__main__":
 
     port = args.port
     host = args.host
+
+    # FIX 1: Also register SIGINT for clean Ctrl-C in dev
+    try:
+        _signal.signal(_signal.SIGINT, _graceful_shutdown)
+    except (OSError, ValueError):
+        pass
 
     # Re-validate at startup
     validate_startup_config()

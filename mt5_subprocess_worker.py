@@ -525,13 +525,28 @@ def main():
 
         def _keepalive():
             while not _stop_keepalive.wait(KEEPALIVE_INTERVAL):
+                # FIX 10: Wrap account_info() call with an 8-second timeout
+                # so a hung MT5 connection doesn't freeze the keepalive thread.
+                _ka_result = [None]
+
+                def _do_check():
+                    try:
+                        _ka_result[0] = mt5.account_info()
+                    except Exception:
+                        pass
+
+                _ka_thread = threading.Thread(target=_do_check, daemon=True)
+                _ka_thread.start()
+                _ka_thread.join(timeout=8)
+                info = _ka_result[0]  # None if timed out or failed
+
                 try:
-                    info = mt5.account_info()
                     if info and info.login != 0:
                         _keepalive_fail_count[0] = 0  # reset on success
                     else:
                         _keepalive_fail_count[0] += 1
-                        _log(f"[{user_id}] Keepalive: account_info None/0 (fail {_keepalive_fail_count[0]})")
+                        timed_out_note = " (timed out)" if _ka_thread.is_alive() else ""
+                        _log(f"[{user_id}] Keepalive: account_info None/0{timed_out_note} (fail {_keepalive_fail_count[0]})")
                         if _keepalive_fail_count[0] >= 3:
                             _log(f"[{user_id}] Keepalive: 3 consecutive failures — signalling exit for supervisor restart")
                             _keepalive_lost.set()
