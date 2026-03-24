@@ -2656,11 +2656,10 @@ def health():
     managed_sessions = len(session_manager._sessions)
     connected_sessions = sum(1 for s in session_manager._sessions.values() if s.connected)
 
-    # Telegram check
+    # Telegram check — signal bot running
     telegram_ok = False
     try:
-        from telegram_notifier import TelegramNotifier as _TN
-        telegram_ok = True
+        telegram_ok = bool(telegram_manager and telegram_manager.is_running)
     except Exception:
         pass
 
