@@ -832,8 +832,21 @@ class TestLiveMT5Execution:
 
     @pytest.mark.live_mt5
     def test_1_restart_managed_session(self):
-        """Authenticate and start/restart the managed MT5 session."""
+        """Authenticate and verify/configure the managed MT5 session.
+
+        Only calls /managed/setup when MT5_LOGIN/PASSWORD/SERVER env vars are
+        explicitly set — this prevents overwriting production credentials with
+        test defaults when the variables aren't configured.
+        """
         import requests
+
+        # Skip setup if the test MT5 env vars aren't explicitly configured.
+        # This avoids overwriting production credentials with placeholder defaults.
+        mt5_creds_configured = (
+            os.environ.get("MT5_LOGIN")
+            and os.environ.get("MT5_PASSWORD")
+            and os.environ.get("MT5_SERVER")
+        )
 
         # Step 1: authenticate to get api_key
         login_resp = requests.post(
@@ -847,7 +860,20 @@ class TestLiveMT5Execution:
         TestLiveMT5Execution._api_key = data["api_key"]
         os.environ["TEST_API_KEY"] = data["api_key"]
 
-        # Step 2: set up managed MT5
+        if not mt5_creds_configured:
+            # Credentials not explicitly set — skip setup to avoid overwriting
+            # production credentials; just verify the session is configured.
+            status_resp = requests.get(
+                f"{self._live_url}/managed/status",
+                headers=self._headers(),
+                timeout=10,
+            )
+            assert status_resp.status_code == 200
+            assert status_resp.json().get("configured"), \
+                "Managed MT5 not configured — set MT5_LOGIN/PASSWORD/SERVER env vars"
+            return
+
+        # Step 2: set up managed MT5 (credentials explicitly provided)
         setup_resp = requests.post(
             f"{self._live_url}/managed/setup",
             json={

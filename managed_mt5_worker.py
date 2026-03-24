@@ -422,13 +422,25 @@ class MT5UserSession:
                 daemon=True,
             ).start()
 
-            # Wait up to 120 s for MT5 to start and authenticate
-            msg = self._read_json_timeout(120)
-            if msg.get("status") == "ready":
-                logger.info(f"[{self.user_id}] MT5 subprocess ready: {msg.get('account', '?')}")
-                return True
+            # Wait up to 120 s for MT5 to authenticate.
+            # The subprocess may send intermediate "connecting" messages while
+            # the terminal is starting — keep reading until "ready" or timeout.
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                remaining = max(1.0, deadline - time.time())
+                msg = self._read_json_timeout(remaining)
+                if msg.get("_timed_out"):
+                    break
+                if msg.get("status") == "ready":
+                    logger.info(f"[{self.user_id}] MT5 subprocess ready: {msg.get('account', '?')}")
+                    return True
+                if msg.get("status") == "connecting":
+                    logger.debug(f"[{self.user_id}] MT5 connecting: {msg.get('error', '')}")
+                    continue  # keep waiting
+                # Any other message (error, unexpected) — give up
+                break
 
-            logger.error(f"[{self.user_id}] Subprocess did not become ready: {msg}")
+            logger.error(f"[{self.user_id}] Subprocess did not become ready within 120s: {msg}")
             return False
 
         except Exception as e:
@@ -601,9 +613,26 @@ class SessionManager:
 
     def start_session(self, user_id: str, login: int, password: str,
                       server: str, path: Optional[str] = None):
-        """Create (or replace) the persistent MT5 session for a user."""
+        """Create (or replace) the persistent MT5 session for a user.
+
+        If the session already exists, is connected, and the credentials are
+        unchanged, this is a no-op — avoids unnecessary restarts that can
+        trigger broker-side rate-limiting on successive login attempts.
+        """
         with self._lock:
             existing = self._sessions.get(user_id)
+            if existing and existing.connected:
+                same_creds = (
+                    existing._login == int(login)
+                    and existing._password == str(password)
+                    and existing._server == str(server)
+                )
+                if same_creds:
+                    logger.info(
+                        f"[{user_id}] start_session: already connected with same "
+                        "credentials — skipping restart"
+                    )
+                    return
             if existing:
                 existing.shutdown()
             session = MT5UserSession(user_id, login, password, server, path)
