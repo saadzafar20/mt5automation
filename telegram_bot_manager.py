@@ -385,6 +385,14 @@ class TelegramBotRunner:
             largest = max(photo, key=lambda p: p.get("file_size", 0))
             file_id = largest.get("file_id", "")
             caption = message.get("caption", "")
+            # S-14: Skip download if Telegram metadata already shows the file is >5MB
+            _file_size = largest.get("file_size", 0)
+            _IMAGE_SIZE_LIMIT = 5 * 1024 * 1024
+            if _file_size and _file_size > _IMAGE_SIZE_LIMIT:
+                logger.warning(
+                    f"Skipping photo download for chat {chat_id}: file_size={_file_size} > {_IMAGE_SIZE_LIMIT}"
+                )
+                return
             if file_id:
                 try:
                     self._photo_callback(chat_id, file_id, caption, message_id)
@@ -727,6 +735,27 @@ class TelegramBotManager:
             }
 
             if parsed.management_type == "close" and self._close_callback:
+                # A-03: Log at WARNING so management commands are highly visible in server logs.
+                # Send a pre-notification to the user's private chat BEFORE executing so they
+                # have a window to manually intervene if the channel was compromised.
+                logger.warning(
+                    f"[MGMT] Channel close command received: channel={channel_id}, "
+                    f"user={user_id}, message_id={message_id}, text={raw_text[:100]!r}"
+                )
+                private_chat_id = sub.get("private_chat_id") or sub.get("chat_id", "")
+                if private_chat_id:
+                    try:
+                        if self._api:
+                            self._api.send_message(
+                                chat_id=private_chat_id,
+                                text=(
+                                    f"⚠️ CLOSE command received from Telegram channel.\n"
+                                    f"Closing all positions for channel {channel_id}.\n"
+                                    f"Message: {raw_text[:200]}"
+                                ),
+                            )
+                    except Exception:
+                        pass
                 try:
                     result = self._close_callback(user_id, channel_id)
                     closed_count = result.get("closed_count", 0)
@@ -734,9 +763,9 @@ class TelegramBotManager:
                     log_entry["execution_detail"] = (
                         f"Channel-scoped close: {closed_count} position(s) closed"
                     )
-                    logger.info(
-                        f"Channel-scoped close for user {user_id}, "
-                        f"channel {channel_id}: {closed_count} positions"
+                    logger.warning(
+                        f"[MGMT] Channel-scoped close EXECUTED for user {user_id}, "
+                        f"channel {channel_id}: {closed_count} positions closed"
                     )
                     self._reply_to_chat(
                         chat_id=sub.get("chat_id", ""),

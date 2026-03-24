@@ -47,11 +47,15 @@ export function SignInCard() {
         if (result) {
           setAuth({ userId: result.user_id, apiKey: result.api_key, oauthProvider: provider });
           if (remember) {
+            // F-01: Store only non-sensitive data in last_user.json.
+            // api_key goes to OS keychain (Keychain / Windows Credential Manager).
             bridge.saveLastUser(JSON.stringify({
               user_id: result.user_id,
-              api_key: result.api_key,
               oauth_provider: provider,
             }));
+            if (result.api_key) {
+              bridge.setKeyringPassword('platalgo-relay', result.user_id + ':api_key', result.api_key);
+            }
           }
           toast.success(`Signed in with ${provider}`);
           return;
@@ -96,13 +100,18 @@ export function SignInCard() {
           relayId: data.relay_id || null,
         });
         if (remember) {
-          bridge.saveLastUser(JSON.stringify({
-            user_id: userIdInput,
-            api_key: data.api_key || '',
-            relay_token: data.token || '',
-            relay_id: data.relay_id || '',
-          }));
+          // F-01: Only user_id in last_user.json. Sensitive tokens go to OS keychain.
+          bridge.saveLastUser(JSON.stringify({ user_id: userIdInput }));
           bridge.setKeyringPassword('platalgo-relay', userIdInput, password);
+          if (data.api_key) {
+            bridge.setKeyringPassword('platalgo-relay', userIdInput + ':api_key', data.api_key);
+          }
+          if (data.token) {
+            bridge.setKeyringPassword('platalgo-relay', userIdInput + ':relay_token', data.token);
+          }
+          if (data.relay_id) {
+            bridge.setKeyringPassword('platalgo-relay', userIdInput + ':relay_id', data.relay_id);
+          }
         }
         toast.success(isSignUp ? 'Account created successfully' : 'Signed in successfully');
       } else {
@@ -116,11 +125,18 @@ export function SignInCard() {
   };
 
   const confirmLogout = () => {
+    const userId = auth.userId;
     clearAuth();
     setVpsActive(false);
     setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
     setRelayStatus('Idle');
     bridge.saveLastUser(JSON.stringify({}));
+    // F-01: Also clear keychain entries on logout
+    if (userId) {
+      bridge.setKeyringPassword('platalgo-relay', userId + ':api_key', '');
+      bridge.setKeyringPassword('platalgo-relay', userId + ':relay_token', '');
+      bridge.setKeyringPassword('platalgo-relay', userId + ':relay_id', '');
+    }
     setShowLogoutDialog(false);
     toast.success('Signed out');
   };

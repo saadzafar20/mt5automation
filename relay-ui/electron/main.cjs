@@ -119,7 +119,7 @@ app.whenReady().then(() => {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self'; " +
-          "script-src 'self' 'unsafe-inline'; " +
+          "script-src 'self'; " +
           "style-src 'self' 'unsafe-inline'; " +
           "img-src 'self' data: https:; " +
           "connect-src 'self' https://app.platalgo.com https://api.telegram.org wss: ws:; " +
@@ -214,7 +214,21 @@ ipcMain.handle('check-for-updates', () => {
 });
 
 ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall();
+  // F-03: Require explicit user confirmation before restarting, even when called
+  // programmatically from the renderer, to prevent forced-restart abuse.
+  dialog
+    .showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Restart to Update',
+      message: 'Restart PlatAlgo Relay to apply the downloaded update?',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+    })
+    .then(({ response }) => {
+      if (response === 0) {
+        setImmediate(() => autoUpdater.quitAndInstall(false, true));
+      }
+    });
 });
 
 ipcMain.handle('show-notification', (_event, { title, body }) => {

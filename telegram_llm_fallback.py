@@ -197,9 +197,17 @@ class LLMFallback:
 
         return self._json_to_result(result)
 
+    _IMAGE_SIZE_LIMIT = 5 * 1024 * 1024  # S-14: 5MB max to prevent OOM from large Telegram images
+
     def parse_signal_image(self, image_bytes: bytes, mime_type: str = "image/png",
                            caption: str = "") -> LLMParseResult:
         """Parse a chart screenshot using GPT-4o-mini vision. Synchronous."""
+        # S-14: Reject oversized images before base64 encoding (20MB image → ~27MB base64)
+        if len(image_bytes) > self._IMAGE_SIZE_LIMIT:
+            logger.warning(
+                f"Image too large for LLM analysis ({len(image_bytes)} bytes > {self._IMAGE_SIZE_LIMIT}), skipping"
+            )
+            return LLMParseResult(error="image too large for LLM analysis (>5MB)")
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
         content_parts = [

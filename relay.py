@@ -60,7 +60,7 @@ class RelayClient:
                 self.poll_timeout = data.get("poll_timeout", 25)
                 self.relay_id = data.get("relay_id", self.relay_id)
                 self.relay_type = relay_type
-                logger.info(f"Relay authenticated: {self.relay_id}, token={self.token[:8]}...")
+                logger.info(f"Relay authenticated: {self.relay_id}")
                 return True
             logger.error(f"Relay login failed: {resp.status_code} {resp.text}")
             return False
@@ -84,7 +84,7 @@ class RelayClient:
                 self.heartbeat_interval = data.get("heartbeat_interval", 10)
                 self.poll_timeout = data.get("poll_timeout", 25)
                 self.relay_type = relay_type
-                logger.info(f"Relay registered: {self.relay_id}, token={self.token[:8]}...")
+                logger.info(f"Relay registered: {self.relay_id}")
                 return True
             else:
                 logger.error(f"Registration failed: {resp.status_code} {resp.text}")
