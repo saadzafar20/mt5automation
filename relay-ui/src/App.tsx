@@ -17,10 +17,12 @@ export default function App() {
       if (!raw) return;
       try {
         const data = JSON.parse(raw) as Record<string, string>;
-        if (data.user_id && data.api_key) {
+        if (data.user_id) {
           setAuth({
             userId: data.user_id,
-            apiKey: data.api_key,
+            apiKey: data.api_key || null,
+            relayToken: data.relay_token || null,
+            relayId: data.relay_id || null,
             oauthProvider: (data.oauth_provider as 'google' | 'facebook') || null,
           });
         }

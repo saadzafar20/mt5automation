@@ -21,7 +21,6 @@ export function SignInCard() {
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
 
   const setAuth = useAppStore((s) => s.setAuth);
@@ -76,12 +75,12 @@ export function SignInCard() {
     try {
       const endpoint = isSignUp ? `${BRIDGE_URL}/account/register` : `${BRIDGE_URL}/relay/login`;
       const body = isSignUp
-        ? { user_id: email, password, invite_code: inviteCode.trim() }
-        : { user_id: email, password };
+        ? { user_id: userIdInput, password, invite_code: inviteCode.trim() }
+        : { user_id: userIdInput, password };
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userIdInput, password }),
+        body: JSON.stringify(body),
       });
       let data: Record<string, string> = {};
       try { data = await res.json(); } catch { /* ignore parse error */ }
@@ -90,9 +89,19 @@ export function SignInCard() {
         return;
       }
       if (data.status === 'ok' || data.token) {
-        setAuth({ userId: userIdInput, apiKey: data.api_key || null });
+        setAuth({
+          userId: userIdInput,
+          apiKey: data.api_key || null,
+          relayToken: data.token || null,
+          relayId: data.relay_id || null,
+        });
         if (remember) {
-          bridge.saveLastUser(JSON.stringify({ user_id: userIdInput, api_key: data.api_key || '' }));
+          bridge.saveLastUser(JSON.stringify({
+            user_id: userIdInput,
+            api_key: data.api_key || '',
+            relay_token: data.token || '',
+            relay_id: data.relay_id || '',
+          }));
           bridge.setKeyringPassword('platalgo-relay', userIdInput, password);
         }
         toast.success(isSignUp ? 'Account created successfully' : 'Signed in successfully');

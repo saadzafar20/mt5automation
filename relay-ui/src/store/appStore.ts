@@ -7,6 +7,8 @@ export type DotStatus = 'online' | 'offline' | 'unknown';
 interface AuthState {
   userId: string | null;
   apiKey: string | null;
+  relayToken: string | null;
+  relayId: string | null;
   oauthProvider: string | null;
   avatar: string | null;
 }
@@ -79,9 +81,9 @@ export const useAppStore = create<AppState>((set) => ({
     set({ theme: t });
   },
 
-  auth: { userId: null, apiKey: null, oauthProvider: null, avatar: null },
+  auth: { userId: null, apiKey: null, relayToken: null, relayId: null, oauthProvider: null, avatar: null },
   setAuth: (auth) => set((s) => ({ auth: { ...s.auth, ...auth } })),
-  clearAuth: () => set({ auth: { userId: null, apiKey: null, oauthProvider: null, avatar: null } }),
+  clearAuth: () => set({ auth: { userId: null, apiKey: null, relayToken: null, relayId: null, oauthProvider: null, avatar: null } }),
 
   relayStatus: 'Idle',
   relayDots: { bridge: 'offline', mt5: 'offline', broker: 'offline' },

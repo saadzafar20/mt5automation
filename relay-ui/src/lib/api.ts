@@ -29,11 +29,24 @@ export async function consumeOAuth(state: string) {
   return res.json() as Promise<{ user_id: string; api_key: string }>;
 }
 
-export async function getDashboardSummary(userId: string, apiKey: string) {
+export async function getDashboardSummary(
+  userId: string,
+  apiKey: string,
+  relayToken?: string,
+  relayId?: string,
+) {
+  // C2: Support relay_token auth as fallback when api_key is not yet available
+  const body: Record<string, string> = { user_id: userId };
+  if (apiKey) {
+    body.api_key = apiKey;
+  } else if (relayToken && relayId) {
+    body.relay_token = relayToken;
+    body.relay_id = relayId;
+  }
   const res = await fetch(`${BRIDGE_URL}/dashboard/summary/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, api_key: apiKey }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

@@ -295,6 +295,8 @@ class MT5Executor:
 
     def __init__(self, mt5_login=None, mt5_password=None, mt5_server=None, mt5_path=None):
         self.mt5_connected = False
+        # P4: Cache executor instead of creating a new one per _init_mt5 call
+        self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self._init_mt5(mt5_login, mt5_password, mt5_server, mt5_path)
 
     def _init_mt5(self, login, password, server, path):
@@ -319,13 +321,12 @@ class MT5Executor:
                 logger.info("No MT5 credentials provided — attaching to current MT5 session")
                 return mt5.initialize(path=path) if path else mt5.initialize()
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _ex:
-                _fut = _ex.submit(_do_mt5_init)
-                try:
-                    init_ok = _fut.result(timeout=15)
-                except concurrent.futures.TimeoutError:
-                    logger.warning("MT5 initialize() timed out after 15s — running in mock mode")
-                    init_ok = False
+            _fut = self._thread_pool.submit(_do_mt5_init)
+            try:
+                init_ok = _fut.result(timeout=15)
+            except concurrent.futures.TimeoutError:
+                logger.warning("MT5 initialize() timed out after 15s — relay running disconnected")
+                init_ok = False
 
             if not init_ok:
                 logger.warning(f"MT5 initialization failed: {mt5.last_error()}")
@@ -473,8 +474,22 @@ class MT5Executor:
                 if tp_price > 0:
                     request["tp"] = tp_price
             elif action.startswith("CLOSE"):
-                # Close all or specific position
-                positions = mt5.positions_get(symbol=symbol if not action.startswith("CLOSE_ALL") else None)
+                # S2/M4: Filter by magic number so CLOSE_ALL only affects PlatAlgo positions,
+                # not trades opened by other strategies or tools on the same MT5 account.
+                magic = command.get("magic")
+                if action.startswith("CLOSE_ALL"):
+                    all_positions = mt5.positions_get() or []
+                    if magic:
+                        positions = [p for p in all_positions if p.magic == int(magic)]
+                        if not positions:
+                            # Fall back to all positions only if no magic-filtered ones found
+                            logger.info(f"CLOSE_ALL: no positions with magic={magic}, closing all")
+                            positions = all_positions
+                    else:
+                        positions = all_positions
+                else:
+                    positions = mt5.positions_get(symbol=symbol) or []
+                positions = tuple(positions)
                 if not positions:
                     return {"status": "failed", "error": "no open positions"}
                 

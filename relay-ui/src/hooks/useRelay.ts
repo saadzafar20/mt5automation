@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
-import { BRIDGE_URL } from '../lib/constants';
+import { getDashboardSummary } from '../lib/api';
 
 const POLL_FAST_MS = 3000;   // while VPS active but MT5 not yet online
 const POLL_SLOW_MS = 10000;  // normal cadence
@@ -17,10 +17,10 @@ export function useRelayPolling() {
       if (isPolling.current) return;
       isPolling.current = true;
 
-      const { auth, vpsActive, setRelayDots, setRelayStatus, setVpsActive, setDashboardData } =
+      const { auth, vpsActive, setRelayDots, setRelayStatus, setVpsActive, setDashboardData, setAuth } =
         useAppStore.getState();
 
-      if (!auth.userId || !auth.apiKey) {
+      if (!auth.userId || (!auth.apiKey && !auth.relayToken)) {
         setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
         setRelayStatus('Idle');
         isPolling.current = false;
@@ -29,24 +29,20 @@ export function useRelayPolling() {
       }
 
       try {
-        const res = await fetch(`${BRIDGE_URL}/dashboard/summary/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: auth.userId, api_key: auth.apiKey }),
-        });
-
-        if (!res.ok) {
-          setRelayDots({ bridge: 'offline', mt5: 'offline', broker: 'offline' });
-          setRelayStatus('Idle');
-          isPolling.current = false;
-          scheduleNext(POLL_SLOW_MS);
-          return;
-        }
-
-        const data = await res.json();
+        const data = await getDashboardSummary(
+          auth.userId,
+          auth.apiKey || '',
+          auth.relayToken || undefined,
+          auth.relayId || undefined,
+        );
         const dashboard = data.dashboard || {};
         const relays = dashboard.relays || {};
         const relayIds = Object.keys(relays);
+
+        // Bootstrap api_key into auth state if we only had a relay_token on login
+        if (data.api_key && !auth.apiKey) {
+          setAuth({ apiKey: data.api_key });
+        }
 
         setDashboardData({
           webhookUrl: data.webhook_url || '',

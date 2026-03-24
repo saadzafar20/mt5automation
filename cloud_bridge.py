@@ -159,6 +159,13 @@ PUBLIC_BASE_URL = os.getenv("BRIDGE_PUBLIC_URL", "").rstrip("/")
 DESKTOP_OAUTH_STATE_TTL = max(180, min(int(os.getenv("DESKTOP_OAUTH_STATE_TTL", "600")), 900))
 LLM_PATTERN_MIN_CONFIDENCE = float(os.getenv("LLM_PATTERN_MIN_CONFIDENCE", "0.9"))
 LLM_PATTERN_AUTO_APPROVE = os.getenv("LLM_PATTERN_AUTO_APPROVE", "false").lower() == "true"
+# Content-hash dedup window: signals with identical content within this window are dropped
+CONTENT_DEDUP_SECS = int(os.getenv("CONTENT_DEDUP_SECS", "30"))
+# Max relays per user (prevent relay table flooding from repeat logins)
+MAX_RELAYS_PER_USER = int(os.getenv("MAX_RELAYS_PER_USER", "20"))
+# Global trading halt flag — set True to block all signal processing
+_TRADING_HALTED = False
+_trading_halt_lock = threading.Lock()
 
 app.secret_key = SESSION_SECRET
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -224,6 +231,14 @@ def validate_startup_config():
 
     if not BRIDGE_CREDS_KEY:
         errors.append("BRIDGE_CREDS_KEY must be set — MT5 credentials cannot be stored securely without it")
+
+    # Warn if BRIDGE_ADMIN_PASSWORD is set but has no effect (only BRIDGE_ADMIN_PASSWORD_HASH works)
+    if os.getenv("BRIDGE_ADMIN_PASSWORD") and not os.getenv("BRIDGE_ADMIN_PASSWORD_HASH"):
+        warnings.append(
+            "BRIDGE_ADMIN_PASSWORD is set but has no effect — generate a bcrypt hash and set "
+            "BRIDGE_ADMIN_PASSWORD_HASH instead: python -c \"from werkzeug.security import "
+            "generate_password_hash; print(generate_password_hash('yourpassword'))\""
+        )
 
     if not PUBLIC_BASE_URL:
         warnings.append("BRIDGE_PUBLIC_URL not set - webhook URLs will use request host")
@@ -586,6 +601,11 @@ class BridgeStore:
             with self.lock, self.conn:
                 self.conn.execute("ALTER TABLE users ADD COLUMN webhook_token TEXT")
 
+        # C2: store encrypted plaintext api_key so it can be returned without rotating
+        if not self._has_column("users", "api_key_enc"):
+            with self.lock, self.conn:
+                self.conn.execute("ALTER TABLE users ADD COLUMN api_key_enc TEXT")
+
         if not self._has_column("commands", "script_name"):
             with self.lock, self.conn:
                 self.conn.execute("ALTER TABLE commands ADD COLUMN script_name TEXT NOT NULL DEFAULT 'Uncategorized'")
@@ -871,15 +891,16 @@ class BridgeStore:
         api_key = secrets.token_urlsafe(24)
         webhook_token = secrets.token_urlsafe(24)
         api_key_hash = hash_secret(user_id, api_key)
+        api_key_enc = encrypt_secret(api_key)
         password_hash = generate_password_hash(password)
         now = time.time()
         with self.lock, self.conn:
             self.conn.execute(
                 """
-                INSERT INTO users (user_id, api_key_hash, password_hash, webhook_token, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO users (user_id, api_key_hash, api_key_enc, password_hash, webhook_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, api_key_hash, password_hash, webhook_token, now),
+                (user_id, api_key_hash, api_key_enc, password_hash, webhook_token, now),
             )
         self.ensure_user_settings(user_id)
         magic = self._generate_unique_magic_number()
@@ -896,12 +917,26 @@ class BridgeStore:
         """Generate a new API key for an existing user."""
         api_key = secrets.token_urlsafe(24)
         api_key_hash = hash_secret(user_id, api_key)
+        api_key_enc = encrypt_secret(api_key)
         with self.lock, self.conn:
             self.conn.execute(
-                "UPDATE users SET api_key_hash = ? WHERE user_id = ?",
-                (api_key_hash, user_id),
+                "UPDATE users SET api_key_hash = ?, api_key_enc = ? WHERE user_id = ?",
+                (api_key_hash, api_key_enc, user_id),
             )
         return api_key
+
+    def get_current_api_key(self, user_id: str) -> str | None:
+        """Return the current plaintext API key (from encrypted store). None if unavailable."""
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT api_key_enc FROM users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        if not row or not row["api_key_enc"]:
+            return None
+        try:
+            return decrypt_secret(row["api_key_enc"])
+        except Exception:
+            return None
 
     def ensure_user_settings(self, user_id: str):
         with self.lock, self.conn:
@@ -1385,6 +1420,22 @@ class BridgeStore:
         token_hash = hash_secret(user_id, token)
         now = time.time()
         with self.lock, self.conn:
+            # S3: cap relays per user to prevent table flooding from repeat logins
+            existing = self.conn.execute(
+                "SELECT COUNT(*) FROM relays WHERE user_id = ?", (user_id,)
+            ).fetchone()[0]
+            if existing >= MAX_RELAYS_PER_USER:
+                # Evict the oldest stale relay (not the one being registered)
+                self.conn.execute(
+                    """
+                    DELETE FROM relays WHERE user_id = ? AND relay_id != ?
+                      AND relay_id IN (
+                        SELECT relay_id FROM relays WHERE user_id = ?
+                        ORDER BY last_heartbeat ASC LIMIT 1
+                      )
+                    """,
+                    (user_id, relay_id, user_id),
+                )
             self.conn.execute(
                 """
                 INSERT INTO relays (user_id, relay_id, token_hash, relay_type, state, last_heartbeat, registered_at, metadata_json)
@@ -2210,12 +2261,15 @@ class BridgeStore:
             return False, "expired"
         return True, ""
 
-    def consume_invite_code(self, code: str, user_id: str):
+    def consume_invite_code(self, code: str, user_id: str) -> bool:
+        """Atomically mark invite code as used. Returns True if this call consumed it, False if already used (race)."""
+        now = time.time()
         with self.lock, self.conn:
-            self.conn.execute(
-                "UPDATE invite_codes SET used_at = ?, used_by = ? WHERE code = ?",
-                (time.time(), user_id, code),
+            cursor = self.conn.execute(
+                "UPDATE invite_codes SET used_at = ?, used_by = ? WHERE code = ? AND used_at IS NULL",
+                (now, user_id, code),
             )
+        return cursor.rowcount > 0
 
     def list_invite_codes(self) -> list:
         with self.lock:
@@ -2387,8 +2441,32 @@ def _rate_check(key: str, max_calls: int, window_secs: int) -> bool:
     return True
 
 
+def _rate_bucket_cleanup_worker():
+    """C6/P3: Periodically remove empty/stale rate buckets to prevent unbounded growth."""
+    while True:
+        time.sleep(600)  # run every 10 minutes
+        try:
+            cutoff = time.time() - 300  # 5-minute window
+            with _rate_lock:
+                empty_keys = [
+                    k for k, v in _rate_buckets.items()
+                    if not v or v[-1] < cutoff
+                ]
+                for k in empty_keys:
+                    del _rate_buckets[k]
+            if empty_keys:
+                logger.debug(f"Rate bucket cleanup: removed {len(empty_keys)} stale entries")
+        except Exception as exc:
+            logger.warning(f"Rate bucket cleanup error: {exc}")
+
+
 def _process_signal_for_telegram(user_id: str, signal_data: dict) -> dict:
     """Process a parsed Telegram signal. Called from the bot manager background thread."""
+    # 7.5: Use a separate rate-limit key for Telegram signals so Telegram channels
+    # cannot consume the user's TradingView webhook budget (and vice versa).
+    tg_rl_key = f"tg_signal:{user_id}"
+    if not _rate_check(tg_rl_key, max_calls=10, window_secs=60):
+        return {"status": "rate_limited", "status_code": 429, "error": "telegram signal rate limit exceeded"}
     with app.test_request_context():
         response, status_code = _process_signal_for_user(user_id, signal_data)
         result = response.get_json()
@@ -2542,13 +2620,37 @@ threading.Thread(target=_notification_worker, daemon=True, name="notify-worker")
 
 def _idempotency_cleanup_worker():
     while True:
-        time.sleep(300)  # 5 minutes
+        # 7.6: Run more frequently than the longest TTL so records don't expire prematurely.
+        # Explicit-key TTL = 120s, content-hash TTL = CONTENT_DEDUP_SECS (30s default).
+        # Clean anything older than 3× the max TTL to be safe.
+        time.sleep(60)
         try:
-            store.cleanup_idempotency(max_age_secs=300)
+            store.cleanup_idempotency(max_age_secs=max(120, CONTENT_DEDUP_SECS) * 3)
         except Exception as exc:
             logger.warning(f"Idempotency cleanup error: {exc}")
 
 threading.Thread(target=_idempotency_cleanup_worker, daemon=True, name="idem-cleanup").start()
+threading.Thread(target=_rate_bucket_cleanup_worker, daemon=True, name="rate-bucket-cleanup").start()
+
+
+def _stale_relay_cleanup_worker():
+    """7.3: Remove relay rows that haven't sent a heartbeat in >7 days to prevent unbounded table growth."""
+    while True:
+        time.sleep(3600)  # once per hour
+        try:
+            cutoff = time.time() - 7 * 86400
+            with store.lock, store.conn:
+                deleted = store.conn.execute(
+                    "DELETE FROM relays WHERE last_heartbeat < ? AND state = ?",
+                    (cutoff, RelayState.OFFLINE.value),
+                ).rowcount
+            if deleted:
+                logger.info(f"[StaleRelayCleanup] Removed {deleted} relay(s) inactive >7 days")
+        except Exception as exc:
+            logger.warning(f"Stale relay cleanup error: {exc}")
+
+
+threading.Thread(target=_stale_relay_cleanup_worker, daemon=True, name="stale-relay-cleanup").start()
 
 
 _session_last_state: dict = {}      # user_id → bool (was connected)
@@ -2575,7 +2677,7 @@ def _managed_heartbeat_worker():
                 }
                 store.heartbeat(user_id, relay_id, metadata)
 
-                # Section 7: Session state change notifications
+                # Section 7 + 7.7: Session state change notifications
                 prev = _session_last_state.get(user_id)
                 if prev is not None and prev != connected:
                     now = time.time()
@@ -2591,12 +2693,26 @@ def _managed_heartbeat_worker():
                         # Offline — throttle to once per hour
                         last_notified = _session_offline_notified.get(user_id, 0)
                         if now - last_notified >= 3600:
-                            msg = "⚠️ MT5 session went offline. Attempting to reconnect…"
+                            # 7.7: Include circuit breaker state hint so user knows if trading is also paused
+                            cb = store.get_circuit_status(user_id)
+                            cb_hint = " Circuit breaker is also active — visit dashboard to reset." if cb.get("broken") else ""
+                            msg = f"⚠️ MT5 session went offline. Attempting to reconnect…{cb_hint}"
                             try:
                                 telegram_manager.send_session_notification(user_id, msg)
                             except Exception:
                                 pass
                             _session_offline_notified[user_id] = now
+                elif prev is None and not connected:
+                    # 7.7: Session started but failed to connect — notify immediately
+                    now = time.time()
+                    last_notified = _session_offline_notified.get(user_id, 0)
+                    if now - last_notified >= 3600:
+                        msg = "⚠️ Managed MT5 session could not connect. Check your MT5 credentials in the app."
+                        try:
+                            telegram_manager.send_session_notification(user_id, msg)
+                        except Exception:
+                            pass
+                        _session_offline_notified[user_id] = now
                 _session_last_state[user_id] = connected
         except Exception as exc:
             logger.warning(f"Managed heartbeat worker error: {exc}")
@@ -3613,6 +3729,27 @@ def admin_api_learned_patterns():
     return jsonify({"patterns": patterns})
 
 
+@app.route("/admin/api/halt-trading", methods=["POST"])
+@admin_login_required
+def admin_halt_trading():
+    """M1: Global kill switch — halt or resume all signal processing for all users."""
+    global _TRADING_HALTED
+    data = request.get_json(silent=True) or {}
+    halt = bool(data.get("halt", True))
+    with _trading_halt_lock:
+        _TRADING_HALTED = halt
+    state = "HALTED" if halt else "RESUMED"
+    logger.warning(f"[ADMIN] Trading {state} by {session.get('admin_user', 'unknown')}")
+    return jsonify({"status": "ok", "trading_halted": halt})
+
+
+@app.route("/admin/api/trading-status", methods=["GET"])
+@admin_login_required
+def admin_trading_status():
+    """M1: Return current trading halt state."""
+    return jsonify({"trading_halted": _TRADING_HALTED})
+
+
 @app.route("/admin/api/learned-patterns/<int:pattern_id>/approve", methods=["POST"])
 @admin_login_required
 def admin_api_learned_pattern_approve(pattern_id: int):
@@ -3745,6 +3882,12 @@ def admin_signals_page():
 
 def _process_signal_for_user(user_id: str, data: dict):
     import re as _re
+
+    # M1: Global trading halt check
+    with _trading_halt_lock:
+        if _TRADING_HALTED:
+            return jsonify({"error": "trading halted by administrator", "code": "TRADING_HALTED"}), 503
+
     if data is None:
         raw_body = request.get_data(as_text=True).strip()
         if raw_body:
@@ -3777,9 +3920,9 @@ def _process_signal_for_user(user_id: str, data: dict):
             ).encode()
         ).hexdigest()[:16]
         _content_idem_key = f"hash:{_content_hash}"
-        if store.check_idempotency(_content_idem_key, user_id, ttl_secs=10):
+        if store.check_idempotency(_content_idem_key, user_id, ttl_secs=CONTENT_DEDUP_SECS):
             return jsonify({"status": "duplicate", "code": "DUPLICATE_SIGNAL",
-                            "message": "identical signal received within 10 seconds"}), 200
+                            "message": f"identical signal received within {CONTENT_DEDUP_SECS} seconds"}), 200
         store.record_idempotency(_content_idem_key, user_id)
 
     action = (data.get("action") or "").strip().upper()
@@ -3798,6 +3941,14 @@ def _process_signal_for_user(user_id: str, data: dict):
         return jsonify({"error": "missing symbol"}), 400
     if symbol and len(symbol) > 20:
         return jsonify({"error": "symbol too long (max 20 chars)"}), 400
+    # U5: CLOSE_ALL with no symbol closes ALL positions on the MT5 account including
+    # non-PlatAlgo positions. Require explicit confirmation flag to prevent accidental nukes.
+    if action == "CLOSE_ALL" and not symbol and not data.get("confirm_close_all"):
+        return jsonify({
+            "error": "CLOSE_ALL with no symbol closes ALL positions on the MT5 account. "
+                     "Pass confirm_close_all=true to confirm.",
+            "code": "CONFIRM_REQUIRED",
+        }), 400
 
     # Sanitize comment
     comment = (data.get("comment") or "").strip()
@@ -4027,14 +4178,7 @@ def receive_signal_by_token(webhook_token):
     if store.is_user_suspended(user_id):
         return jsonify({"error": "account suspended"}), 403
 
-    # Rate-limit per resolved user_id (same budget as the API-key endpoint)
-    if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
-        from flask import make_response as _mkr
-        _resp = _mkr(jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429)
-        _resp.headers["Retry-After"] = "60"
-        return _resp
-
-    # Rate-limit per resolved user_id (same budget as the API-key endpoint)
+    # Rate-limit per resolved user_id
     if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
         from flask import make_response as _mkr
         _resp = _mkr(jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429)
@@ -4146,18 +4290,23 @@ def relay_login():
 
     if not store.verify_dashboard_login(user_id, password):
         return jsonify({"error": "invalid credentials"}), 401
-
-    if not store.user_exists(user_id):
-        return jsonify({"error": "user not found"}), 404
+    # C3: user_exists check here was dead code — verify_dashboard_login already returns False for non-existent users.
 
     token = store.register_relay(user_id, relay_id, relay_type)
-    api_key = store.regenerate_api_key(user_id)
+
+    # M5: Notify user of new relay registration (potential account access alert)
+    notify_user(user_id, f"ℹ️ New relay session started for relay '{relay_id}'.")
+
+    # C2: Return current api_key without rotating it. Only rotate on explicit /api/rotate-api-key call.
+    # This prevents TradingView webhooks from breaking on every desktop app login.
+    current_api_key = store.get_current_api_key(user_id) or ""
+
     return jsonify({
         "status": "authenticated",
         "user_id": user_id,
         "relay_id": relay_id,
         "token": token,
-        "api_key": api_key,
+        "api_key": current_api_key,
         "heartbeat_interval": 10,
         "poll_timeout": 25,
     }), 200
@@ -4229,6 +4378,8 @@ def managed_setup_login():
         return jsonify({"error": "missing user_id or password"}), 400
     if not store.verify_dashboard_login(user_id, password):
         return jsonify({"error": "invalid credentials"}), 401
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
     if not mt5_login or not mt5_password or not mt5_server:
         return jsonify({"error": "missing mt5_login, mt5_password, or mt5_server"}), 400
 
@@ -4370,7 +4521,10 @@ def relay_poll():
 
     wait_seconds = request.args.get("wait", "0").strip()
     try:
-        wait_seconds = max(0, min(int(wait_seconds), 25))
+        # S1: Cap at 10s (not 25s) to limit WSGI thread hold time.
+        # With sync workers (gunicorn default) each blocked poller holds a thread.
+        # Use gevent/eventlet workers in production to support >4 concurrent relays.
+        wait_seconds = max(0, min(int(wait_seconds), 10))
     except ValueError:
         wait_seconds = 0
 
@@ -4855,6 +5009,9 @@ def dashboard_summary_login():
     user_id = (data.get("user_id") or "").strip()
     password = data.get("password") or ""
     api_key = (data.get("api_key") or "").strip()
+    # C2: Also accept relay_token+relay_id for desktop app sessions that have no api_key yet
+    relay_token = (data.get("relay_token") or "").strip()
+    relay_id_body = (data.get("relay_id") or "").strip()
 
     if user_id and not _rate_check(f"summary_login:user:{user_id}", max_calls=8, window_secs=60):
         resp = jsonify({"error": "too many login attempts for this user. please wait a moment."})
@@ -4873,6 +5030,9 @@ def dashboard_summary_login():
         authed = store.verify_dashboard_login(user_id, password)
     elif api_key:
         authed = store.verify_api_key(user_id, api_key)
+    elif relay_token and relay_id_body:
+        # C2: desktop app can auth with relay token when no api_key is available yet
+        authed = store.verify_relay_token(user_id, relay_id_body, relay_token)
 
     if not authed:
         return jsonify({"error": "invalid credentials"}), 401
@@ -4881,10 +5041,12 @@ def dashboard_summary_login():
     webhook_token = store.get_or_create_webhook_token(user_id)
     root_url = get_public_base_url()
 
-    # Generate (or regenerate) an API key for this session
-    # NOTE: api_key is not stored in plaintext; we regenerate on each login.
-    # The desktop app caches the returned api_key in the OS keyring.
-    stored_api_key = store.regenerate_api_key(user_id)
+    # C2: Return current api_key without rotating it.
+    # Key only rotates on explicit POST /api/rotate-api-key request.
+    # If no api_key_enc exists yet (legacy user), generate one now.
+    stored_api_key = store.get_current_api_key(user_id)
+    if not stored_api_key:
+        stored_api_key = store.regenerate_api_key(user_id)
 
     # Managed connection / broker status
     managed_connected = False
@@ -4950,6 +5112,80 @@ def panic_close_all():
 
     notify_user(user_id, "⚠️ Panic close-all queued to relay")
     return jsonify({"status": "queued", "command_id": cmd.id})
+
+
+# ==================== User Self-Service API Endpoints ====================
+
+@app.route("/api/rotate-api-key", methods=["POST"])
+def api_rotate_api_key():
+    """C2: Explicit API key rotation endpoint. Invalidates old key and returns new one.
+    Auth: X-User-ID + (X-API-Key or relay token), or body {user_id, password}.
+    """
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        # Fallback: allow password auth from body
+        data = request.get_json(silent=True) or {}
+        user_id = (data.get("user_id") or "").strip()
+        password = data.get("password") or ""
+        if not user_id or not store.verify_dashboard_login(user_id, password):
+            return jsonify({"error": "unauthorized"}), 401
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
+    new_key = store.regenerate_api_key(user_id)
+    notify_user(user_id, "🔑 API key was rotated. Update your TradingView webhook if needed.")
+    return jsonify({"status": "ok", "api_key": new_key})
+
+
+@app.route("/api/reset-circuit-breaker", methods=["POST"])
+def api_reset_circuit_breaker():
+    """U4: Reset circuit breaker via API (not just dashboard)."""
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+    store.set_circuit_broken(user_id, False)
+    notify_user(user_id, "✅ Circuit breaker reset. Trading resumed.")
+    return jsonify({"status": "ok", "circuit_broken": False})
+
+
+@app.route("/api/my-trades", methods=["GET"])
+def api_my_trades():
+    """M3: Per-user trade history accessible from API/desktop app."""
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+    limit = min(int(request.args.get("limit", 50)), 200)
+    offset = max(0, int(request.args.get("offset", 0)))
+    days = min(int(request.args.get("days", 30)), 90)
+    cutoff = time.time() - days * 86400
+    with store.lock:
+        rows = store.conn.execute(
+            """
+            SELECT id, action, symbol, size, sl, tp, status, script_name,
+                   created_at, executed_at, result_json
+            FROM commands
+            WHERE user_id = ? AND created_at > ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, cutoff, limit, offset),
+        ).fetchall()
+    trades = []
+    for r in rows:
+        result_data = json.loads(r["result_json"]) if r["result_json"] else None
+        trades.append({
+            "id": r["id"],
+            "action": r["action"],
+            "symbol": r["symbol"],
+            "size": r["size"],
+            "sl": r["sl"],
+            "tp": r["tp"],
+            "status": r["status"],
+            "script_name": r["script_name"],
+            "created_at": r["created_at"],
+            "executed_at": r["executed_at"],
+            "result": result_data,
+        })
+    return jsonify({"trades": trades, "count": len(trades), "days": days})
 
 
 # ==================== Analytics (Section 3) ====================
