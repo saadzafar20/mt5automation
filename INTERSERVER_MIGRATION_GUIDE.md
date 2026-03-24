@@ -90,7 +90,6 @@ git clone https://YOUR_REPO_URL.git
 
 **Option B: Manual Copy via SFTP**
 Use WinSCP or FileZilla to transfer from Hostinger to InterServer:
-- `mt5_tradingview_integration.py`
 - `cloud_bridge.py`
 - `relay.py`
 - `config.json`
@@ -192,10 +191,10 @@ venv\Scripts\activate
 # Test the script
 python relay.py
 
-# OR for Flask API:
-python mt5_tradingview_integration.py
+# Cloud bridge API:
+python cloud_bridge.py
 
-# You should see: * Running on http://0.0.0.0:5000
+# You should see bridge startup logs for port 5001
 ```
 
 ### 2. Test Health Check

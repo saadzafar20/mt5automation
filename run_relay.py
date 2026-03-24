@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
-"""PlatAlgo Relay — entry point.
-Launches the React UI. Falls back to legacy PyQt6 GUI if React build is missing.
+"""PlatAlgo Relay compatibility entry point.
+
+The legacy Python GUI launchers were removed. Use the Electron app in `relay-ui/`.
 """
 import sys
 
 
 def main():
-    try:
-        from relay_webview import main as webview_main
-        webview_main()
-    except Exception as e:
-        print(f"React UI failed: {e}", file=sys.stderr)
-        print("Falling back to legacy GUI...", file=sys.stderr)
-        try:
-            from relay_gui import main_legacy
-            main_legacy()
-        except Exception as e2:
-            print(f"Legacy GUI also failed: {e2}", file=sys.stderr)
-            sys.exit(1)
+    print("The legacy Python GUI launch path has been removed.", file=sys.stderr)
+    print("Use the Electron app instead:", file=sys.stderr)
+    print("  1) cd relay-ui", file=sys.stderr)
+    print("  2) npm install", file=sys.stderr)
+    print("  3) npm run electron:dev", file=sys.stderr)
+    print("For packaged builds: npm run electron:build:win or npm run electron:build:mac", file=sys.stderr)
+    sys.exit(1)
 
 
 if __name__ == "__main__":

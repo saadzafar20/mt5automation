@@ -90,10 +90,12 @@ Recommended setup:
 python relay.py --bridge-url https://bridge.yourdomain.com --user-id alice --password "your-dashboard-password" --config config.json
 ```
 
-Or use the GUI app:
+Or use the desktop app (Electron):
 
 ```powershell
-python relay_gui.py
+cd relay-ui
+npm install
+npm run electron:dev
 ```
 
 In the GUI:
@@ -110,7 +112,7 @@ In the GUI:
 
 macOS usage parity:
 
-- Run `start_relay_mac.sh` to create venv, install deps (including `pywebview`), and launch the GUI.
+- Run the Electron app from `relay-ui/` (`npm run electron:dev` for development or `npm run electron:build:mac` for packaged build).
 - Local MT5 is unavailable on macOS; click **Enable VPS 24/7 Mode** to upload MT5 creds so the bridge executes trades on the managed host.
 - The dashboard mirror works on Mac; adjust Bridge URL under **Advanced** if using a custom domain.
 - For true local execution from a Mac, use a Windows VM/VPS with the Windows relay plus MT5 installed.
@@ -118,7 +120,8 @@ macOS usage parity:
 Build Windows EXE for end users:
 
 ```powershell
-build_relay_exe_windows.bat
+cd relay-ui
+npm run electron:build:win
 ```
 
 ### Request headers to include

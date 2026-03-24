@@ -94,12 +94,11 @@ Relay registered: relay-xxxxx, token=xxxxx...
 ```powershell
 cd C:\trading
 venv\Scripts\activate
-python mt5_tradingview_integration.py
+python cloud_bridge.py
 ```
 Should show:
 ```
-* Running on http://0.0.0.0:5000
-MT5 connection successful
+Cloud bridge listening on http://0.0.0.0:5001
 ```
 
 ---
@@ -256,14 +255,14 @@ Should return list of open positions or empty array.
 }
 ```
 
-### .env (for mt5_tradingview_integration.py)
+### .env (optional local settings)
 ```env
 MT5_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 MT5_LOGIN=12345678
 MT5_PASSWORD=your_password
 MT5_SERVER=MetaQuotes-Demo
 API_HOST=0.0.0.0
-API_PORT=5000
+API_PORT=5001
 API_KEY=your_webhook_secret_key
 DEFAULT_LOT_SIZE=0.1
 ```
