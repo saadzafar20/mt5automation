@@ -6,10 +6,22 @@ let mainWindow = null;
 
 // ── Auto-updater setup ──
 
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = false;  // F3: user must confirm before download begins
 autoUpdater.autoInstallOnAppQuit = true;
 
 autoUpdater.on('update-available', (info) => {
+  // F3: prompt user before downloading — no silent installs
+  dialog
+    .showMessageBox({
+      type: 'info',
+      title: 'Update Available',
+      message: `Version ${info.version} is available. Download and install?`,
+      buttons: ['Download', 'Later'],
+      defaultId: 0,
+    })
+    .then(({ response }) => {
+      if (response === 0) autoUpdater.downloadUpdate();
+    });
   if (mainWindow) {
     mainWindow.webContents.send('update-status', {
       status: 'available',
