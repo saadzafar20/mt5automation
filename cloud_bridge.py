@@ -4711,14 +4711,76 @@ def mt5_account_info():
         return jsonify({"error": "managed mode not enabled"}), 400
 
     try:
-        result = session_manager.execute(user_id, {"action": "ACCOUNT_INFO"})
+        result = session_manager.execute(user_id, {"_action": "ACCOUNT_INFO"})
         return jsonify(result)
     except Exception as exc:
         logger.error(f"mt5_account_info error for {user_id}: {exc}")
         return jsonify({"error": "failed to retrieve account info"}), 500
 
 
-# ==================== Terms & Privacy (Section 9) ====================
+# ==================== Direct Trade Execution (Section 9) ====================
+
+@app.route("/api/trade", methods=["POST"])
+def api_trade():
+    """Execute a trade directly via managed session or queue via relay."""
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "").strip().upper()
+    symbol = (data.get("symbol") or "").strip().upper()[:20]
+    size = data.get("size", 0.0)
+
+    if not action:
+        return jsonify({"error": "missing action"}), 400
+
+    # Idempotency check (explicit key or content-hash)
+    idem_key = (data.get("idempotency_key") or "").strip()
+    if idem_key:
+        if store.check_idempotency(idem_key, user_id, ttl_secs=120):
+            return jsonify({"status": "duplicate", "idempotency_key": idem_key}), 200
+        store.record_idempotency(idem_key, user_id)
+    else:
+        _content_hash = hashlib.sha256(
+            json.dumps({"action": action, "symbol": symbol, "size": str(size)},
+                       sort_keys=True).encode()
+        ).hexdigest()[:16]
+        _content_key = f"hash:{_content_hash}"
+        if store.check_idempotency(_content_key, user_id, ttl_secs=10):
+            return jsonify({"status": "duplicate"}), 200
+        store.record_idempotency(_content_key, user_id)
+
+    if store.is_managed_enabled(user_id):
+        cmd = {"action": action, "symbol": symbol, "size": size}
+        if data.get("sl") is not None:
+            cmd["sl"] = data["sl"]
+        if data.get("tp") is not None:
+            cmd["tp"] = data["tp"]
+        try:
+            result = session_manager.execute(user_id, cmd)
+            return jsonify(result)
+        except Exception as exc:
+            logger.error(f"api_trade managed error for {user_id}: {exc}")
+            return jsonify({"error": "trade execution failed"}), 500
+
+    # Relay path — queue as command
+    relays = store.list_relays(user_id)
+    if not relays:
+        return jsonify({"error": "no relay registered"}), 400
+    target_relay = next((rid for rid, r in relays.items() if r.get("state") == "online"), None)
+    if not target_relay:
+        return jsonify({"error": "no relay online"}), 503
+    command = Command(user_id, target_relay, action, symbol, size)
+    store.enqueue(command)
+    return jsonify({
+        "status": "queued",
+        "command_id": command.id,
+        "relay_id": target_relay,
+    }), 202
+
+
+# ==================== Terms & Privacy (Section 10) ====================
 
 @app.route("/terms", methods=["GET"])
 def terms_page():
