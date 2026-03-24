@@ -14,6 +14,7 @@ Communication with the subprocess uses JSON lines on stdin/stdout.
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -241,6 +242,39 @@ TRADE_TIMEOUT_SECS      = 20
 RECONNECT_DELAY_SECS    = 5
 HEALTH_CHECK_INTERVAL_SECS = 10
 MT5_USERS_BASE_DIR      = r"C:\mt5_users"
+MT5_TEMPLATE_DIR        = os.path.join(MT5_USERS_BASE_DIR, "_template")
+
+
+def _provision_user_dir(user_id: str, data_dir: str):
+    """
+    Ensure the user's MT5 data directory exists with a full portable installation.
+
+    On first call for a new user:
+      1. If C:\\mt5_users\\_template\\ exists, copy it to data_dir (gives the user
+         their own terminal64.exe + broker config in portable mode).
+      2. If no template exists, just mkdir data_dir — the subprocess will fall
+         back to the shared system MT5 installation.
+
+    On subsequent calls the directory already exists so this returns immediately.
+    """
+    if os.path.exists(data_dir):
+        return  # already provisioned
+
+    if os.path.isdir(MT5_TEMPLATE_DIR):
+        logger.info(f"[{user_id}] Provisioning MT5 from template → {data_dir}")
+        try:
+            shutil.copytree(MT5_TEMPLATE_DIR, data_dir)
+            logger.info(f"[{user_id}] MT5 directory provisioned successfully")
+            return
+        except Exception as exc:
+            logger.error(f"[{user_id}] copytree failed: {exc} — falling back to mkdir")
+    else:
+        logger.warning(
+            f"[{user_id}] Template dir not found ({MT5_TEMPLATE_DIR}); "
+            "using system MT5 installation — create the template for full isolation"
+        )
+
+    os.makedirs(data_dir, exist_ok=True)
 
 
 class MT5UserSession:
@@ -332,6 +366,10 @@ class MT5UserSession:
 
     def _start_subprocess(self) -> bool:
         """Spawn the worker subprocess, send init params, wait for ready."""
+        # Provision the user's MT5 directory from the template if needed.
+        # Idempotent — fast no-op when directory already exists.
+        _provision_user_dir(self.user_id, self._data_dir)
+
         worker = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "mt5_subprocess_worker.py",
@@ -517,6 +555,12 @@ class SessionManager:
         if not session:
             return {"active": False, "connected": False}
         return {"active": True, "connected": session.connected}
+
+    def get_all_sessions_status(self) -> Dict[str, Any]:
+        """Return {user_id: {active, connected}} for all sessions."""
+        with self._lock:
+            snapshot = dict(self._sessions)
+        return {uid: {"active": True, "connected": s.connected} for uid, s in snapshot.items()}
 
     def load_from_store(self, store, decrypt_fn):
         """

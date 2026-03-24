@@ -20,6 +20,8 @@ export function SignInCard() {
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const setAuth = useAppStore((s) => s.setAuth);
   const clearAuth = useAppStore((s) => s.clearAuth);
@@ -29,10 +31,14 @@ export function SignInCard() {
   const auth = useAppStore((s) => s.auth);
 
   const handleOAuth = async (provider: 'google' | 'facebook') => {
+    if (isSignUp && !inviteCode.trim()) {
+      setValidationError('An invite code is required to create a new account');
+      return;
+    }
     setLoading(true);
     setValidationError('');
     try {
-      const { auth_url, state } = await startOAuth(provider);
+      const { auth_url, state } = await startOAuth(provider, isSignUp ? inviteCode.trim() : undefined);
       bridge.openExternal(auth_url);
       toast.info('Browser opened — complete sign-in then return here');
       for (let i = 0; i < 180; i++) {
@@ -61,32 +67,40 @@ export function SignInCard() {
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
-      setValidationError('Email and password are required');
+      setValidationError('Username and password are required');
+      return;
+    }
+    if (isSignUp && !inviteCode.trim()) {
+      setValidationError('An invite code is required to create a new account');
       return;
     }
     setLoading(true);
     setValidationError('');
     try {
-      const res = await fetch(`${BRIDGE_URL}/relay/login`, {
+      const endpoint = isSignUp ? `${BRIDGE_URL}/account/register` : `${BRIDGE_URL}/relay/login`;
+      const body = isSignUp
+        ? { user_id: email, password, invite_code: inviteCode.trim() }
+        : { user_id: email, password };
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: email, password }),
+        body: JSON.stringify(body),
       });
       let data: Record<string, string> = {};
       try { data = await res.json(); } catch { /* ignore parse error */ }
       if (!res.ok) {
-        toast.error(data.error || 'Login failed — please check your credentials');
+        toast.error(data.error || (isSignUp ? 'Registration failed' : 'Login failed — please check your credentials'));
         return;
       }
-      if (data.status === 'ok' || data.token) {
+      if (data.status === 'ok' || data.token || data.api_key) {
         setAuth({ userId: email, apiKey: data.api_key || null });
         if (remember) {
           bridge.saveLastUser(JSON.stringify({ user_id: email, api_key: data.api_key || '' }));
           bridge.setKeyringPassword('platalgo-relay', email, password);
         }
-        toast.success('Signed in successfully');
+        toast.success(isSignUp ? 'Account created successfully' : 'Signed in successfully');
       } else {
-        toast.error(data.error || 'Login failed — please check your credentials');
+        toast.error(data.error || (isSignUp ? 'Registration failed' : 'Login failed — please check your credentials'));
       }
     } catch {
       toast.error('Connection failed — check your internet connection');
@@ -155,21 +169,42 @@ export function SignInCard() {
 
   return (
     <Card>
-      <h2 className="text-base font-semibold text-fg mb-6 flex items-center gap-2">
-        <Mail size={18} className="text-accent" />
-        Sign In
-      </h2>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-[0.9rem] font-semibold text-fg flex items-center gap-2" style={{ letterSpacing: '-0.01em' }}>
+          <Mail size={15} className="text-accent" />
+          {isSignUp ? 'Create Account' : 'Sign In'}
+        </h2>
+        <button
+          className="text-[0.72rem] text-accent underline cursor-pointer bg-transparent border-none p-0"
+          onClick={() => { setIsSignUp(!isSignUp); setValidationError(''); setInviteCode(''); }}
+        >
+          {isSignUp ? 'Already have an account?' : 'Need an account?'}
+        </button>
+      </div>
+
+      {/* Invite code field — shown only for sign-up */}
+      {isSignUp && (
+        <div className="mb-4">
+          <Input
+            label="Invite Code"
+            type="text"
+            value={inviteCode}
+            onChange={(e) => { setInviteCode(e.target.value); setValidationError(''); }}
+            placeholder="Enter your invite code"
+          />
+        </div>
+      )}
 
       {/* OAuth buttons */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-2.5 mb-5">
         <motion.button
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[var(--radius)] bg-bg-hover/70 border border-border text-[0.8rem] font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent/20 hover:bg-primary/[0.05] disabled:opacity-50"
           onClick={() => handleOAuth('google')}
           disabled={loading}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.015 }}
+          whileTap={{ scale: 0.985 }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24">
+          <svg width="14" height="14" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11.96 11.96 0 0 0 1 12c0 1.94.46 3.77 1.18 4.93l3.66-2.84z"/>
@@ -178,27 +213,27 @@ export function SignInCard() {
           Google
         </motion.button>
         <motion.button
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius)] bg-bg-hover border border-border text-sm font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent-muted disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[var(--radius)] bg-bg-hover/70 border border-border text-[0.8rem] font-medium text-fg cursor-pointer transition-all duration-200 hover:border-accent/20 hover:bg-primary/[0.05] disabled:opacity-50"
           onClick={() => handleOAuth('facebook')}
           disabled={loading}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.015 }}
+          whileTap={{ scale: 0.985 }}
         >
-          <Facebook size={16} className="text-[#1877F2]" />
+          <Facebook size={14} className="text-[#1877F2]" />
           Facebook
         </motion.button>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-5">
         <div className="flex-1 h-px bg-border" />
-        <span className="text-[0.625rem] text-fg-faint font-medium uppercase tracking-wider">or</span>
+        <span className="text-[0.575rem] text-fg-faint font-semibold uppercase" style={{ letterSpacing: '0.1em' }}>or</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
       <div className="space-y-5">
         <Input
-          label="Email"
-          type="email"
+          label="Username"
+          type="text"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setValidationError(''); }}
           placeholder="you@example.com"
@@ -236,18 +271,8 @@ export function SignInCard() {
         )}
 
         <GoldButton fullWidth onClick={handleEmailLogin} disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
+          {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
         </GoldButton>
-
-        <p className="text-xs text-center text-fg-muted">
-          Don&apos;t have an account?{' '}
-          <button
-            className="text-accent underline cursor-pointer bg-transparent border-none p-0 text-xs"
-            onClick={() => bridge.openExternal('https://app.platalgo.com/register')}
-          >
-            Sign up
-          </button>
-        </p>
       </div>
     </Card>
   );

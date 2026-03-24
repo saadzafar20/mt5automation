@@ -5,8 +5,11 @@ This module extracts common MT5 order logic used by both:
 - managed_mt5_worker.py (VPS managed execution)
 """
 
+import logging
 import math
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 # Common MT5 error code mappings
 MT5_RETCODE_MESSAGES = {
@@ -363,6 +366,7 @@ def execute_command(mt5, command: Dict[str, Any],
             if price > 0 and contract_size > 0:
                 size = (account.equity * pct) / (contract_size * price)
             else:
+                logger.warning("Cannot compute lot size for %s (price=%s contract_size=%s) — falling back to 0.01", symbol, price, contract_size)
                 size = 0.01
             vol_min = symbol_info.volume_min or 0.01
             vol_max = symbol_info.volume_max or 100.0
@@ -373,6 +377,7 @@ def execute_command(mt5, command: Dict[str, Any],
                 if size < vol_min:
                     size = vol_min
         else:
+            logger.warning("Cannot compute lot size for %s (no account or symbol_info) — falling back to 0.01", symbol)
             size = 0.01
 
     # Apply max_lot_size cap

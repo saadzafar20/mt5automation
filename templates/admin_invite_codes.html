@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Invite Codes</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; }
+    .topbar { background:#111827; color:white; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center; }
+    .topbar h1 { margin:0; font-size: 20px; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .section { background:white; border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.06); margin-bottom: 16px; }
+    .section h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; font-size: 17px; }
+    .section-content { padding: 14px 16px; }
+    label { display:block; margin-top: 10px; font-weight: 600; }
+    input[type=text], input[type=number] { width:100%; max-width: 320px; padding: 10px; margin-top:6px; box-sizing:border-box; border: 1px solid #d0d7de; border-radius: 8px; }
+    button { margin-top: 14px; padding: 10px 14px; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    th { background:#f9fafb; }
+    .msg { margin: 8px 0; padding: 10px; border-radius: 8px; }
+    .error { background: #fee2e2; color: #991b1b; }
+    .success { background: #dcfce7; color: #166534; }
+    .logout-btn { background:#1f2937; color:white; border:1px solid #374151; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    .nav a { color: #bfdbfe; margin-right: 12px; text-decoration: none; font-weight: 600; }
+    .status-pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .used { background:#fee2e2; color:#991b1b; }
+    .active { background:#dcfce7; color:#166534; }
+    .expired { background:#fef3c7; color:#92400e; }
+    code { font-family: monospace; font-size: 13px; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>Admin — Invite Codes</h1>
+      <div class="nav">
+        <a href="/admin/catalog">Catalog</a>
+        <a href="/admin/scripts">Assignments</a>
+        <a href="/admin/invite-codes">Invite Codes</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/signals">Signals</a>
+      </div>
+    </div>
+    <form method="post" action="/admin/logout">
+      <button class="logout-btn" type="submit">Sign out ({{ admin_user }})</button>
+    </form>
+  </div>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="msg {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="section">
+      <h2>Create Invite Code</h2>
+      <div class="section-content">
+        <form method="post" action="/admin/invite-codes">
+          <input type="hidden" name="action" value="create" />
+          <label for="expires_hours">Expires in (hours, leave blank = never expires)</label>
+          <input type="number" id="expires_hours" name="expires_hours" placeholder="e.g. 72" min="1" />
+          <button type="submit">Create Invite Code</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>All Invite Codes</h2>
+      <div class="section-content">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Expires</th>
+              <th>Used By</th>
+              <th>Used At</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in codes %}
+            <tr>
+              <td><code>{{ c.code }}</code></td>
+              <td>
+                {% if c.used_at %}
+                  <span class="status-pill used">Used</span>
+                {% elif c.expires_at and c.expires_at < now_ts %}
+                  <span class="status-pill expired">Expired</span>
+                {% else %}
+                  <span class="status-pill active">Active</span>
+                {% endif %}
+              </td>
+              <td>{{ c.created_at_str if c.created_at_str else c.created_at }}</td>
+              <td>{{ c.expires_at_str if c.expires_at_str else (c.expires_at or '—') }}</td>
+              <td>{{ c.used_by or '—' }}</td>
+              <td>{{ c.used_at_str if c.used_at_str else (c.used_at or '—') }}</td>
+            </tr>
+          {% endfor %}
+          {% if not codes %}
+            <tr><td colspan="6">No invite codes yet.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

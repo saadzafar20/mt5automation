@@ -14,12 +14,14 @@ Run as a Windows service via NSSM:
     nssm start PlatAlgoBuildHook
 """
 
+import datetime
 import hashlib
 import hmac
 import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -33,6 +35,11 @@ BUILD_SCRIPT    = BASE_DIR / "build_and_deploy.bat"
 LOG_FILE        = BASE_DIR / "build_webhook.log"
 WEBHOOK_SECRET  = os.getenv("WEBHOOK_SECRET", "")
 PORT            = int(os.getenv("WEBHOOK_PORT", "9000"))
+
+if not WEBHOOK_SECRET:
+    print("FATAL: WEBHOOK_SECRET environment variable is not set. "
+          "Set it to the secret configured in your GitHub webhook.", file=sys.stderr)
+    sys.exit(1)
 PUBLIC_BASE_URL = os.getenv("BRIDGE_PUBLIC_URL", "").rstrip("/")
 BRANCH          = os.getenv("WEBHOOK_BRANCH", "refs/heads/main")
 
@@ -59,9 +66,6 @@ _build_status = {"running": False, "last_exit": None, "last_trigger": None}
 
 def _verify_signature(payload: bytes, sig_header: str) -> bool:
     """Verify GitHub HMAC-SHA256 webhook signature."""
-    if not WEBHOOK_SECRET:
-        log.warning("WEBHOOK_SECRET not set — skipping signature check")
-        return True
     if not sig_header or not sig_header.startswith("sha256="):
         return False
     expected = "sha256=" + hmac.new(
@@ -115,8 +119,7 @@ def webhook_build():
         log.info("Ignoring push to %s (want %s)", ref, BRANCH)
         return jsonify({"ok": True, "skipped": True}), 200
 
-    import datetime
-    _build_status["last_trigger"] = datetime.datetime.utcnow().isoformat()
+    _build_status["last_trigger"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     log.info("Push to %s received — queuing build", BRANCH)
 
     thread = threading.Thread(target=_run_build, daemon=True)

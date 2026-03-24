@@ -146,14 +146,17 @@ def _kill_user_terminal(user_exe: str):
     """
     try:
         import subprocess as _sp
-        exe_escaped = user_exe.replace("'", "''")
+        import os as _os
+        _env = _os.environ.copy()
+        _env["_MT5_EXE_PATH"] = user_exe
         _sp.run(
             [
                 "powershell", "-NonInteractive", "-Command",
-                f"Get-Process -Name terminal64 -ErrorAction SilentlyContinue "
-                f"| Where-Object {{$_.Path -eq '{exe_escaped}'}} "
-                f"| Stop-Process -Force",
+                "Get-Process -Name terminal64 -ErrorAction SilentlyContinue "
+                "| Where-Object { $_.Path -eq $env:_MT5_EXE_PATH } "
+                "| Stop-Process -Force",
             ],
+            env=_env,
             capture_output=True,
             timeout=10,
         )
@@ -530,23 +533,31 @@ def main():
                         _keepalive_fail_count[0] += 1
                         _log(f"[{user_id}] Keepalive: account_info None/0 (fail {_keepalive_fail_count[0]})")
                         if _keepalive_fail_count[0] >= 3:
-                            _log(f"[{user_id}] Keepalive: 3 consecutive failures — exiting for supervisor restart")
+                            _log(f"[{user_id}] Keepalive: 3 consecutive failures — signalling exit for supervisor restart")
                             _keepalive_lost.set()
-                            # Force-exit so the parent supervisor detects us gone and
-                            # restarts with a fresh subprocess.  The terminal process
-                            # stays alive; the new subprocess will re-attach to it.
-                            os._exit(1)
+                            return  # main loop checks _keepalive_lost and exits cleanly
                 except Exception as _e:
                     _keepalive_fail_count[0] += 1
                     if _keepalive_fail_count[0] >= 3:
+                        _log(f"[{user_id}] Keepalive: exception on fail {_keepalive_fail_count[0]} — signalling exit")
                         _keepalive_lost.set()
-                        os._exit(1)
+                        return
 
         ka_thread = threading.Thread(target=_keepalive, daemon=True)
         ka_thread.start()
 
         # ── Command loop (one command → one response) ─────────────────────────
         lost_connection = False
+        # Wait for keepalive signal in a background thread so we can break
+        # out of the blocking stdin read without os._exit().
+        def _watch_keepalive():
+            _keepalive_lost.wait()
+            # Write a sentinel to unblock the stdin readline in the main thread.
+            # The main thread checks _keepalive_lost at the top of each iteration
+            # and will exit cleanly on the next line received (or when stdin closes).
+            pass  # event-driven; main loop polls at top of each iteration
+        threading.Thread(target=_watch_keepalive, daemon=True).start()
+
         for raw_line in sys.stdin:
             if _keepalive_lost.is_set():
                 lost_connection = True

@@ -25,16 +25,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
-MT5_RETCODE_MESSAGES = {
-    10016: "Invalid stop loss or take profit.",
-    10018: "Market is currently closed.",
-    10019: "Not enough money in account to execute trade.",
-}
 
-def map_mt5_retcode(retcode: Optional[int]) -> str:
-    if retcode is None:
-        return "Trade request failed."
-    return MT5_RETCODE_MESSAGES.get(retcode, f"Broker returned error code {retcode}.")
+from mt5_order_utils import map_mt5_retcode  # noqa: E402
 
 class RelayClient:
     """Client to communicate with cloud bridge."""

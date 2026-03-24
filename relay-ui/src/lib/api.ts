@@ -12,11 +12,11 @@ function authHeaders(userId: string, apiKey: string): Record<string, string> {
 
 /* ── Cloud Bridge API ── */
 
-export async function startOAuth(provider: 'google' | 'facebook') {
+export async function startOAuth(provider: 'google' | 'facebook', inviteCode?: string) {
   const res = await fetch(`${BRIDGE_URL}/auth/desktop/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, invite_code: inviteCode || '' }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<{ auth_url: string; state: string }>;
@@ -72,6 +72,18 @@ export async function managedEnable(params: {
   if (!res.ok) {
     let err = `HTTP ${res.status}`;
     try { const j = await res.json(); err = j.error || err; } catch { /* non-JSON error */ }
+    return { error: err };
+  }
+  return res.json();
+}
+
+export async function managedDisable(userId: string, apiKey?: string) {
+  const headers: Record<string, string> = { 'X-User-ID': userId };
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  const res = await fetch(`${BRIDGE_URL}/managed/disable`, { method: 'POST', headers });
+  if (!res.ok) {
+    let err = `HTTP ${res.status}`;
+    try { const j = await res.json(); err = j.error || err; } catch { /* non-JSON */ }
     return { error: err };
   }
   return res.json();

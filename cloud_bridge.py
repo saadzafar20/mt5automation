@@ -33,6 +33,14 @@ from threading import RLock
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_cors import CORS
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except ImportError:
+    Limiter = None
+    get_remote_address = None
+import csv
+import io
 import requests
 try:
     from authlib.integrations.flask_client import OAuth as _OAuth
@@ -49,8 +57,28 @@ from managed_mt5_worker import SessionManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import logging.handlers as _log_handlers
+os.makedirs("logs", exist_ok=True)
+_file_handler = _log_handlers.TimedRotatingFileHandler(
+    "logs/bridge.log", when="midnight", interval=1, backupCount=30, encoding="utf-8"
+)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger().addHandler(_file_handler)
+
 app = Flask(__name__)
-CORS(app)
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB — reject oversized payloads
+CORS(app, origins=os.getenv("ALLOWED_ORIGINS", "https://app.platalgo.com").split(","))
+
+# ── Rate limiting ──
+if Limiter is not None:
+    _limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=["200 per minute"],
+        storage_uri="memory://",
+    )
+else:
+    _limiter = None
 
 # Trust Caddy reverse proxy headers so url_for generates https:// URLs
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -59,6 +87,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # ==================== Constants & Config ====================
 DEFAULT_COMMAND_TTL = 3600  # 1 hour
 DEFAULT_HEARTBEAT_TIMEOUT = 30  # 30 seconds without heartbeat = offline
+SYSTEM_DEFAULT_SL_PIPS = 50
+SYSTEM_DEFAULT_TP_PIPS = 50
 COMMAND_DEQUEUE_LIMIT = 10  # max commands per poll
 DB_PATH = os.getenv("BRIDGE_DB_PATH", "bridge.db")
 REQUIRE_API_KEY = os.getenv("BRIDGE_REQUIRE_API_KEY", "true").lower() == "true"
@@ -125,29 +155,54 @@ def validate_startup_config():
     """Validate critical configuration at startup."""
     warnings = []
     errors = []
-    
+
     if AUTH_SALT == "change-me-in-production":
         if not DEV_MODE:
             errors.append("BRIDGE_AUTH_SALT must be set in production")
         else:
             warnings.append("BRIDGE_AUTH_SALT using default - OK for dev only")
-    
+
     if SESSION_SECRET == "change-me-session-secret":
         if not DEV_MODE:
             errors.append("BRIDGE_SESSION_SECRET must be set in production")
         else:
             warnings.append("BRIDGE_SESSION_SECRET using default - OK for dev only")
-    
+
     if not BRIDGE_CREDS_KEY:
-        warnings.append("BRIDGE_CREDS_KEY not set - managed VPS execution will be disabled")
-    
+        errors.append("BRIDGE_CREDS_KEY must be set — MT5 credentials cannot be stored securely without it")
+
+    if not PUBLIC_BASE_URL:
+        warnings.append("BRIDGE_PUBLIC_URL not set - webhook URLs will use request host")
+
+    if not RELAY_DOWNLOAD_URL:
+        warnings.append("RELAY_DOWNLOAD_URL not set - download page may show empty links")
+
+    if not os.getenv("BRIDGE_ADMIN_PASSWORD") and not os.getenv("BRIDGE_ADMIN_PASSWORD_HASH"):
+        warnings.append("No admin password configured - admin panel will be inaccessible")
+
     for warn in warnings:
         logger.warning(f"[CONFIG] {warn}")
-    
+
     if errors and not DEV_MODE:
         for err in errors:
-            logger.error(f"[CONFIG] {err}")
-        raise RuntimeError("Invalid configuration. Set required environment variables.")
+            logger.error(f"[CONFIG] FATAL: {err}")
+        sys.exit(1)
+
+
+def _log_startup_summary():
+    """Log a human-readable startup summary after store is initialized."""
+    try:
+        with store.lock:
+            user_count = store.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            relay_count = store.conn.execute("SELECT COUNT(*) FROM relays").fetchone()[0]
+    except Exception:
+        user_count = relay_count = "?"
+    logger.info(
+        f"[STARTUP] PlatAlgo Bridge v{APP_VERSION} ready — "
+        f"db={DB_PATH}, users={user_count}, relays={relay_count}, "
+        f"managed_creds={'set' if BRIDGE_CREDS_KEY else 'unset'}, "
+        f"dev_mode={DEV_MODE}"
+    )
 
 # Run validation on import (not just __main__)
 # This ensures module-level issues are caught early
@@ -255,6 +310,8 @@ class Command:
         self.result = None
         self.delivered_at = None
         self.executed_at = None
+        self.magic = None
+        self.max_lot_size = None
 
     def is_expired(self):
         return (time.time() - self.created_at) > self.ttl
@@ -275,6 +332,8 @@ class Command:
             "delivered_at": self.delivered_at,
             "executed_at": self.executed_at,
             "result": self.result,
+            "magic": self.magic,
+            "max_lot_size": self.max_lot_size,
         }
 
     @classmethod
@@ -307,11 +366,9 @@ def hash_secret(user_id: str, raw_secret: str) -> str:
 def verify_admin_credentials(username: str, password: str) -> bool:
     if username != ADMIN_USERNAME:
         return False
-    if ADMIN_PASSWORD_HASH:
-        return check_password_hash(ADMIN_PASSWORD_HASH, password)
-    if ADMIN_PASSWORD:
-        return hmac.compare_digest(password, ADMIN_PASSWORD)
-    return False
+    if not ADMIN_PASSWORD_HASH:
+        return False  # no hashed password configured — admin panel disabled
+    return check_password_hash(ADMIN_PASSWORD_HASH, password)
 
 
 def get_fernet():
@@ -485,6 +542,35 @@ class BridgeStore:
                 with self.lock, self.conn:
                     self.conn.execute(f"ALTER TABLE user_settings ADD COLUMN {col} {coltype}")
 
+        if not self._has_column("users", "magic_number"):
+            with self.lock, self.conn:
+                self.conn.execute("ALTER TABLE users ADD COLUMN magic_number INTEGER")
+            # Assign magic numbers to existing users that don't have one
+            with self.lock:
+                users_without = self.conn.execute(
+                    "SELECT user_id FROM users WHERE magic_number IS NULL"
+                ).fetchall()
+            for row in users_without:
+                magic = self._generate_unique_magic_number()
+                with self.lock, self.conn:
+                    self.conn.execute(
+                        "UPDATE users SET magic_number = ? WHERE user_id = ? AND magic_number IS NULL",
+                        (magic, row["user_id"]),
+                    )
+
+        for col, coltype, default in [
+            ("max_daily_loss_pct", "REAL", "5.0"),
+            ("consecutive_loss_limit", "INTEGER", "5"),
+            ("circuit_broken", "INTEGER", "0"),
+            ("circuit_broken_at", "REAL", "NULL"),
+        ]:
+            if not self._has_column("user_settings", col):
+                with self.lock, self.conn:
+                    if default == "NULL":
+                        self.conn.execute(f"ALTER TABLE user_settings ADD COLUMN {col} {coltype}")
+                    else:
+                        self.conn.execute(f"ALTER TABLE user_settings ADD COLUMN {col} {coltype} DEFAULT {default}")
+
         with self.lock, self.conn:
             self.conn.executescript(
                 """
@@ -579,6 +665,31 @@ class BridgeStore:
 
                 CREATE INDEX IF NOT EXISTS idx_telegram_users_user
                     ON telegram_users(user_id);
+
+                CREATE TABLE IF NOT EXISTS invite_codes (
+                    code TEXT PRIMARY KEY,
+                    created_at REAL NOT NULL,
+                    expires_at REAL,
+                    used_at REAL,
+                    used_by TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS signal_idempotency (
+                    idem_key TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    PRIMARY KEY (idem_key, user_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS user_subscriptions (
+                    user_id TEXT PRIMARY KEY,
+                    plan TEXT NOT NULL DEFAULT 'free',
+                    started_at REAL NOT NULL,
+                    expires_at REAL,
+                    stripe_customer_id TEXT,
+                    stripe_subscription_id TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
                 """
             )
 
@@ -655,6 +766,18 @@ class BridgeStore:
                 (user_id, api_key_hash, webhook_token, time.time()),
             )
         self.ensure_user_settings(user_id)
+        # Assign magic number if not set
+        with self.lock:
+            row = self.conn.execute("SELECT magic_number FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row["magic_number"] is None:
+            magic = self._generate_unique_magic_number()
+            with self.lock, self.conn:
+                self.conn.execute("UPDATE users SET magic_number = ? WHERE user_id = ?", (magic, user_id))
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO user_subscriptions (user_id, plan, started_at) VALUES (?, 'free', ?)",
+                (user_id, time.time()),
+            )
 
     def register_dashboard_user(self, user_id: str, password: str) -> str:
         if self.user_exists(user_id):
@@ -673,6 +796,14 @@ class BridgeStore:
                 (user_id, api_key_hash, password_hash, webhook_token, now),
             )
         self.ensure_user_settings(user_id)
+        magic = self._generate_unique_magic_number()
+        with self.lock, self.conn:
+            self.conn.execute("UPDATE users SET magic_number = ? WHERE user_id = ?", (magic, user_id))
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO user_subscriptions (user_id, plan, started_at) VALUES (?, 'free', ?)",
+                (user_id, time.time()),
+            )
         return api_key
 
     def regenerate_api_key(self, user_id: str) -> str:
@@ -840,6 +971,14 @@ class BridgeStore:
             )
         self.ensure_user_settings(user_id)
         self.assign_script_to_user(user_id, "default-script")
+        magic = self._generate_unique_magic_number()
+        with self.lock, self.conn:
+            self.conn.execute("UPDATE users SET magic_number = ? WHERE user_id = ?", (magic, user_id))
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO user_subscriptions (user_id, plan, started_at) VALUES (?, 'free', ?)",
+                (user_id, time.time()),
+            )
         return user_id, api_key
 
     def upsert_desktop_token(self, state: str, user_id: str, api_key: str, relay_id: str = None, ttl: int = DESKTOP_OAUTH_STATE_TTL):
@@ -1634,8 +1773,9 @@ class BridgeStore:
         """Return a lightweight list of all users for admin /admin users command."""
         with self.lock:
             rows = self.conn.execute(
-                """SELECT u.user_id, u.created_at,
-                          CASE WHEN ma.user_id IS NOT NULL THEN 1 ELSE 0 END as managed
+                """SELECT u.user_id, u.created_at, u.webhook_token,
+                          CASE WHEN ma.user_id IS NOT NULL THEN 1 ELSE 0 END as managed,
+                          ma.mt5_login, ma.mt5_server
                    FROM users u
                    LEFT JOIN managed_accounts ma ON u.user_id = ma.user_id AND ma.enabled = 1
                    ORDER BY u.created_at DESC""",
@@ -1645,6 +1785,9 @@ class BridgeStore:
             result.append({
                 "user_id": r["user_id"],
                 "managed": bool(r["managed"]),
+                "mt5_login": r["mt5_login"],
+                "mt5_server": r["mt5_server"],
+                "webhook_token": r["webhook_token"] or "",
                 "created_at_str": datetime.fromtimestamp(r["created_at"], tz=timezone.utc).strftime("%Y-%m-%d"),
             })
         return result
@@ -1657,7 +1800,12 @@ class BridgeStore:
                    FROM telegram_signal_log ORDER BY created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["created_at"] = datetime.fromtimestamp(r["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if r["created_at"] else ""
+            result.append(d)
+        return result
 
     def get_platform_stats(self) -> dict:
         """Return aggregate platform statistics for admin."""
@@ -1725,8 +1873,184 @@ class BridgeStore:
                 (time.time(), user_id),
             )
 
+    # ── Invite Codes ─────────────────────────────────────────────────────────
+
+    def create_invite_code(self, expires_hours=None) -> str:
+        import secrets as _sec
+        code = _sec.token_urlsafe(16)
+        now = time.time()
+        expires_at = now + expires_hours * 3600 if expires_hours else None
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO invite_codes (code, created_at, expires_at) VALUES (?, ?, ?)",
+                (code, now, expires_at),
+            )
+        return code
+
+    def validate_invite_code(self, code: str) -> tuple:
+        """Returns (valid: bool, reason: str)"""
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT code, used_at, expires_at FROM invite_codes WHERE code = ?",
+                (code,),
+            ).fetchone()
+        if not row:
+            return False, "invalid code"
+        if row["used_at"] is not None:
+            return False, "already used"
+        if row["expires_at"] is not None and row["expires_at"] < time.time():
+            return False, "expired"
+        return True, ""
+
+    def consume_invite_code(self, code: str, user_id: str):
+        with self.lock, self.conn:
+            self.conn.execute(
+                "UPDATE invite_codes SET used_at = ?, used_by = ? WHERE code = ?",
+                (time.time(), user_id, code),
+            )
+
+    def list_invite_codes(self) -> list:
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT code, created_at, expires_at, used_at, used_by FROM invite_codes ORDER BY created_at DESC"
+            ).fetchall()
+        result = []
+        for r in rows:
+            status = "available"
+            if r["used_at"]:
+                status = "used"
+            elif r["expires_at"] and r["expires_at"] < time.time():
+                status = "expired"
+            result.append({
+                "code": r["code"],
+                "created_at": r["created_at"],
+                "created_at_str": datetime.fromtimestamp(r["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if r["created_at"] else "",
+                "expires_at": r["expires_at"],
+                "expires_at_str": datetime.fromtimestamp(r["expires_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if r["expires_at"] else "",
+                "used_at": r["used_at"],
+                "used_at_str": datetime.fromtimestamp(r["used_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if r["used_at"] else "",
+                "used_by": r["used_by"],
+                "status": status,
+            })
+        return result
+
+    # ── Magic Numbers ─────────────────────────────────────────────────────────
+
+    def _generate_unique_magic_number(self) -> int:
+        import random as _random
+        while True:
+            magic = _random.randint(100000, 999999)
+            row = self.conn.execute("SELECT 1 FROM users WHERE magic_number = ?", (magic,)).fetchone()
+            if not row:
+                return magic
+
+    def get_user_magic_number(self, user_id: str) -> int:
+        with self.lock:
+            row = self.conn.execute("SELECT magic_number FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row["magic_number"]:
+            return int(row["magic_number"])
+        # Generate and save if missing
+        magic = self._generate_unique_magic_number()
+        with self.lock, self.conn:
+            self.conn.execute("UPDATE users SET magic_number = ? WHERE user_id = ?", (magic, user_id))
+        return magic
+
+    # ── Signal Idempotency ────────────────────────────────────────────────────
+
+    def check_idempotency(self, idem_key: str, user_id: str, ttl_secs: int = 120) -> bool:
+        """Returns True if duplicate (already seen within ttl_secs)."""
+        cutoff = time.time() - ttl_secs
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT 1 FROM signal_idempotency WHERE idem_key = ? AND user_id = ? AND created_at > ?",
+                (idem_key, user_id, cutoff),
+            ).fetchone()
+        return row is not None
+
+    def record_idempotency(self, idem_key: str, user_id: str):
+        with self.lock, self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO signal_idempotency (idem_key, user_id, created_at) VALUES (?, ?, ?)",
+                (idem_key, user_id, time.time()),
+            )
+
+    def cleanup_idempotency(self, max_age_secs: int = 300):
+        cutoff = time.time() - max_age_secs
+        with self.lock, self.conn:
+            self.conn.execute("DELETE FROM signal_idempotency WHERE created_at < ?", (cutoff,))
+
+    # ── Circuit Breaker ───────────────────────────────────────────────────────
+
+    def get_circuit_status(self, user_id: str) -> dict:
+        self.ensure_user_settings(user_id)
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT circuit_broken, circuit_broken_at FROM user_settings WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return {"broken": False, "broken_at": None}
+        return {"broken": bool(row["circuit_broken"]), "broken_at": row["circuit_broken_at"]}
+
+    def set_circuit_broken(self, user_id: str, broken: bool):
+        self.ensure_user_settings(user_id)
+        now = time.time() if broken else None
+        with self.lock, self.conn:
+            self.conn.execute(
+                "UPDATE user_settings SET circuit_broken = ?, circuit_broken_at = ?, updated_at = ? WHERE user_id = ?",
+                (1 if broken else 0, now, time.time(), user_id),
+            )
+
+    def count_consecutive_losses(self, user_id: str, window_secs: int = 3600) -> int:
+        cutoff = time.time() - window_secs
+        with self.lock:
+            rows = self.conn.execute(
+                """SELECT status FROM commands WHERE user_id = ? AND created_at > ?
+                   AND action IN ('BUY', 'SELL') ORDER BY created_at DESC LIMIT 20""",
+                (user_id, cutoff),
+            ).fetchall()
+        count = 0
+        for row in rows:
+            if row["status"] == "failed":
+                count += 1
+            else:
+                break  # stop at first non-failure
+        return count
+
+    def get_consecutive_loss_limit(self, user_id: str) -> int:
+        self.ensure_user_settings(user_id)
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT consecutive_loss_limit FROM user_settings WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return int(row["consecutive_loss_limit"]) if row and row["consecutive_loss_limit"] else 5
+
+    # ── Subscription Plans ────────────────────────────────────────────────────
+
+    def get_user_plan(self, user_id: str) -> str:
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT plan FROM user_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return row["plan"] if row else "free"
+
+    def is_plan_active(self, user_id: str) -> bool:
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT expires_at FROM user_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return True  # no subscription record = free plan = always active
+        return row["expires_at"] is None or row["expires_at"] > time.time()
+
+
 # Global store
 store = BridgeStore(DB_PATH)
+_start_time = time.time()
+_log_startup_summary()
 PENDING_DESKTOP_STATES = {}
 _pending_state_lock = RLock()
 
@@ -1884,6 +2208,17 @@ def _notification_worker():
         _notify_queue.task_done()
 
 threading.Thread(target=_notification_worker, daemon=True, name="notify-worker").start()
+
+
+def _idempotency_cleanup_worker():
+    while True:
+        time.sleep(300)  # 5 minutes
+        try:
+            store.cleanup_idempotency(max_age_secs=300)
+        except Exception as exc:
+            logger.warning(f"Idempotency cleanup error: {exc}")
+
+threading.Thread(target=_idempotency_cleanup_worker, daemon=True, name="idem-cleanup").start()
 
 
 _session_last_state: dict = {}      # user_id → bool (was connected)
@@ -2047,14 +2382,63 @@ def _log_request():
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Health check."""
+    """Structured health check with component status."""
+    uptime = int(time.time() - _start_time)
+
+    # DB check
+    db_ok = False
+    try:
+        with store.lock:
+            store.conn.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception:
+        pass
+
+    # Managed sessions
+    managed_sessions = len(session_manager._sessions)
+    connected_sessions = sum(1 for s in session_manager._sessions.values() if s.connected)
+
+    # Telegram check
+    telegram_ok = False
+    try:
+        from telegram_notifier import TelegramNotifier as _TN
+        telegram_ok = True
+    except Exception:
+        pass
+
+    # LLM check
+    llm_configured = False
+    try:
+        if _llm_processor and _llm_processor._llm and _llm_processor._llm.is_configured:
+            llm_configured = True
+    except Exception:
+        pass
+
+    # Active dashboard sessions (approximate via store)
+    try:
+        with store.lock:
+            active_sessions = store.conn.execute(
+                "SELECT COUNT(*) FROM users"
+            ).fetchone()[0]
+    except Exception:
+        active_sessions = 0
+
+    overall_status = "online" if db_ok else "degraded"
+
     return jsonify({
-        "status": "online",
+        "status": overall_status,
         "bridge": "cloud-bridge",
-        "db_path": DB_PATH,
-        "require_api_key": REQUIRE_API_KEY,
-        "public_base_url": os.getenv("BRIDGE_PUBLIC_URL", "NOT_SET"),
+        "version": APP_VERSION,
+        "uptime_secs": uptime,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "components": {
+            "db": {"status": "ok" if db_ok else "error"},
+            "managed_sessions": {"total": managed_sessions, "connected": connected_sessions},
+            "telegram": {"configured": telegram_ok},
+            "llm": {"configured": llm_configured},
+        },
+        "sessions": {"registered_users": active_sessions},
+        "require_api_key": REQUIRE_API_KEY,
     })
 
 
@@ -2077,6 +2461,15 @@ def register_page():
     password_confirm = request.form.get("password_confirm") or ""
     selected_scripts = request.form.getlist("scripts")
 
+    invite_code = (request.form.get("invite_code") or "").strip()
+    if not invite_code:
+        flash("An invite code is required to register.", "error")
+        return render_template("register.html", available_scripts=available_scripts), 400
+    valid, reason = store.validate_invite_code(invite_code)
+    if not valid:
+        flash(f"Invalid or already used invite code: {reason}", "error")
+        return render_template("register.html", available_scripts=available_scripts), 400
+
     if not user_id or len(user_id) < 3:
         flash("Username must be at least 3 characters.", "error")
         return render_template("register.html", available_scripts=available_scripts), 400
@@ -2093,13 +2486,11 @@ def register_page():
         flash("User already exists.", "error")
         return render_template("register.html", available_scripts=available_scripts), 400
 
-    if not selected_scripts:
-        selected_scripts = ["default-script"]
-
-    for script_code in selected_scripts:
-        store.assign_script_to_user(user_id, script_code)
+    store.consume_invite_code(invite_code, user_id)
+    store.assign_script_to_user(user_id, "default-script")
 
     session["dashboard_user"] = user_id
+    session.permanent = True
     session["dashboard_api_key"] = api_key
     flash("Registration successful.", "success")
     return redirect(url_for("dashboard_page"))
@@ -2145,6 +2536,10 @@ def google_login():
         return redirect(url_for("login_page"))
     redirect_uri = url_for("google_callback", _external=True)
     desktop_state = request.args.get("desktop_state", "").strip()
+    # Carry invite code through web OAuth flow via session
+    invite_code = request.args.get("invite_code", "").strip()
+    if invite_code:
+        session["pending_invite_code"] = invite_code
     return google_oauth.authorize_redirect(redirect_uri, state=desktop_state or None)
 
 
@@ -2173,7 +2568,22 @@ def google_callback():
     user_id = store.get_user_by_oauth("google", provider_id)
     api_key = None
     if not user_id:
+        # New registration — require a valid invite code
+        if is_desktop:
+            with _pending_state_lock:
+                pending_entry = PENDING_DESKTOP_STATES.get(state, {})
+            invite_code = pending_entry.get("invite_code", "") if isinstance(pending_entry, dict) else ""
+        else:
+            invite_code = session.pop("pending_invite_code", "")
+        if not invite_code:
+            flash("An invite code is required to create a new account. Please register at app.platalgo.com/register.", "error")
+            return redirect(url_for("register_page"))
+        valid, reason = store.validate_invite_code(invite_code)
+        if not valid:
+            flash(f"Invalid or already used invite code: {reason}", "error")
+            return redirect(url_for("register_page"))
         user_id, api_key = store.register_oauth_user("google", provider_id, email)
+        store.consume_invite_code(invite_code, user_id)
     else:
         api_key = store.regenerate_api_key(user_id)
 
@@ -2185,6 +2595,7 @@ def google_callback():
                                provider_name="Google", user_id=user_id)
 
     session["dashboard_user"] = user_id
+    session.permanent = True
     session["dashboard_api_key"] = api_key
     flash("Signed in with Google.", "success")
     return redirect(url_for("dashboard_page"))
@@ -2197,6 +2608,9 @@ def facebook_login():
         return redirect(url_for("login_page"))
     redirect_uri = url_for("facebook_callback", _external=True)
     desktop_state = request.args.get("desktop_state", "").strip()
+    invite_code = request.args.get("invite_code", "").strip()
+    if invite_code:
+        session["pending_invite_code"] = invite_code
     return facebook_oauth.authorize_redirect(redirect_uri, state=desktop_state or None)
 
 
@@ -2234,7 +2648,22 @@ def facebook_callback():
     user_id = store.get_user_by_oauth("facebook", provider_id)
     api_key = None
     if not user_id:
+        # New registration — require a valid invite code
+        if is_desktop:
+            with _pending_state_lock:
+                pending_entry = PENDING_DESKTOP_STATES.get(state, {})
+            invite_code = pending_entry.get("invite_code", "") if isinstance(pending_entry, dict) else ""
+        else:
+            invite_code = session.pop("pending_invite_code", "")
+        if not invite_code:
+            flash("An invite code is required to create a new account. Please register at app.platalgo.com/register.", "error")
+            return redirect(url_for("register_page"))
+        valid, reason = store.validate_invite_code(invite_code)
+        if not valid:
+            flash(f"Invalid or already used invite code: {reason}", "error")
+            return redirect(url_for("register_page"))
         user_id, api_key = store.register_oauth_user("facebook", provider_id, email)
+        store.consume_invite_code(invite_code, user_id)
     else:
         api_key = store.regenerate_api_key(user_id)
 
@@ -2246,6 +2675,7 @@ def facebook_callback():
                                provider_name="Facebook", user_id=user_id)
 
     session["dashboard_user"] = user_id
+    session.permanent = True
     session["dashboard_api_key"] = api_key
     flash("Signed in with Facebook.", "success")
     return redirect(url_for("dashboard_page"))
@@ -2261,12 +2691,14 @@ def auth_desktop_start():
         return jsonify({"error": "google oauth not configured"}), 503
     if provider == "facebook" and not facebook_oauth:
         return jsonify({"error": "facebook oauth not configured"}), 503
+    invite_code = (data.get("invite_code") or "").strip()
     state = f"desktop:{uuid.uuid4().hex}"
     login_route = "google_login" if provider == "google" else "facebook_login"
     auth_url = url_for(login_route, _external=True, desktop_state=state)
     expires_at = time.time() + DESKTOP_OAUTH_STATE_TTL
     with _pending_state_lock:
-        PENDING_DESKTOP_STATES[state] = expires_at
+        # Store expires_at and invite_code together so the callback can validate new registrations
+        PENDING_DESKTOP_STATES[state] = {"expires_at": expires_at, "invite_code": invite_code}
     return jsonify({"auth_url": auth_url, "state": state, "expires_in": DESKTOP_OAUTH_STATE_TTL})
 
 
@@ -2283,17 +2715,19 @@ def auth_desktop_consume(state: str):
             PENDING_DESKTOP_STATES.pop(state, None)
         return jsonify({"error": "expired"}), 410
 
-    pending_expires_at = None
+    pending_entry = None
     with _pending_state_lock:
-        pending_expires_at = PENDING_DESKTOP_STATES.get(state)
-        if pending_expires_at and time.time() > pending_expires_at:
-            PENDING_DESKTOP_STATES.pop(state, None)
-            pending_expires_at = None
-            expired = True
+        pending_entry = PENDING_DESKTOP_STATES.get(state)
+        if pending_entry:
+            expires_at = pending_entry["expires_at"] if isinstance(pending_entry, dict) else pending_entry
+            if time.time() > expires_at:
+                PENDING_DESKTOP_STATES.pop(state, None)
+                pending_entry = None
+                expired = True
 
     if expired:
         return jsonify({"error": "expired"}), 410
-    if pending_expires_at:
+    if pending_entry:
         return jsonify({"status": "pending"}), 202
     return jsonify({"error": "not found"}), 404
 
@@ -2308,6 +2742,8 @@ def dashboard_page():
     webhook_token = store.get_or_create_webhook_token(user_id)
     webhook_url = f"{get_public_base_url()}/signal/{webhook_token}"
     scripts = store.get_user_scripts(user_id)
+    circuit_status = store.get_circuit_status(user_id)
+    circuit_broken = circuit_status.get("broken", False)
     return render_template(
         "dashboard.html",
         dashboard=dashboard,
@@ -2315,6 +2751,7 @@ def dashboard_page():
         dashboard_api_key=dashboard_api_key,
         webhook_url=webhook_url,
         scripts=scripts,
+        circuit_broken=circuit_broken,
     )
 
 
@@ -2326,6 +2763,88 @@ def regenerate_api_key_route():
     session["dashboard_api_key"] = new_api_key
     flash("New API key generated. Store it now - it won't be shown again.", "success")
     return redirect(url_for("dashboard_page"))
+
+
+@app.route("/dashboard/rotate-webhook", methods=["POST"])
+@login_required
+def rotate_webhook_route():
+    user_id = session["dashboard_user"]
+    import secrets as _sec
+    new_token = _sec.token_urlsafe(24)
+    with store.lock, store.conn:
+        store.conn.execute(
+            "UPDATE users SET webhook_token = ? WHERE user_id = ?",
+            (new_token, user_id),
+        )
+    flash("Webhook URL rotated. Update your TradingView alerts.", "success")
+    return redirect(url_for("dashboard_page"))
+
+
+@app.route("/api/rotate-webhook", methods=["POST"])
+def api_rotate_webhook():
+    """API-key authenticated webhook rotation (used by Electron app)."""
+    user_id, err = require_user_id()
+    if err:
+        return err
+    auth_err = require_user_auth(user_id)
+    if auth_err:
+        return auth_err
+    import secrets as _sec
+    new_token = _sec.token_urlsafe(24)
+    with store.lock, store.conn:
+        store.conn.execute(
+            "UPDATE users SET webhook_token = ? WHERE user_id = ?",
+            (new_token, user_id),
+        )
+    root_url = get_public_base_url()
+    return jsonify({"status": "rotated", "webhook_url": f"{root_url}/signal/{new_token}"})
+
+
+@app.route("/dashboard/analytics", methods=["GET"])
+def dashboard_analytics():
+    """Signal performance analytics endpoint."""
+    user_id, err = require_user_id()
+    if err:
+        return err
+    auth_err = require_user_auth(user_id)
+    if auth_err:
+        return auth_err
+
+    with store.lock:
+        # Per-script performance breakdown
+        rows = store.conn.execute(
+            """
+            SELECT script_name,
+                   COUNT(*) AS total_signals,
+                   SUM(CASE WHEN status = 'executed' THEN 1 ELSE 0 END) AS executed,
+                   SUM(CASE WHEN status = 'failed'   THEN 1 ELSE 0 END) AS failed,
+                   MIN(created_at) AS first_signal,
+                   MAX(created_at) AS last_signal
+            FROM signals
+            WHERE user_id = ?
+            GROUP BY script_name
+            ORDER BY total_signals DESC
+            """,
+            (user_id,),
+        ).fetchall()
+
+        # Last 7-day daily volume
+        daily_rows = store.conn.execute(
+            """
+            SELECT DATE(created_at) AS day, COUNT(*) AS count
+            FROM signals
+            WHERE user_id = ?
+              AND created_at >= datetime('now', '-7 days')
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            (user_id,),
+        ).fetchall()
+
+    return jsonify({
+        "by_script": [dict(r) for r in rows],
+        "daily_volume": [dict(r) for r in daily_rows],
+    })
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -2440,7 +2959,176 @@ def admin_catalog_page():
         admin_user=session.get("admin_user"),
     )
 
+
+@app.route("/admin/invite-codes", methods=["GET", "POST"])
+@admin_login_required
+def admin_invite_codes_page():
+    if request.method == "POST":
+        action = (request.form.get("action") or "create").strip().lower()
+        code = (request.form.get("code") or "").strip()
+        if action == "create":
+            expires_hours_str = (request.form.get("expires_hours") or "").strip()
+            expires_hours = int(expires_hours_str) if expires_hours_str.isdigit() else None
+            new_code = store.create_invite_code(expires_hours=expires_hours)
+            flash(f"Invite code created: {new_code}", "success")
+        elif action == "delete" and code:
+            with store.lock:
+                store.conn.execute("DELETE FROM invite_codes WHERE code = ?", (code,))
+                store.conn.commit()
+            flash(f"Invite code deleted: {code}", "success")
+        return redirect(url_for("admin_invite_codes_page"))
+
+    codes = store.list_invite_codes()
+    return render_template(
+        "admin_invite_codes.html",
+        codes=codes,
+        admin_user=session.get("admin_user"),
+        now_ts=time.time(),
+    )
+
+
+@app.route("/admin/invite-codes/<code>", methods=["DELETE"])
+@admin_login_required
+def admin_invite_code_delete(code):
+    with store.lock:
+        store.conn.execute("DELETE FROM invite_codes WHERE code = ?", (code,))
+        store.conn.commit()
+    return jsonify({"status": "deleted", "code": code})
+
+
+@app.route("/admin/api/invite-codes", methods=["GET", "POST"])
+@admin_login_required
+def admin_api_invite_codes():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        expires_hours = data.get("expires_hours")
+        if expires_hours is not None:
+            expires_hours = int(expires_hours)
+        code = store.create_invite_code(expires_hours=expires_hours)
+        return jsonify({"status": "created", "code": code})
+    codes = store.list_invite_codes()
+    return jsonify({"invite_codes": codes})
+
+
+@app.route("/admin", methods=["GET"])
+@admin_login_required
+def admin_overview_page():
+    """Admin dashboard overview."""
+    try:
+        with store.lock:
+            user_count = store.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            relay_count = store.conn.execute("SELECT COUNT(*) FROM relays").fetchone()[0]
+            signal_count = store.conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+            managed_count = store.conn.execute(
+                "SELECT COUNT(*) FROM managed_accounts WHERE enabled=1"
+            ).fetchone()[0]
+    except Exception:
+        user_count = relay_count = signal_count = managed_count = 0
+    # Count live MT5 sessions
+    try:
+        all_sessions = session_manager.get_all_sessions_status()
+        active_mt5 = sum(1 for s in all_sessions.values() if s.get("connected"))
+    except Exception:
+        active_mt5 = 0
+    uptime = int(time.time() - _start_time)
+    return render_template(
+        "admin_dashboard.html",
+        admin_user=session.get("admin_user"),
+        user_count=user_count,
+        relay_count=relay_count,
+        signal_count=signal_count,
+        managed_count=managed_count,
+        active_mt5=active_mt5,
+        uptime_secs=uptime,
+        version=APP_VERSION,
+    )
+
+
+@app.route("/admin/users", methods=["GET"])
+@admin_login_required
+def admin_users_page():
+    users = store.get_all_users_summary()
+    # Attach live MT5 session status to each managed user
+    for u in users:
+        if u["managed"]:
+            status = session_manager.session_status(u["user_id"])
+            u["mt5_connected"] = status.get("connected", False)
+        else:
+            u["mt5_connected"] = None
+    return render_template("admin_users.html", users=users, admin_user=session.get("admin_user"))
+
+
+@app.route("/admin/users/<user_id>/restart-session", methods=["POST"])
+@admin_login_required
+def admin_restart_session(user_id: str):
+    """Force-restart a user's managed MT5 session."""
+    acct = store.get_managed_account(user_id)
+    if not acct:
+        flash(f"No managed account for {user_id}.", "error")
+        return redirect(url_for("admin_users_page"))
+    try:
+        password = decrypt_secret(acct["mt5_password_enc"])
+        session_manager.start_session(
+            user_id,
+            int(acct["mt5_login"]),
+            password,
+            acct["mt5_server"],
+            acct.get("mt5_path") or None,
+        )
+        flash(f"MT5 session restarted for {user_id}.", "success")
+    except Exception as exc:
+        flash(f"Restart failed: {exc}", "error")
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/<user_id>/regen-token", methods=["POST"])
+@admin_login_required
+def admin_regen_token(user_id: str):
+    """Generate a new webhook token for a user."""
+    import secrets as _secrets
+    new_token = _secrets.token_urlsafe(24)
+    with store.lock:
+        store.conn.execute("UPDATE users SET webhook_token = ? WHERE user_id = ?", (new_token, user_id))
+        store.conn.commit()
+    flash(f"New webhook token generated for {user_id}.", "success")
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/<user_id>/suspend", methods=["POST"])
+@admin_login_required
+def admin_suspend_user(user_id: str):
+    """Suspend or unsuspend a user account."""
+    action = (request.form.get("action") or "suspend").strip().lower()
+    suspended = (action == "suspend")
+    try:
+        with store.lock:
+            # Add suspended column if it doesn't exist (migration-safe)
+            try:
+                store.conn.execute("ALTER TABLE users ADD COLUMN suspended INTEGER DEFAULT 0")
+                store.conn.commit()
+            except Exception:
+                pass
+            store.conn.execute(
+                "UPDATE users SET suspended = ? WHERE user_id = ?",
+                (1 if suspended else 0, user_id),
+            )
+            store.conn.commit()
+        action_label = "suspended" if suspended else "unsuspended"
+        flash(f"User {user_id} {action_label}.", "success")
+    except Exception as e:
+        flash(f"Failed to update user: {e}", "error")
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/signals", methods=["GET"])
+@admin_login_required
+def admin_signals_page():
+    signals = store.get_recent_signal_logs(limit=100)
+    return render_template("admin_signals.html", signals=signals, admin_user=session.get("admin_user"))
+
+
 def _process_signal_for_user(user_id: str, data: dict):
+    import re as _re
     if data is None:
         raw_body = request.get_data(as_text=True).strip()
         if raw_body:
@@ -2450,8 +3138,64 @@ def _process_signal_for_user(user_id: str, data: dict):
                 return jsonify({"error": "invalid JSON payload"}), 400
     data = data or {}
 
-    action = data.get("action", "").upper()
-    symbol = data.get("symbol", "")
+    # Idempotency check
+    idem_key = (data.get("idempotency_key") or "").strip()
+    if idem_key:
+        if store.check_idempotency(idem_key, user_id):
+            return jsonify({"status": "duplicate", "message": "signal already processed — idempotency key matched"}), 200
+        store.record_idempotency(idem_key, user_id)
+
+    action = (data.get("action") or "").strip().upper()
+    symbol = (data.get("symbol") or "").strip().upper()[:20]
+
+    # Validate action
+    if action not in ("BUY", "SELL", "CLOSE", "CLOSE_ALL", "CLOSE_BUY", "CLOSE_SELL"):
+        return jsonify({"error": f"invalid action: {action}. Must be BUY, SELL, or CLOSE"}), 400
+
+    # Backtest skip
+    if data.get("is_backtest") or data.get("backtest"):
+        return jsonify({"status": "skipped", "reason": "backtest signal"}), 200
+
+    # Validate symbol
+    if action in ("BUY", "SELL") and not symbol:
+        return jsonify({"error": "missing symbol"}), 400
+    if symbol and len(symbol) > 20:
+        return jsonify({"error": "symbol too long (max 20 chars)"}), 400
+
+    # Sanitize comment
+    comment = (data.get("comment") or "").strip()
+    comment = _re.sub(r'[^a-zA-Z0-9 \-]', '', comment)[:100]
+
+    # Sanitize script_name
+    script_name = str(
+        data.get("script_name") or data.get("script") or data.get("strategy") or "Uncategorized"
+    ).strip()
+    script_name = _re.sub(r'[^a-zA-Z0-9 \-_]', '', script_name)[:100] or "Uncategorized"
+
+    sl = data.get("sl", data.get("stop_loss"))
+    tp = data.get("tp", data.get("take_profit"))
+
+    # Validate SL/TP if provided
+    if sl is not None:
+        try:
+            sl = float(sl)
+            if sl <= 0:
+                return jsonify({"error": "sl must be positive"}), 400
+        except (TypeError, ValueError):
+            sl = None
+
+    if tp is not None:
+        try:
+            tp = float(tp)
+            if tp <= 0:
+                return jsonify({"error": "tp must be positive"}), 400
+        except (TypeError, ValueError):
+            tp = None
+
+    # Circuit breaker check
+    circuit = store.get_circuit_status(user_id)
+    if circuit.get("broken"):
+        return jsonify({"error": "Trading paused: circuit breaker active. Visit your dashboard to reset.", "code": "CIRCUIT_BREAKER"}), 403
 
     # Support lot_size_pct (percentage of equity) or legacy lot_size (absolute lots)
     lot_size_pct_raw = data.get("lot_size_pct")
@@ -2469,23 +3213,28 @@ def _process_signal_for_user(user_id: str, data: dict):
             size = float(data.get("size", data.get("lot_size", 0.1)))
         except (TypeError, ValueError):
             size = 0.1
-    sl = data.get("sl", data.get("stop_loss"))
-    tp = data.get("tp", data.get("take_profit"))
+
     # Section 2: pips-based SL/TP defaults (passed from Telegram bot when signal has no absolute SL/TP)
     sl_pips = data.get("sl_pips")
     tp_pips = data.get("tp_pips")
-    script_name = str(
-        data.get("script_name")
-        or data.get("script")
-        or data.get("strategy")
-        or "Uncategorized"
-    ).strip() or "Uncategorized"
-
-    if not action or not symbol:
-        return jsonify({"error": "missing action or symbol"}), 400
 
     settings = store.get_user_settings(user_id)
     max_lot_size = float(settings.get("max_lot_size") or 0.5)
+
+    # Apply user/system defaults for pips
+    if action in ("BUY", "SELL"):
+        user_defaults = store.get_user_defaults(user_id)
+        if sl is None and sl_pips is None:
+            default_sl = user_defaults.get("default_sl_pips") or SYSTEM_DEFAULT_SL_PIPS
+            sl_pips = default_sl
+        if tp is None and tp_pips is None:
+            default_tp = user_defaults.get("default_tp_pips") or SYSTEM_DEFAULT_TP_PIPS
+            tp_pips = default_tp
+        # Apply user default lot size if not specified
+        if (lot_size_pct_raw is None) and size == 0.1:
+            if user_defaults.get("default_lot_size"):
+                size = float(user_defaults["default_lot_size"])
+
     # Only enforce max-lot check for absolute lot sizes (positive).
     # Negative size = percentage mode — the relay/worker converts to lots and enforces its own limits.
     if action in ("BUY", "SELL") and size > 0 and size > max_lot_size:
@@ -2499,7 +3248,7 @@ def _process_signal_for_user(user_id: str, data: dict):
         recent_count = store.count_recent_script_commands(user_id, script_name, limit_window)
         if recent_count >= limit_count:
             msg = (
-                f"⚠️ Circuit breaker: script '{script_name}' hit {recent_count} trades in "
+                f"⚠️ Rate limit: script '{script_name}' hit {recent_count} trades in "
                 f"{limit_window}s. Execution paused."
             )
             notify_user(user_id, msg)
@@ -2534,10 +3283,17 @@ def _process_signal_for_user(user_id: str, data: dict):
 
     # Create command and enqueue
     cmd = Command(user_id, target_relay, action, symbol, size, sl, tp, script_name=script_name)
+    cmd.magic = store.get_user_magic_number(user_id)
+    cmd.max_lot_size = max_lot_size
     store.enqueue(cmd)
 
     if managed_mode:
-        cmd_dict = {"action": action, "symbol": symbol, "size": size or 0.1, "sl": sl, "tp": tp}
+        magic = store.get_user_magic_number(user_id)
+        cmd_dict = {
+            "action": action, "symbol": symbol, "size": size or 0.1, "sl": sl, "tp": tp,
+            "magic": magic,
+            "max_lot_size": max_lot_size,
+        }
         if sl_pips and sl is None:
             cmd_dict["sl_pips"] = float(sl_pips)
         if tp_pips and tp is None:
@@ -2550,6 +3306,18 @@ def _process_signal_for_user(user_id: str, data: dict):
             notify_user(user_id, f"🟢 {action} {size} {symbol} executed.")
         else:
             notify_user(user_id, f"🔴 Trade failed: {result.get('error_message') or result.get('error') or 'Unknown error'}")
+            # Circuit breaker: check consecutive losses
+            if action in ("BUY", "SELL"):
+                losses = store.count_consecutive_losses(user_id)
+                limit = store.get_consecutive_loss_limit(user_id)
+                if losses >= limit:
+                    store.set_circuit_broken(user_id, True)
+                    cb_msg = f"🔴 Circuit breaker activated: {limit} consecutive trade failures. Trading paused. Visit dashboard to reset."
+                    try:
+                        telegram_manager.send_session_notification(user_id, cb_msg)
+                    except Exception:
+                        pass
+                    notify_user(user_id, cb_msg)
         return jsonify({
             "status": result.get("status", "failed"),
             "mode": "managed-vps",
@@ -2605,6 +3373,10 @@ def receive_signal_by_token(webhook_token):
     if not user_id:
         return jsonify({"error": "invalid webhook token"}), 404
 
+    # Rate-limit per resolved user_id (same budget as the API-key endpoint)
+    if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
+        return jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429
+
     data = request.get_json(silent=True)
     return _process_signal_for_user(user_id, data)
 
@@ -2639,6 +3411,40 @@ def relay_register():
         "heartbeat_interval": 10,  # seconds
         "poll_timeout": 5,  # seconds
     }), 201
+
+
+@app.route("/account/register", methods=["POST"])
+def account_register():
+    """
+    Create a new user account from the desktop app.
+    POST /account/register
+    Body: {user_id, password, invite_code}
+    Returns: {status, user_id, api_key}
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or "").strip()
+    password = data.get("password") or ""
+    invite_code = (data.get("invite_code") or "").strip()
+
+    if not user_id or len(user_id) < 3:
+        return jsonify({"error": "Username must be at least 3 characters"}), 400
+    if not password or len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if not invite_code:
+        return jsonify({"error": "An invite code is required"}), 400
+
+    valid, reason = store.validate_invite_code(invite_code)
+    if not valid:
+        return jsonify({"error": f"Invalid or already used invite code: {reason}"}), 400
+
+    try:
+        api_key = store.register_dashboard_user(user_id, password)
+    except ValueError:
+        return jsonify({"error": "Username already taken"}), 409
+
+    store.consume_invite_code(invite_code, user_id)
+    store.assign_script_to_user(user_id, "default-script")
+    return jsonify({"status": "ok", "user_id": user_id, "api_key": api_key}), 201
 
 
 @app.route("/relay/login", methods=["POST"])
@@ -3260,9 +4066,42 @@ def dashboard_summary_login():
     dashboard = store.get_dashboard_data(user_id)
     webhook_token = store.get_or_create_webhook_token(user_id)
     root_url = get_public_base_url()
+
+    # Retrieve stored api_key for this user
+    with store.lock:
+        row = store.conn.execute(
+            "SELECT api_key FROM users WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    stored_api_key = row["api_key"] if row else ""
+
+    # Managed connection / broker status
+    managed_connected = False
+    broker_connected = False
+    if store.is_managed_enabled(user_id):
+        try:
+            ping_result = session_manager.execute(user_id, {"_action": "ping"})
+            managed_connected = ping_result.get("connected", False)
+            broker_connected = managed_connected
+        except Exception:
+            pass
+
+    # Circuit breaker status
+    circuit_status = store.get_circuit_status(user_id)
+    circuit_broken = circuit_status.get("broken", False)
+
+    # User plan & magic number
+    plan = store.get_user_plan(user_id)
+    magic_number = store.get_user_magic_number(user_id)
+
     return jsonify({
         "dashboard": dashboard,
         "webhook_url": f"{root_url}/signal/{webhook_token}",
+        "api_key": stored_api_key,
+        "managed_connected": managed_connected,
+        "broker_connected": broker_connected,
+        "circuit_broken": circuit_broken,
+        "magic_number": magic_number,
+        "plan": plan,
         "settings": store.get_user_settings(user_id),
     })
 
@@ -3300,9 +4139,193 @@ def panic_close_all():
     notify_user(user_id, "⚠️ Panic close-all queued to relay")
     return jsonify({"status": "queued", "command_id": cmd.id})
 
+
+# ==================== Analytics (Section 3) ====================
+
+@app.route("/api/analytics", methods=["GET"])
+def analytics_api():
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    days = min(int(request.args.get("days", 30)), 90)
+    cutoff = time.time() - days * 86400
+
+    with store.lock:
+        total = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND created_at > ?",
+            (user_id, cutoff),
+        ).fetchone()[0]
+        executed = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND created_at > ? AND status = 'executed'",
+            (user_id, cutoff),
+        ).fetchone()[0]
+        failed = store.conn.execute(
+            "SELECT COUNT(*) FROM commands WHERE user_id = ? AND created_at > ? AND status = 'failed'",
+            (user_id, cutoff),
+        ).fetchone()[0]
+        by_script = store.conn.execute(
+            """SELECT script_name, COUNT(*) as cnt,
+               SUM(CASE WHEN status='executed' THEN 1 ELSE 0 END) as ok,
+               SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as fail
+               FROM commands WHERE user_id = ? AND created_at > ?
+               GROUP BY script_name ORDER BY cnt DESC LIMIT 10""",
+            (user_id, cutoff),
+        ).fetchall()
+
+    return jsonify({
+        "period_days": days,
+        "total_signals": total,
+        "executed": executed,
+        "failed": failed,
+        "success_rate": round(executed / total * 100, 1) if total else 0,
+        "by_script": [{"script": r["script_name"], "total": r["cnt"], "executed": r["ok"], "failed": r["fail"]} for r in by_script],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+# ==================== Trade Export (Section 6) ====================
+
+@app.route("/api/export/trades", methods=["GET"])
+def export_trades():
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    days = min(int(request.args.get("days", 30)), 365)
+    cutoff = time.time() - days * 86400
+
+    with store.lock:
+        rows = store.conn.execute(
+            """SELECT action, symbol, size, sl, tp, script_name, status, created_at, result_json
+               FROM commands WHERE user_id = ? AND created_at > ?
+               ORDER BY created_at DESC""",
+            (user_id, cutoff),
+        ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "action", "symbol", "size", "sl", "tp", "script", "status", "result"])
+    for row in rows:
+        ts = datetime.fromtimestamp(row["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        result = ""
+        if row["result_json"]:
+            try:
+                r = json.loads(row["result_json"])
+                result = r.get("error_message") or r.get("error") or r.get("status") or ""
+            except Exception:
+                pass
+        writer.writerow([ts, row["action"], row["symbol"], row["size"], row["sl"], row["tp"],
+                         row["script_name"], row["status"], result])
+
+    output.seek(0)
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=trades_{user_id}_{days}d.csv"},
+    )
+
+
+@app.route("/dashboard/export-trades", methods=["GET"])
+@login_required
+def dashboard_export_trades():
+    """Session-authenticated trade journal CSV export from web dashboard."""
+    user_id = session["dashboard_user"]
+    days = min(int(request.args.get("days", 30)), 365)
+    cutoff = time.time() - days * 86400
+
+    with store.lock:
+        rows = store.conn.execute(
+            """SELECT action, symbol, size, sl, tp, script_name, status, created_at, result_json
+               FROM commands WHERE user_id = ? AND created_at > ?
+               ORDER BY created_at DESC""",
+            (user_id, cutoff),
+        ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "action", "symbol", "size", "sl", "tp", "script", "status", "result"])
+    for row in rows:
+        ts = datetime.fromtimestamp(row["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        result = ""
+        if row["result_json"]:
+            try:
+                r = json.loads(row["result_json"])
+                result = r.get("error_message") or r.get("error") or r.get("status") or ""
+            except Exception:
+                pass
+        writer.writerow([ts, row["action"], row["symbol"], row["size"], row["sl"], row["tp"],
+                         row["script_name"], row["status"], result])
+
+    output.seek(0)
+    from flask import Response as _Resp
+    return _Resp(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=trades_{user_id}_{days}d.csv"},
+    )
+
+
+# ==================== Circuit Breaker Reset (Section 7) ====================
+
+@app.route("/api/circuit-breaker/reset", methods=["POST"])
+def reset_circuit_breaker():
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+    store.set_circuit_broken(user_id, False)
+    return jsonify({"status": "reset", "message": "circuit breaker cleared"})
+
+
+@app.route("/dashboard/reset-circuit-breaker", methods=["POST"])
+@login_required
+def dashboard_reset_circuit_breaker():
+    """Session-authenticated circuit breaker reset from web dashboard."""
+    user_id = session["dashboard_user"]
+    store.set_circuit_broken(user_id, False)
+    flash("Circuit breaker reset. Trading is now enabled.", "success")
+    return redirect(url_for("dashboard_page"))
+
+
+# ==================== MT5 Account Info (Section 8) ====================
+
+@app.route("/api/mt5/account-info", methods=["GET"])
+def mt5_account_info():
+    user_id, err = resolve_user_from_request()
+    if err is not None:
+        return err
+
+    managed_mode = store.is_managed_enabled(user_id)
+    if not managed_mode:
+        return jsonify({"error": "managed mode not enabled"}), 400
+
+    try:
+        result = session_manager.execute(user_id, {"action": "ACCOUNT_INFO"})
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ==================== Terms & Privacy (Section 9) ====================
+
+@app.route("/terms", methods=["GET"])
+def terms_page():
+    return render_template("terms.html")
+
+
+@app.route("/privacy", methods=["GET"])
+def privacy_page():
+    return render_template("privacy.html")
+
+
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "endpoint not found"}), 404
+
+@app.errorhandler(429)
+def rate_limited(e):
+    return jsonify({"error": "too many requests — slow down", "retry_after": getattr(e, "retry_after", None)}), 429
 
 @app.errorhandler(500)
 def server_error(e):

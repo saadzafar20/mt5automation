@@ -233,6 +233,11 @@
 
       <form id="registerForm" method="POST" action="/register">
         <div class="form-group">
+          <label class="form-label" for="invite_code">Invite Code</label>
+          <input class="form-input" type="text" id="invite_code" name="invite_code" placeholder="Enter your invite code" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
           <label class="form-label" for="user_id">Username</label>
           <input class="form-input" type="text" id="user_id" name="user_id" placeholder="your username" required autocomplete="username">
         </div>
@@ -276,20 +281,6 @@
             </button>
           </div>
         </div>
-
-        {% if available_scripts %}
-        <div class="form-group">
-          <label class="scripts-label">Scripts Purchased</label>
-          <div class="scripts-box">
-            {% for script in available_scripts %}
-              <label class="script-item">
-                <input type="checkbox" name="scripts" value="{{ script.script_code }}" />
-                {{ script.script_name }} <span class="script-code">({{ script.script_code }})</span>
-              </label>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
 
         <button type="submit" class="btn-submit" id="submitBtn">
           Create Account
