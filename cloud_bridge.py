@@ -157,10 +157,13 @@ RELAY_MANIFEST_URL = os.getenv("RELAY_MANIFEST_URL", "")
 _manifest_cache: dict = {"data": None, "ts": 0.0}
 PUBLIC_BASE_URL = os.getenv("BRIDGE_PUBLIC_URL", "").rstrip("/")
 DESKTOP_OAUTH_STATE_TTL = max(180, min(int(os.getenv("DESKTOP_OAUTH_STATE_TTL", "600")), 900))
+LLM_PATTERN_MIN_CONFIDENCE = float(os.getenv("LLM_PATTERN_MIN_CONFIDENCE", "0.9"))
+LLM_PATTERN_AUTO_APPROVE = os.getenv("LLM_PATTERN_AUTO_APPROVE", "false").lower() == "true"
 
 app.secret_key = SESSION_SECRET
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("CLOUD_BRIDGE_DEBUG", "false").lower() != "true"
 # Section 9: session expires after 24 hours of inactivity
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
 
@@ -737,6 +740,26 @@ class BridgeStore:
                     PRIMARY KEY (idem_key, user_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS learned_parse_patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    normalized_template TEXT NOT NULL,
+                    regex_pattern TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    field_map_json TEXT,
+                    source_confidence REAL NOT NULL,
+                    min_confidence REAL NOT NULL,
+                    approved INTEGER NOT NULL DEFAULT 0,
+                    usage_count INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    approved_at REAL,
+                    last_used_at REAL,
+                    sample_text TEXT,
+                    UNIQUE(user_id, normalized_template, action, symbol),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS user_subscriptions (
                     user_id TEXT PRIMARY KEY,
                     plan TEXT NOT NULL DEFAULT 'free',
@@ -752,6 +775,7 @@ class BridgeStore:
                 CREATE INDEX IF NOT EXISTS idx_tg_signal_created ON telegram_signal_log(created_at);
                 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_desktop_tokens(expires_at);
                 CREATE INDEX IF NOT EXISTS idx_signal_idem_created ON signal_idempotency(created_at);
+                CREATE INDEX IF NOT EXISTS idx_learned_patterns_user_approved ON learned_parse_patterns(user_id, approved, usage_count);
                 """
             )
 
@@ -1334,6 +1358,19 @@ class BridgeStore:
             row = self.conn.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,)).fetchone()
         return row is not None
 
+    def is_user_suspended(self, user_id: str) -> bool:
+        """Return True when the user account is flagged as suspended."""
+        with self.lock:
+            try:
+                row = self.conn.execute(
+                    "SELECT suspended FROM users WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                # Column may not exist on legacy databases yet.
+                return False
+        return bool(row and row["suspended"])
+
     def verify_api_key(self, user_id: str, api_key: str) -> bool:
         with self.lock:
             row = self.conn.execute("SELECT api_key_hash FROM users WHERE user_id = ?", (user_id,)).fetchone()
@@ -1628,6 +1665,215 @@ class BridgeStore:
                 params,
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── Learned LLM Parse Patterns ───────────────────────────────────────
+
+    def add_llm_learned_pattern(
+        self,
+        user_id: str,
+        raw_text: str,
+        action: str,
+        symbol: str,
+        entry,
+        sl,
+        tp_list,
+        source_confidence: float,
+        min_confidence: float,
+        auto_approve: bool,
+    ) -> int | None:
+        """Persist a learned parse pattern from high-confidence LLM output."""
+        if not (user_id and raw_text and action and symbol):
+            return None
+        if source_confidence < min_confidence:
+            return None
+
+        from telegram_signal_parser import build_learned_regex  # local import to avoid cycles
+        cleaned, normalized_template, regex_pattern = build_learned_regex(raw_text)
+
+        # Build index mapping from observed numeric literals to semantic fields.
+        num_tokens = [float(x) for x in _re_top.findall(r"\d+(?:\.\d+)?", cleaned)]
+        used_idx = set()
+
+        def _map_index(val):
+            if val is None:
+                return None
+            try:
+                target = float(val)
+            except (TypeError, ValueError):
+                return None
+            best_i = None
+            best_delta = None
+            for i, n in enumerate(num_tokens):
+                if i in used_idx:
+                    continue
+                delta = abs(n - target)
+                if best_delta is None or delta < best_delta:
+                    best_delta = delta
+                    best_i = i
+            if best_i is not None:
+                used_idx.add(best_i)
+            return best_i
+
+        field_map = {
+            "entry": _map_index(entry),
+            "sl": _map_index(sl),
+            "tp1": _map_index(tp_list[0] if isinstance(tp_list, list) and tp_list else None),
+        }
+
+        now = time.time()
+        with self.lock, self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO learned_parse_patterns (
+                    user_id, normalized_template, regex_pattern, action, symbol,
+                    field_map_json, source_confidence, min_confidence, approved,
+                    created_at, approved_at, sample_text
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, normalized_template, action, symbol)
+                DO UPDATE SET
+                    regex_pattern=excluded.regex_pattern,
+                    field_map_json=excluded.field_map_json,
+                    source_confidence=excluded.source_confidence,
+                    min_confidence=excluded.min_confidence,
+                    sample_text=excluded.sample_text,
+                    approved=CASE WHEN learned_parse_patterns.approved = 1 THEN 1 ELSE excluded.approved END,
+                    approved_at=CASE
+                        WHEN learned_parse_patterns.approved = 1 THEN learned_parse_patterns.approved_at
+                        WHEN excluded.approved = 1 THEN excluded.approved_at
+                        ELSE learned_parse_patterns.approved_at
+                    END
+                """,
+                (
+                    user_id,
+                    normalized_template,
+                    regex_pattern,
+                    action,
+                    symbol,
+                    json.dumps(field_map),
+                    float(source_confidence),
+                    float(min_confidence),
+                    1 if auto_approve else 0,
+                    now,
+                    now if auto_approve else None,
+                    raw_text[:500],
+                ),
+            )
+            row = self.conn.execute(
+                """
+                SELECT id FROM learned_parse_patterns
+                WHERE user_id = ? AND normalized_template = ? AND action = ? AND symbol = ?
+                """,
+                (user_id, normalized_template, action, symbol),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
+    def list_learned_patterns(self, user_id: str | None = None, include_unapproved: bool = True, limit: int = 200) -> list[dict]:
+        where = []
+        params: list = []
+        if user_id:
+            where.append("user_id = ?")
+            params.append(user_id)
+        if not include_unapproved:
+            where.append("approved = 1")
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        params.append(max(1, min(int(limit), 500)))
+        with self.lock:
+            rows = self.conn.execute(
+                f"""
+                SELECT id, user_id, normalized_template, regex_pattern, action, symbol,
+                       field_map_json, source_confidence, min_confidence, approved,
+                       usage_count, created_at, approved_at, last_used_at, sample_text
+                FROM learned_parse_patterns
+                {where_sql}
+                ORDER BY approved DESC, usage_count DESC, created_at DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["approved"] = bool(d["approved"])
+            out.append(d)
+        return out
+
+    def set_learned_pattern_approved(self, pattern_id: int, approved: bool) -> bool:
+        now = time.time() if approved else None
+        with self.lock, self.conn:
+            cur = self.conn.execute(
+                "UPDATE learned_parse_patterns SET approved = ?, approved_at = ? WHERE id = ?",
+                (1 if approved else 0, now, int(pattern_id)),
+            )
+        return cur.rowcount > 0
+
+    def match_learned_pattern(self, user_id: str, raw_text: str):
+        """Return parsed signal dict from approved learned patterns, or None."""
+        if not user_id or not raw_text:
+            return None
+        from telegram_signal_parser import clean_text  # local import to avoid cycles
+        cleaned = clean_text(raw_text)
+
+        with self.lock:
+            rows = self.conn.execute(
+                """
+                SELECT id, action, symbol, regex_pattern, field_map_json, min_confidence
+                FROM learned_parse_patterns
+                WHERE user_id = ? AND approved = 1
+                ORDER BY usage_count DESC, created_at DESC
+                LIMIT 200
+                """,
+                (user_id,),
+            ).fetchall()
+
+        for row in rows:
+            try:
+                m = _re_top.match(row["regex_pattern"], cleaned)
+            except Exception:
+                continue
+            if not m:
+                continue
+
+            captures = []
+            for g in m.groups():
+                try:
+                    captures.append(float(g))
+                except (TypeError, ValueError):
+                    captures.append(None)
+            fmap = {}
+            try:
+                fmap = json.loads(row["field_map_json"] or "{}")
+            except Exception:
+                fmap = {}
+
+            def _cap(name):
+                idx = fmap.get(name)
+                if isinstance(idx, int) and 0 <= idx < len(captures):
+                    return captures[idx]
+                return None
+
+            entry = _cap("entry")
+            sl = _cap("sl")
+            tp1 = _cap("tp1")
+            tp_list = [tp1] if tp1 is not None else []
+
+            with self.lock, self.conn:
+                self.conn.execute(
+                    "UPDATE learned_parse_patterns SET usage_count = usage_count + 1, last_used_at = ? WHERE id = ?",
+                    (time.time(), row["id"]),
+                )
+
+            return {
+                "action": row["action"],
+                "symbol": row["symbol"],
+                "entry": entry,
+                "sl": sl,
+                "tp_list": tp_list,
+                "confidence": max(float(row["min_confidence"] or 0.0), 0.9),
+                "source": "learned-pattern",
+                "pattern_id": row["id"],
+            }
+
+        return None
 
     def get_channel_open_symbols(self, user_id: str, channel_id: str) -> list[str]:
         """
@@ -2203,6 +2449,25 @@ def _close_channel_positions(user_id: str, channel_id: str) -> dict:
 _tg_bot_token = os.getenv("TELEGRAM_SIGNAL_BOT_TOKEN", "").strip()
 _openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
 
+
+def _learn_pattern_from_llm(user_id: str, raw_text: str, llm_result, auto_approve: bool):
+    """Persist high-confidence LLM parse output as a reusable pattern."""
+    try:
+        store.add_llm_learned_pattern(
+            user_id=user_id,
+            raw_text=raw_text,
+            action=llm_result.action,
+            symbol=llm_result.symbol,
+            entry=llm_result.entry,
+            sl=llm_result.sl,
+            tp_list=llm_result.tp_list or [],
+            source_confidence=float(llm_result.confidence or 0.0),
+            min_confidence=LLM_PATTERN_MIN_CONFIDENCE,
+            auto_approve=bool(auto_approve),
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to store learned LLM pattern for {user_id}: {exc}")
+
 # Initialize LLM fallback if OpenAI key is configured
 _llm_processor = None
 if _openai_api_key:
@@ -2212,6 +2477,9 @@ if _openai_api_key:
         llm=_llm,
         execute_callback=_process_signal_for_telegram,
         confidence_threshold=0.5,
+        learning_callback=_learn_pattern_from_llm,
+        learning_confidence_threshold=LLM_PATTERN_MIN_CONFIDENCE,
+        learning_auto_approve=LLM_PATTERN_AUTO_APPROVE,
     )
     logger.info("LLM fallback configured (GPT-4o-mini)")
 
@@ -2542,6 +2810,9 @@ def require_user_id():
 
 
 def require_user_auth(user_id: str):
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
+
     api_key = (request.headers.get("X-API-Key") or "").strip()
     relay_token = (request.headers.get("X-Relay-Token") or "").strip()
     relay_id = (request.headers.get("X-Relay-ID") or "").strip()
@@ -2579,7 +2850,10 @@ def resolve_user_from_request() -> tuple:
     """
     # Try session first (browser dashboard)
     if "dashboard_user" in session:
-        return session["dashboard_user"], None
+        session_user = session["dashboard_user"]
+        if store.is_user_suspended(session_user):
+            return None, (jsonify({"error": "account suspended"}), 403)
+        return session_user, None
 
     # Try header auth (API / desktop app)
     user_id = (request.headers.get("X-User-ID") or "").strip()
@@ -3321,6 +3595,35 @@ def admin_api_invite_codes():
     return jsonify({"invite_codes": codes})
 
 
+@app.route("/admin/api/learned-patterns", methods=["GET"])
+@admin_login_required
+def admin_api_learned_patterns():
+    user_id = (request.args.get("user_id") or "").strip() or None
+    include_unapproved = (request.args.get("include_unapproved") or "true").lower() != "false"
+    limit_raw = request.args.get("limit", "200")
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        limit = 200
+    patterns = store.list_learned_patterns(
+        user_id=user_id,
+        include_unapproved=include_unapproved,
+        limit=limit,
+    )
+    return jsonify({"patterns": patterns})
+
+
+@app.route("/admin/api/learned-patterns/<int:pattern_id>/approve", methods=["POST"])
+@admin_login_required
+def admin_api_learned_pattern_approve(pattern_id: int):
+    data = request.get_json(silent=True) or {}
+    approved = bool(data.get("approved", True))
+    ok = store.set_learned_pattern_approved(pattern_id, approved)
+    if not ok:
+        return jsonify({"error": "pattern not found"}), 404
+    return jsonify({"status": "ok", "pattern_id": pattern_id, "approved": approved})
+
+
 @app.route("/admin", methods=["GET"])
 @admin_login_required
 def admin_overview_page():
@@ -3721,6 +4024,15 @@ def receive_signal_by_token(webhook_token):
     user_id = store.get_user_id_by_webhook_token((webhook_token or "").strip())
     if not user_id:
         return jsonify({"error": "invalid webhook token"}), 404
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
+
+    # Rate-limit per resolved user_id (same budget as the API-key endpoint)
+    if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
+        from flask import make_response as _mkr
+        _resp = _mkr(jsonify({"error": "rate limit exceeded", "code": "RATE_LIMIT"}), 429)
+        _resp.headers["Retry-After"] = "60"
+        return _resp
 
     # Rate-limit per resolved user_id (same budget as the API-key endpoint)
     if not _rate_check(f"signal:{user_id}", max_calls=10, window_secs=60):
@@ -3807,14 +4119,30 @@ def relay_login():
     POST /relay/login
     Body: {user_id, password, relay_id?, relay_type?}
     """
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not _rate_check(f"relay_login:ip:{client_ip}", max_calls=10, window_secs=60):
+        resp = jsonify({"error": "too many login attempts. please wait a moment."})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = "60"
+        return resp
+
     data = request.get_json(silent=True) or {}
     user_id = (data.get("user_id") or "").strip()
     password = data.get("password") or ""
     relay_id = (data.get("relay_id") or f"relay-{uuid.uuid4().hex[:8]}").strip()
     relay_type = (data.get("relay_type") or "self-hosted").strip()
 
+    if user_id and not _rate_check(f"relay_login:user:{user_id}", max_calls=6, window_secs=60):
+        resp = jsonify({"error": "too many login attempts for this user. please wait a moment."})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = "60"
+        return resp
+
     if not user_id or not password:
         return jsonify({"error": "missing user_id or password"}), 400
+
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
 
     if not store.verify_dashboard_login(user_id, password):
         return jsonify({"error": "invalid credentials"}), 401
@@ -3941,6 +4269,51 @@ def managed_status():
         "connected": session.get("connected", False),
         "updated_at": account.get("updated_at") if account else None,
     })
+
+
+@app.route("/relay/managed/disable", methods=["POST"])
+def relay_managed_disable():
+    """
+    Disable managed VPS execution for a user.
+    Auth: X-User-ID + (X-API-Key or valid relay token),
+          or dashboard credentials in body {user_id, password}.
+    """
+    user_id, err = require_user_id()
+    if err:
+        # Fallback for clients that may only send user_id in body
+        data = request.get_json(silent=True) or {}
+        body_user = (data.get("user_id") or "").strip()
+        if not body_user:
+            return err
+        user_id = body_user
+    else:
+        data = request.get_json(silent=True) or {}
+
+    body_user = (data.get("user_id") or "").strip()
+    if body_user and body_user != user_id:
+        return jsonify({"error": "user mismatch"}), 400
+
+    if not store.user_exists(user_id):
+        return jsonify({"error": "user not found"}), 404
+
+    auth_err = require_user_auth(user_id)
+    if auth_err is not None:
+        # Allow password-based fallback for dashboard clients.
+        password = data.get("password") or ""
+        if not password or not store.verify_dashboard_login(user_id, password):
+            return auth_err
+
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
+
+    # Idempotent disable.
+    store.admin_stop_managed_session(user_id)
+    session_manager.stop_session(user_id)
+    return jsonify({
+        "status": "managed_disabled",
+        "user_id": user_id,
+        "managed_execution": False,
+    }), 200
 
 @app.route("/relay/heartbeat", methods=["POST"])
 def relay_heartbeat():
@@ -4412,7 +4785,7 @@ def telegram_signals_api():
 
 @app.route("/api/telegram/test-parse", methods=["POST"])
 def telegram_test_parse_api():
-    _, err = resolve_user_from_request()
+    user_id, err = resolve_user_from_request()
     if err is not None:
         return err
     data = request.get_json(silent=True) or {}
@@ -4420,6 +4793,21 @@ def telegram_test_parse_api():
     use_llm = data.get("use_llm", False)
     if not text:
         return jsonify({"error": "text is required"}), 400
+
+    learned = store.match_learned_pattern(user_id, text)
+    if learned:
+        return jsonify({
+            "action": learned.get("action"),
+            "symbol": learned.get("symbol"),
+            "entry": learned.get("entry"),
+            "sl": learned.get("sl"),
+            "tp_list": learned.get("tp_list") or [],
+            "confidence": learned.get("confidence", 0.9),
+            "skip_reason": None,
+            "management_type": None,
+            "parser": "learned-pattern",
+            "pattern_id": learned.get("pattern_id"),
+        })
 
     from telegram_signal_parser import parse_telegram_message
     result = parse_telegram_message(text)
@@ -4456,13 +4844,29 @@ def telegram_test_parse_api():
 
 @app.route("/dashboard/summary/login", methods=["POST"])
 def dashboard_summary_login():
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not _rate_check(f"summary_login:ip:{client_ip}", max_calls=10, window_secs=60):
+        resp = jsonify({"error": "too many login attempts. please wait a moment."})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = "60"
+        return resp
+
     data = request.get_json(silent=True) or {}
     user_id = (data.get("user_id") or "").strip()
     password = data.get("password") or ""
     api_key = (data.get("api_key") or "").strip()
 
+    if user_id and not _rate_check(f"summary_login:user:{user_id}", max_calls=8, window_secs=60):
+        resp = jsonify({"error": "too many login attempts for this user. please wait a moment."})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = "60"
+        return resp
+
     if not user_id:
         return jsonify({"error": "missing user_id"}), 400
+
+    if store.is_user_suspended(user_id):
+        return jsonify({"error": "account suspended"}), 403
 
     authed = False
     if password:

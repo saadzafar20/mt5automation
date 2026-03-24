@@ -13,8 +13,9 @@ import { bridge } from '../../lib/bridge';
 import { BRIDGE_URL } from '../../lib/constants';
 
 export function SignInCard() {
-  const [email, setEmail] = useState('');
+  const [userIdInput, setUserIdInput] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export function SignInCard() {
     setLoading(true);
     setValidationError('');
     try {
-      const { auth_url, state } = await startOAuth(provider, isSignUp ? inviteCode.trim() : undefined);
+      const { auth_url, state } = await startOAuth(provider, inviteCode);
       bridge.openExternal(auth_url);
       toast.info('Browser opened — complete sign-in then return here');
       for (let i = 0; i < 180; i++) {
@@ -66,12 +67,8 @@ export function SignInCard() {
   };
 
   const handleEmailLogin = async () => {
-    if (!email || !password) {
-      setValidationError('Username and password are required');
-      return;
-    }
-    if (isSignUp && !inviteCode.trim()) {
-      setValidationError('An invite code is required to create a new account');
+    if (!userIdInput || !password) {
+      setValidationError('User ID and password are required');
       return;
     }
     setLoading(true);
@@ -84,7 +81,7 @@ export function SignInCard() {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ user_id: userIdInput, password }),
       });
       let data: Record<string, string> = {};
       try { data = await res.json(); } catch { /* ignore parse error */ }
@@ -92,11 +89,11 @@ export function SignInCard() {
         toast.error(data.error || (isSignUp ? 'Registration failed' : 'Login failed — please check your credentials'));
         return;
       }
-      if (data.status === 'ok' || data.token || data.api_key) {
-        setAuth({ userId: email, apiKey: data.api_key || null });
+      if (data.status === 'ok' || data.token) {
+        setAuth({ userId: userIdInput, apiKey: data.api_key || null });
         if (remember) {
-          bridge.saveLastUser(JSON.stringify({ user_id: email, api_key: data.api_key || '' }));
-          bridge.setKeyringPassword('platalgo-relay', email, password);
+          bridge.saveLastUser(JSON.stringify({ user_id: userIdInput, api_key: data.api_key || '' }));
+          bridge.setKeyringPassword('platalgo-relay', userIdInput, password);
         }
         toast.success(isSignUp ? 'Account created successfully' : 'Signed in successfully');
       } else {
@@ -232,11 +229,11 @@ export function SignInCard() {
 
       <div className="space-y-5">
         <Input
-          label="Username"
+          label="User ID"
           type="text"
-          value={email}
-          onChange={(e) => { setEmail(e.target.value); setValidationError(''); }}
-          placeholder="you@example.com"
+          value={userIdInput}
+          onChange={(e) => { setUserIdInput(e.target.value); setValidationError(''); }}
+          placeholder="your-user-id"
         />
         <div className="relative">
           <Input
@@ -253,6 +250,14 @@ export function SignInCard() {
             {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
+
+        <Input
+          label="Invite Code (Required for new account creation)"
+          type="text"
+          value={inviteCode}
+          onChange={(e) => setInviteCode(e.target.value)}
+          placeholder="Paste invite token"
+        />
 
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -273,6 +278,22 @@ export function SignInCard() {
         <GoldButton fullWidth onClick={handleEmailLogin} disabled={loading}>
           {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
         </GoldButton>
+
+        <p className="text-xs text-center text-fg-muted">
+          Don&apos;t have an account?{' '}
+          <button
+            className="text-accent underline cursor-pointer bg-transparent border-none p-0 text-xs"
+            onClick={() => {
+              const code = (inviteCode || '').trim();
+              const url = code
+                ? `https://app.platalgo.com/register?invite_code=${encodeURIComponent(code)}`
+                : 'https://app.platalgo.com/register';
+              bridge.openExternal(url);
+            }}
+          >
+            Sign up
+          </button>
+        </p>
       </div>
     </Card>
   );

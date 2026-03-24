@@ -389,15 +389,15 @@ class MT5Executor:
 
         try:
             if not self.mt5_connected:
-                # Mock mode — resolve percentage for logging
+                # Safety: never report a successful trade when MT5 is disconnected.
                 if size < 0:
-                    logger.info(f"[MOCK] Executing {action} {abs(size):.1f}% equity {symbol} SL={sl} TP={tp}")
+                    logger.warning(f"[DISCONNECTED] Cannot execute {action} {abs(size):.1f}% equity {symbol} SL={sl} TP={tp}")
                 else:
-                    logger.info(f"[MOCK] Executing {action} {size} {symbol} SL={sl} TP={tp}")
+                    logger.warning(f"[DISCONNECTED] Cannot execute {action} {size} {symbol} SL={sl} TP={tp}")
                 return {
-                    "status": "executed",
-                    "order_id": str(uuid.uuid4()),
-                    "mode": "mock",
+                    "status": "failed",
+                    "error": "MT5 disconnected — command not executed",
+                    "mode": "disconnected",
                 }
 
             # Real MT5 execution

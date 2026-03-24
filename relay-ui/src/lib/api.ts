@@ -16,7 +16,7 @@ export async function startOAuth(provider: 'google' | 'facebook', inviteCode?: s
   const res = await fetch(`${BRIDGE_URL}/auth/desktop/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, invite_code: inviteCode || '' }),
+    body: JSON.stringify({ provider, invite_code: (inviteCode || '').trim() }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<{ auth_url: string; state: string }>;

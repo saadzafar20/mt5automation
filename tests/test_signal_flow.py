@@ -160,7 +160,7 @@ class TestSignalEndpoint(unittest.TestCase):
                 "symbol": "EURUSD",
                 "size": 0.01,
                 "script_name": "RateLimitTest",
-                "idempotency_key": f"rl-test-{_uuid.uuid4()}",
+                "idempotency_key": f"rate-limit-{i}",
             })
             self.assertEqual(resp.status_code, 202)
 
@@ -172,7 +172,7 @@ class TestSignalEndpoint(unittest.TestCase):
             "symbol": "EURUSD",
             "size": 0.01,
             "script_name": "RateLimitTest",
-            "idempotency_key": f"rl-test-{_uuid.uuid4()}",
+            "idempotency_key": "rate-limit-2",
         })
         self.assertEqual(resp.status_code, 429)
 

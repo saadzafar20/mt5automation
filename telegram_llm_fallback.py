@@ -257,7 +257,10 @@ class LLMFallbackProcessor:
     """
 
     def __init__(self, llm: LLMFallback, execute_callback: Callable,
-                 confidence_threshold: float = 0.5):
+                 confidence_threshold: float = 0.5,
+                 learning_callback: Callable | None = None,
+                 learning_confidence_threshold: float = 0.9,
+                 learning_auto_approve: bool = False):
         """
         Args:
             llm: LLMFallback instance
@@ -267,6 +270,9 @@ class LLMFallbackProcessor:
         self._llm = llm
         self._execute = execute_callback
         self._threshold = confidence_threshold
+        self._learning_callback = learning_callback
+        self._learning_threshold = learning_confidence_threshold
+        self._learning_auto_approve = bool(learning_auto_approve)
         self._queue: list[dict] = []
         self._queue_lock = threading.Lock()
         self._running = False
@@ -397,6 +403,21 @@ class LLMFallbackProcessor:
         if result.confidence < self._threshold:
             self.stats["skipped"] += 1
             return
+
+        # Learn safe reusable pattern from high-confidence text parses.
+        if (not is_image
+                and item.get("raw_text")
+                and result.confidence >= self._learning_threshold
+                and self._learning_callback is not None):
+            try:
+                self._learning_callback(
+                    item["user_id"],
+                    item["raw_text"],
+                    result,
+                    self._learning_auto_approve,
+                )
+            except Exception:
+                logger.exception("Failed to persist learned LLM pattern")
 
         # Build signal data for execution
         sub = item["sub"]

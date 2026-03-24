@@ -106,7 +106,7 @@ class TestMT5Executor(unittest.TestCase):
 
     @patch("relay.concurrent.futures.ThreadPoolExecutor")
     def test_mock_mode_when_mt5_init_fails(self, mock_pool):
-        """Test executor runs in mock mode when MT5 init returns False."""
+        """Test executor fails safely when MT5 init returns False."""
         # Make the thread pool executor return False from initialize()
         mock_future = MagicMock()
         mock_future.result.return_value = False
@@ -125,8 +125,8 @@ class TestMT5Executor(unittest.TestCase):
             "symbol": "EURUSD",
             "size": 0.1,
         })
-        self.assertEqual(result["status"], "executed")
-        self.assertEqual(result["mode"], "mock")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["mode"], "disconnected")
 
     @patch("relay.concurrent.futures.ThreadPoolExecutor")
     def test_mock_mode_no_credentials(self, mock_pool):

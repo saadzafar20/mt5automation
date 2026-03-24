@@ -570,12 +570,44 @@ class TelegramBotManager:
         if not subscriptions:
             return  # no users subscribed to this channel
 
+        # Apply approved learned patterns first (per-user) before generic regex parsing.
+        remaining_subscriptions = []
+        for sub in subscriptions:
+            user_id = sub["user_id"]
+            learned = None
+            try:
+                learned = self._store.match_learned_pattern(user_id, text)
+            except Exception:
+                learned = None
+            if learned:
+                parsed_learned = ParsedSignal(
+                    action=learned.get("action"),
+                    symbol=learned.get("symbol"),
+                    entry=learned.get("entry"),
+                    sl=learned.get("sl"),
+                    tp_list=learned.get("tp_list") or [],
+                    confidence=float(learned.get("confidence", 0.9)),
+                    raw_text=text,
+                )
+                try:
+                    self._execute_for_subscription(sub, parsed_learned, text, message_id)
+                except Exception:
+                    logger.exception(
+                        f"Error executing learned-pattern signal for user {user_id} "
+                        f"channel {sub.get('channel_id')}"
+                    )
+            else:
+                remaining_subscriptions.append(sub)
+
+        if not remaining_subscriptions:
+            return
+
         # Parse the signal once (shared across all subscribers)
         parsed = parse_telegram_message(text)
 
         # Handle management messages (channel-scoped close)
         if parsed.management_type:
-            self._handle_management_message(chat_id, parsed, text, message_id, subscriptions)
+            self._handle_management_message(chat_id, parsed, text, message_id, remaining_subscriptions)
             return
 
         # Pips-format signals skip merging — they need LLM interpretation, not completion
@@ -604,7 +636,7 @@ class TelegramBotManager:
                 and any(r in parsed.skip_reason for r in _llm_worthy)
                 and parsed.confidence > 0.0
                 and self._llm_processor and self._llm_processor.is_running):
-            for sub in subscriptions:
+            for sub in remaining_subscriptions:
                 self._llm_processor.enqueue(
                     user_id=sub["user_id"],
                     channel_id=sub["channel_id"],
@@ -616,7 +648,7 @@ class TelegramBotManager:
             return
 
         # Fan out to each subscribed user
-        for sub in subscriptions:
+        for sub in remaining_subscriptions:
             try:
                 self._execute_for_subscription(sub, parsed, text, message_id)
             except Exception:

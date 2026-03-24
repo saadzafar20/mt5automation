@@ -93,6 +93,7 @@ MANAGEMENT_PATTERNS: list[tuple[re.Pattern, str]] = [
 
 # Pips format detection — "50 pips", "100 pip"
 PIPS_PATTERN = re.compile(r"\bPIPS?\b", re.IGNORECASE)
+NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?")
 
 # Emoji removal pattern
 EMOJI_PATTERN = re.compile(
@@ -148,6 +149,34 @@ def clean_text(raw: str) -> str:
     # Uppercase for consistent matching
     text = text.upper().strip()
     return text
+
+
+def normalize_for_learning(raw: str) -> str:
+    """Normalize text and replace numeric literals with <NUM> placeholders."""
+    cleaned = clean_text(raw)
+    return NUMBER_PATTERN.sub("<NUM>", cleaned)
+
+
+def build_learned_regex(raw: str) -> tuple[str, str, str]:
+    """
+    Build a safe regex from a concrete message.
+
+    Returns:
+        (cleaned_text, normalized_template, regex_pattern)
+    """
+    cleaned = clean_text(raw)
+    normalized = NUMBER_PATTERN.sub("<NUM>", cleaned)
+
+    parts: list[str] = []
+    last = 0
+    for m in NUMBER_PATTERN.finditer(cleaned):
+        parts.append(re.escape(cleaned[last:m.start()]))
+        parts.append(r"([0-9]+(?:\.[0-9]+)?)")
+        last = m.end()
+    parts.append(re.escape(cleaned[last:]))
+
+    regex_pattern = "^" + "".join(parts) + "$"
+    return cleaned, normalized, regex_pattern
 
 
 # ---------------------------------------------------------------------------
